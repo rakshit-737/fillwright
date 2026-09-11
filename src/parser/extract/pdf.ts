@@ -36,7 +36,12 @@ export async function extractPdf(bytes: ArrayBuffer): Promise<ExtractedText> {
   let document: pdfjs.PDFDocumentProxy;
   try {
     document = await pdfjs.getDocument({
-      data: new Uint8Array(bytes),
+      // A COPY, deliberately. pdf.js transfers the buffer it is given to its
+      // worker thread, which detaches the original — and the caller still needs
+      // those bytes afterwards to store the file. Handing over `bytes` directly
+      // leaves the caller holding a dead handle, and the failure only surfaces
+      // later, as a DataCloneError when the resume is written to IndexedDB.
+      data: new Uint8Array(bytes.slice(0)),
       // No network access of any kind while parsing.
       disableAutoFetch: true,
       disableStream: true,

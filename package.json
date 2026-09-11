@@ -1,8 +1,8 @@
 {
   "name": "fillwright",
   "private": true,
-  "version": "0.3.0",
-  "description": "Fillwright — privacy-first, local-only resume autofill for job applications.",
+  "version": "0.3.1",
+  "description": "Fillwright \u2014 privacy-first, local-only resume autofill for job applications.",
   "type": "module",
   "scripts": {
     "dev": "vite build --mode development --watch",

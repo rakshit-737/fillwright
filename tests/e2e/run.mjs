@@ -986,6 +986,96 @@ async function main() {
       assertEqual(profile.data.personal.email.value, TEST_PROFILE.email, 'data survived');
     });
 
+
+    /* --- importing a real PDF through the UI -------------------------- */
+
+    await test('a PDF resume imports and saves through the Resume pane', async () => {
+      const { buildPdf } = await import('./make-pdf.mjs');
+      const { writeFileSync: write, mkdtempSync } = await import('node:fs');
+      const { join } = await import('node:path');
+      const { tmpdir } = await import('node:os');
+
+      const dir = mkdtempSync(join(tmpdir(), 'fw-pdf-'));
+      const file = join(dir, 'resume.pdf');
+      write(file, buildPdf());
+
+      const page = await browser.newPage();
+      const failures = [];
+      page.on('pageerror', (error) => failures.push(error.message));
+      await page.evaluateOnNewDocument(() => {
+        window.__rejections = [];
+        window.addEventListener('unhandledrejection', (event) => {
+          window.__rejections.push(String(event.reason));
+        });
+      });
+
+      await page.goto(`chrome-extension://${extensionId}/options.html#/import`, {
+        waitUntil: 'networkidle0',
+      });
+
+      const input = await page.$('input[type="file"]');
+      assert(input, 'the file input was not found');
+      await input.uploadFile(file);
+
+      await page.waitForFunction(
+        () => document.body.innerText.indexOf('Here is what Fillwright read') !== -1,
+        { timeout: 20_000 },
+      );
+
+      // pdf.js hands its worker the byte buffer and detaches the original. The
+      // import still needs those bytes to store the file, so this is where the
+      // "Saving to your profile…" hang used to begin.
+      await page.evaluate(() => {
+        const button = Array.from(document.querySelectorAll('button')).find(
+          (candidate) => (candidate.textContent || '').trim().indexOf('Save to my profile') === 0,
+        );
+        if (button) button.click();
+      });
+
+      const outcome = await page
+        .waitForFunction(
+          () => {
+            const text = document.body.innerText;
+            if (text.indexOf('Profile updated') !== -1) return 'saved';
+            if (text.indexOf('Try again') !== -1) return 'error';
+            return false;
+          },
+          { timeout: 20_000 },
+        )
+        .then((handle) => handle.jsonValue())
+        .catch(() => 'HUNG');
+
+      const rejections = await page.evaluate(() => window.__rejections || []);
+      assertEqual(
+        outcome,
+        'saved',
+        `the PDF import did not complete (${rejections.join(' | ') || 'no rejection recorded'})`,
+      );
+      assertEqual(rejections.length, 0, `unhandled rejection: ${rejections.join(' | ')}`);
+      assertEqual(failures.length, 0, `page error: ${failures.join(' | ')}`);
+
+      await page.close();
+    });
+
+    await test('the imported PDF is stored, not silently dropped', async () => {
+      const page = await browser.newPage();
+      await page.goto(`chrome-extension://${extensionId}/options.html`, {
+        waitUntil: 'domcontentloaded',
+      });
+      const stored = await page.evaluate(async () => {
+        const state = await chrome.runtime.sendMessage({ type: 'ui:get-state' });
+        const profile = await chrome.runtime.sendMessage({
+          type: 'ui:get-profile',
+          profileId: state.data.settings.activeProfileId,
+        });
+        return profile.ok ? { resumes: profile.data.resumeIds.length } : null;
+      });
+      await page.close();
+
+      assert(stored, 'the profile could not be read back');
+      assert(stored.resumes >= 1, 'the resume file was not kept');
+    });
+
   } finally {
     await browser.close();
     await server.close();

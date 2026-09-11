@@ -40,6 +40,7 @@ export function ImportResume({ settings }: { settings: Settings | null }) {
   const [pasted, setPasted] = useState('');
   const [strategy, setStrategy] = useState<'fill-gaps' | 'replace'>('fill-gaps');
   const [existingResume, setExistingResume] = useState<ResumeAttachment | null>(null);
+  const [attachmentWarning, setAttachmentWarning] = useState("");
   const fileInput = useRef<HTMLInputElement>(null);
 
   const profileId = settings?.activeProfileId ?? null;
@@ -73,6 +74,7 @@ export function ImportResume({ settings }: { settings: Settings | null }) {
 
   const handleFile = useCallback(
     async (file: File) => {
+      setAttachmentWarning('');
       setStage({ name: 'reading', fileName: file.name });
       try {
         const bytes = await file.arrayBuffer();
@@ -101,39 +103,61 @@ export function ImportResume({ settings }: { settings: Settings | null }) {
     if (file) void handleFile(file);
   };
 
+  /**
+   * Saves the reviewed profile.
+   *
+   * Wrapped end to end: without this, any unexpected throw left the pane on
+   * "Saving to your profile…" forever, with no message and no way out. An
+   * infinite spinner is the worst possible failure report — the user cannot
+   * tell whether it is working, stuck, or has lost their data.
+   */
   const apply = async () => {
     if (stage.name !== 'review' || !profileId) return;
+    const source = stage.source;
+    const parsed = stage.parsed;
     setStage({ name: 'saving' });
 
-    const current = await send<Profile>({ type: 'ui:get-profile', profileId });
-    if (!current.ok) {
-      setStage({ name: 'error', message: current.error });
-      return;
-    }
+    try {
+      const current = await send<Profile>({ type: 'ui:get-profile', profileId });
+      if (!current.ok) {
+        setStage({ name: 'error', message: describeSaveFailure(current.error) });
+        return;
+      }
 
-    const { profile, changes } = mergeResumeIntoProfile(current.data, stage.parsed, { strategy });
+      const { profile, changes } = mergeResumeIntoProfile(current.data, parsed, { strategy });
 
-    // Store the original file so it can be re-attached to applications later.
-    if (stage.source.bytes) {
-      const attachment: ResumeAttachment = {
-        id: newId('res'),
-        fileName: stage.source.fileName,
-        mimeType: stage.source.mimeType,
-        sizeBytes: stage.source.bytes.byteLength,
-        importedAt: now(),
-        data: stage.source.bytes,
-        text: stage.source.text,
-      };
-      await saveResume(attachment);
-      profile.resumeIds = [...profile.resumeIds, attachment.id];
-    }
+      // Store the original file so it can be re-attached to applications later.
+      // The parsed text is already safe in `parsed`, so a failure here costs the
+      // attachment but not the import.
+      if (source.bytes) {
+        try {
+          const attachment: ResumeAttachment = {
+            id: newId('res'),
+            fileName: source.fileName,
+            mimeType: source.mimeType,
+            sizeBytes: source.bytes.byteLength,
+            importedAt: now(),
+            data: source.bytes,
+            text: source.text,
+          };
+          await saveResume(attachment);
+          profile.resumeIds = [...profile.resumeIds, attachment.id];
+        } catch (cause) {
+          // Keep going: the profile is the valuable part, and losing it because
+          // the file copy failed would be a far worse outcome.
+          setAttachmentWarning(describeAttachmentFailure(cause));
+        }
+      }
 
-    const saved = await send<Profile>({ type: 'ui:save-profile', profile });
-    if (!saved.ok) {
-      setStage({ name: 'error', message: saved.error });
-      return;
+      const saved = await send<Profile>({ type: 'ui:save-profile', profile });
+      if (!saved.ok) {
+        setStage({ name: 'error', message: describeSaveFailure(saved.error) });
+        return;
+      }
+      setStage({ name: 'done', changeCount: changes.length });
+    } catch (cause) {
+      setStage({ name: 'error', message: describeSaveFailure(cause) });
     }
-    setStage({ name: 'done', changeCount: changes.length });
   };
 
   if (!profileId) {
@@ -260,6 +284,7 @@ export function ImportResume({ settings }: { settings: Settings | null }) {
           <strong>Profile updated.</strong> {stage.changeCount} field
           {stage.changeCount === 1 ? '' : 's'} written. Review everything on the Profile page —
           nothing is used to fill a form until you say so.
+          {attachmentWarning && <p className="fw-field__hint">{attachmentWarning}</p>}
           <div className="fw-actions">
             <button className="fw-btn fw-btn--primary" onClick={() => (location.hash = '#/profile')}>
               Review my profile
@@ -429,3 +454,44 @@ function formatBytes(bytes: number): string {
 }
 
 export type { MergeChange };
+
+/**
+ * Turns a failure into something a person can act on.
+ *
+ * "Something went wrong" tells the user nothing and leaves them guessing
+ * whether to retry, change the file, or give up.
+ */
+function describeSaveFailure(cause: unknown): string {
+  const message = cause instanceof Error ? cause.message : String(cause ?? '');
+
+  if (/detached/i.test(message)) {
+    return 'The file could not be read a second time. Please choose it again and retry.';
+  }
+  if (/ELOCKED/i.test(message) || /locked/i.test(message)) {
+    return 'Fillwright is locked. Unlock it under Security, then import again.';
+  }
+  if (/quota|QuotaExceeded/i.test(message)) {
+    return 'This browser is out of storage space for extensions. Remove an old resume under Privacy Center and try again.';
+  }
+  if (/receiving end|message port|Extension context/i.test(message)) {
+    return 'Fillwright’s background service restarted while saving. Please try again — nothing was lost.';
+  }
+  if (/timed out/i.test(message)) {
+    return 'Saving took too long and was stopped. Please try again.';
+  }
+  return message
+    ? `Your profile could not be saved: ${message}`
+    : 'Your profile could not be saved. Please try again.';
+}
+
+/** A failed file copy is recoverable: the parsed profile is unaffected. */
+function describeAttachmentFailure(cause: unknown): string {
+  const message = cause instanceof Error ? cause.message : String(cause ?? '');
+  if (/detached/i.test(message)) {
+    return 'Your details were saved, but the original file could not be kept. Re-import it if you want a copy stored.';
+  }
+  if (/quota/i.test(message)) {
+    return 'Your details were saved, but there was not enough storage to keep a copy of the file.';
+  }
+  return 'Your details were saved, but the original file could not be kept.';
+}

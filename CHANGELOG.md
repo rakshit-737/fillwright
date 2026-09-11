@@ -2,6 +2,43 @@
 
 Notable changes, newest first. Versions follow semantic versioning.
 
+## 0.3.1
+
+Fixes a bug that made importing a PDF resume appear to hang forever.
+
+### Fixed
+
+- **"Saving to your profile…" never finished when importing a PDF.** pdf.js
+  transfers the byte buffer it is given to its worker thread, which detaches the
+  caller's `ArrayBuffer`. The import still needed those bytes to store the file,
+  so the write failed with a `DataCloneError` — and because the save had no
+  error boundary, the rejection vanished and the pane sat on its loading state
+  indefinitely. pdf.js is now handed a copy.
+
+  This only affected PDFs, which is why it survived 227 tests and a 47-case
+  browser suite: every one of them used plain text or a `.txt` upload. Reported
+  from real use.
+
+- **An infinite spinner is no longer a possible outcome.** The save is wrapped
+  end to end, and failures are explained in terms the user can act on — a
+  detached file, a locked vault, exhausted storage, a restarted background
+  service — each with a retry.
+
+- **A failed file copy no longer discards the import.** If the original file
+  cannot be stored, the parsed profile is still saved and the pane says the copy
+  was not kept, rather than losing both.
+
+- **Messaging can no longer hang.** `send()` now times out after 15 seconds and
+  retries once when the background service was asleep. Under MV3 a worker can be
+  terminated mid-request, leaving a promise that never settles; that is now a
+  reported error instead of a frozen interface.
+
+### Added
+
+- Regression tests for the detached-buffer bug, for messaging timeouts and
+  retries, and an end-to-end test that imports a genuine PDF through the Resume
+  pane and asserts the file is stored.
+
 ## 0.3.0 — unreleased
 
 ### Added

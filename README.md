@@ -80,8 +80,8 @@ To produce a Web Store zip: `npm run package` (runs every check first, writes
 ## Testing it
 
 ```bash
-npm test          # 227 unit and integration tests (jsdom)
-npm run test:e2e  # 47 end-to-end tests in real Chrome
+npm test          # 238 unit and integration tests (jsdom)
+npm run test:e2e  # 49 end-to-end tests in real Chrome
 npm run check     # typecheck → lint → test → build → verify
 ```
 
@@ -96,7 +96,10 @@ an outbound network request.
 
 This matters more than the test count suggests. The first time it ran it found a
 field-mapping bug that 173 jsdom tests had missed, on the most common form layout
-there is (see `tests/context-isolation.test.ts`).
+there is (see `tests/context-isolation.test.ts`). A later report from real use
+found another: importing a **PDF** hung on save, because pdf.js detaches the
+buffer it is handed and every test until then had used plain text. Both are now
+covered here.
 
 Stable Chrome 137 and later refuse to load unpacked extensions from the command
 line, so the suite uses Chrome for Testing, which puppeteer downloads. Set

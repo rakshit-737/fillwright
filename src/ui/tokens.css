@@ -1,0 +1,154 @@
+/*
+ * Fillwright design tokens.
+ *
+ * No web fonts: remote font loading would leak a request on every popup open,
+ * so the type stack is entirely local. The palette is deliberately narrow —
+ * one accent, one caution, one danger — so status colour always means something.
+ */
+
+:root {
+  color-scheme: light dark;
+
+  /* Type */
+  --fw-font-sans: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue',
+    Arial, sans-serif;
+  --fw-font-mono: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, monospace;
+
+  --fw-text-2xs: 0.6875rem;
+  --fw-text-xs: 0.75rem;
+  --fw-text-sm: 0.8125rem;
+  --fw-text-base: 0.875rem;
+  --fw-text-md: 0.9375rem;
+  --fw-text-lg: 1.0625rem;
+  --fw-text-xl: 1.3125rem;
+  --fw-text-2xl: 1.625rem;
+  --fw-text-3xl: 2.125rem;
+
+  --fw-leading-tight: 1.2;
+  --fw-leading-normal: 1.5;
+  --fw-leading-relaxed: 1.65;
+
+  --fw-tracking-tight: -0.015em;
+  --fw-tracking-wide: 0.04em;
+
+  /* Space — 4px base */
+  --fw-space-1: 0.25rem;
+  --fw-space-2: 0.5rem;
+  --fw-space-3: 0.75rem;
+  --fw-space-4: 1rem;
+  --fw-space-5: 1.25rem;
+  --fw-space-6: 1.5rem;
+  --fw-space-8: 2rem;
+  --fw-space-10: 2.5rem;
+  --fw-space-12: 3rem;
+  --fw-space-16: 4rem;
+
+  --fw-radius-sm: 6px;
+  --fw-radius: 10px;
+  --fw-radius-lg: 14px;
+  --fw-radius-xl: 20px;
+  --fw-radius-full: 999px;
+
+  /* Light palette */
+  --fw-paper: #fbfaf8;
+  --fw-surface: #ffffff;
+  --fw-surface-sunken: #f4f2ef;
+  --fw-surface-raised: #ffffff;
+  --fw-ink: #16151a;
+  --fw-ink-muted: #56545e;
+  --fw-ink-subtle: #8b8892;
+  --fw-line: #e6e3de;
+  --fw-line-strong: #d4d0c9;
+
+  --fw-accent: #4b3ecf;
+  --fw-accent-hover: #3f33b4;
+  --fw-accent-soft: #ecebfb;
+  --fw-accent-ink: #ffffff;
+
+  --fw-ok: #1f7a4d;
+  --fw-ok-soft: #e6f4ec;
+  --fw-caution: #9a6209;
+  --fw-caution-soft: #fdf1dd;
+  --fw-danger: #b3261e;
+  --fw-danger-soft: #fbe9e7;
+
+  --fw-shadow-sm: 0 1px 2px rgba(20, 18, 30, 0.06);
+  --fw-shadow: 0 2px 8px rgba(20, 18, 30, 0.07), 0 1px 2px rgba(20, 18, 30, 0.05);
+  --fw-shadow-lg: 0 12px 32px rgba(20, 18, 30, 0.12), 0 2px 8px rgba(20, 18, 30, 0.06);
+
+  --fw-focus: 0 0 0 2px var(--fw-surface), 0 0 0 4px var(--fw-accent);
+
+  --fw-duration-fast: 110ms;
+  --fw-duration: 180ms;
+  --fw-ease: cubic-bezier(0.2, 0, 0.13, 1);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --fw-paper: #121116;
+    --fw-surface: #1a191f;
+    --fw-surface-sunken: #0e0d11;
+    --fw-surface-raised: #22212a;
+    --fw-ink: #f2f0f4;
+    --fw-ink-muted: #a8a5b1;
+    --fw-ink-subtle: #77737f;
+    --fw-line: #2c2a34;
+    --fw-line-strong: #3b3845;
+
+    --fw-accent: #9a90ff;
+    --fw-accent-hover: #ada4ff;
+    --fw-accent-soft: #232043;
+    --fw-accent-ink: #16151a;
+
+    --fw-ok: #5fd39a;
+    --fw-ok-soft: #17291f;
+    --fw-caution: #eab765;
+    --fw-caution-soft: #2c2314;
+    --fw-danger: #f28b82;
+    --fw-danger-soft: #2e1a19;
+
+    --fw-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+    --fw-shadow: 0 2px 10px rgba(0, 0, 0, 0.45);
+    --fw-shadow-lg: 0 16px 40px rgba(0, 0, 0, 0.55);
+  }
+}
+
+:root[data-theme='dark'] {
+  --fw-paper: #121116;
+  --fw-surface: #1a191f;
+  --fw-surface-sunken: #0e0d11;
+  --fw-surface-raised: #22212a;
+  --fw-ink: #f2f0f4;
+  --fw-ink-muted: #a8a5b1;
+  --fw-ink-subtle: #77737f;
+  --fw-line: #2c2a34;
+  --fw-line-strong: #3b3845;
+
+  --fw-accent: #9a90ff;
+  --fw-accent-hover: #ada4ff;
+  --fw-accent-soft: #232043;
+  --fw-accent-ink: #16151a;
+
+  --fw-ok: #5fd39a;
+  --fw-ok-soft: #17291f;
+  --fw-caution: #eab765;
+  --fw-caution-soft: #2c2314;
+  --fw-danger: #f28b82;
+  --fw-danger-soft: #2e1a19;
+
+  --fw-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+  --fw-shadow: 0 2px 10px rgba(0, 0, 0, 0.45);
+  --fw-shadow-lg: 0 16px 40px rgba(0, 0, 0, 0.55);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --fw-duration-fast: 0ms;
+    --fw-duration: 0ms;
+  }
+}
+
+:root[data-reduced-motion='true'] {
+  --fw-duration-fast: 0ms;
+  --fw-duration: 0ms;
+}

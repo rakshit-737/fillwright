@@ -1,0 +1,71 @@
+@import './tokens.css';
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: var(--fw-font-sans);
+  font-size: var(--fw-text-base);
+  line-height: var(--fw-leading-normal);
+  color: var(--fw-ink);
+  background: var(--fw-paper);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  margin: 0;
+  font-weight: 600;
+  letter-spacing: var(--fw-tracking-tight);
+  line-height: var(--fw-leading-tight);
+}
+
+p {
+  margin: 0;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+/* A single, consistent focus treatment everywhere — never removed. */
+:focus-visible {
+  outline: none;
+  box-shadow: var(--fw-focus);
+  border-radius: var(--fw-radius-sm);
+}
+
+/* Visible only to screen readers. */
+.fw-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.fw-popup-body {
+  width: 380px;
+  min-height: 440px;
+  background: var(--fw-paper);
+}

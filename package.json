@@ -1,0 +1,50 @@
+{
+  "name": "fillwright",
+  "private": true,
+  "version": "0.3.0",
+  "description": "Fillwright — privacy-first, local-only resume autofill for job applications.",
+  "type": "module",
+  "scripts": {
+    "dev": "vite build --mode development --watch",
+    "build": "npm run build:pages && npm run build:content",
+    "build:pages": "vite build",
+    "build:content": "vite build --config vite.content.config.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "lint": "eslint . --ext .ts,.tsx",
+    "format": "prettier --write \"src/**/*.{ts,tsx,css}\"",
+    "package": "npm run check && node scripts/package.mjs",
+    "verify": "node scripts/verify-build.mjs",
+    "icons": "node scripts/make-icons.mjs",
+    "check": "npm run typecheck && npm run lint && npm run test && npm run build && npm run verify",
+    "test:e2e": "npm run build:e2e && node tests/e2e/run.mjs",
+    "build:e2e": "npm run build && node scripts/build-e2e.mjs",
+    "normalize-eol": "node scripts/normalize-eol.mjs"
+  },
+  "dependencies": {
+    "fflate": "^0.8.2",
+    "pdfjs-dist": "^4.10.38",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/chrome": "^0.0.287",
+    "@types/node": "^22.20.2",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@typescript-eslint/eslint-plugin": "^8.15.0",
+    "@typescript-eslint/parser": "^8.15.0",
+    "@vitejs/plugin-react": "^4.3.4",
+    "eslint": "^8.57.1",
+    "eslint-plugin-react-hooks": "^5.0.0",
+    "jsdom": "^25.0.1",
+    "prettier": "^3.4.1",
+    "puppeteer": "^23.11.1",
+    "puppeteer-core": "^23.11.1",
+    "typescript": "^5.7.2",
+    "vite": "^5.4.11",
+    "vitest": "^2.1.6"
+  },
+  "license": "MIT"
+}

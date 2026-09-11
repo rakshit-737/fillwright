@@ -1,0 +1,90 @@
+import type { FillOutcome, FillPlan, FillPlanEntry, ScanResult, SavedMapping } from './fields';
+import type { Profile } from './profile';
+import type { Settings } from './settings';
+
+/**
+ * Typed message protocol. Every message crossing a trust boundary carries a
+ * literal `type` from this union; anything else is dropped by the router.
+ *
+ * Trust note: content scripts run in a hostile document. Messages arriving FROM
+ * a content script are validated in src/security/validate.ts before use, and the
+ * background never echoes profile data back to a tab that did not ask for a fill.
+ */
+
+export interface ApplicationHistoryEntry {
+  id: string;
+  company: string;
+  role: string;
+  origin: string;
+  appliedAt: string;
+  /** Fillwright never records what was typed — only that a fill happened. */
+  fieldsFilled: number;
+}
+
+/* ---------- popup / options → background ---------- */
+
+export type UiRequest =
+  | { type: 'ui:get-state' }
+  | { type: 'ui:get-settings' }
+  | { type: 'ui:set-settings'; patch: DeepPartial<Settings> }
+  | { type: 'ui:list-profiles' }
+  | { type: 'ui:get-profile'; profileId: string }
+  | { type: 'ui:save-profile'; profile: Profile }
+  | { type: 'ui:create-profile'; name: string; cloneFromId?: string }
+  | { type: 'ui:delete-profile'; profileId: string }
+  | { type: 'ui:set-active-profile'; profileId: string }
+  | { type: 'ui:list-history' }
+  | { type: 'ui:clear-history' }
+  | { type: 'ui:list-saved-mappings'; origin?: string }
+  | { type: 'ui:delete-saved-mapping'; id: string }
+  | { type: 'ui:erase-all-data' }
+  | { type: 'ui:export-data' }
+  | { type: 'ui:vault-status' }
+  | { type: 'ui:vault-enable'; passphrase: string }
+  | { type: 'ui:vault-unlock'; passphrase: string }
+  | { type: 'ui:vault-lock' }
+  | { type: 'ui:vault-change-passphrase'; current: string; next: string }
+  | { type: 'ui:vault-disable'; passphrase: string }
+  | { type: 'ui:scan-active-tab' }
+  | { type: 'ui:request-fill'; entries: FillPlanEntry[] }
+  | { type: 'ui:undo-fill' };
+
+/* ---------- content script → background ---------- */
+
+export type ContentRequest =
+  | { type: 'content:ready'; url: string }
+  | { type: 'ui:open-security' }
+  | { type: 'content:scan-result'; scan: ScanResult }
+  | { type: 'content:request-mappings'; scan: ScanResult }
+  | { type: 'content:fill-complete'; outcomes: FillOutcome[] }
+  | { type: 'content:save-mapping'; mapping: Omit<SavedMapping, 'id' | 'createdAt' | 'useCount'> }
+  | { type: 'content:log-application'; company: string; role: string; origin: string; fieldsFilled: number };
+
+/* ---------- background → content script ---------- */
+
+export type BackgroundCommand =
+  | { type: 'bg:scan' }
+  | { type: 'bg:show-plan'; plan: FillPlan }
+  | { type: 'bg:fill'; entries: FillPlanEntry[] }
+  | { type: 'bg:undo' }
+  | { type: 'bg:teardown' };
+
+export type AnyRequest = UiRequest | ContentRequest;
+
+export interface Ok<T> {
+  ok: true;
+  data: T;
+}
+export interface Err {
+  ok: false;
+  error: string;
+  code?: string;
+}
+export type Result<T> = Ok<T> | Err;
+
+export type DeepPartial<T> = {
+  [K in keyof T]?: T[K] extends object ? DeepPartial<T[K]> : T[K];
+};
+
+export const ok = <T>(data: T): Ok<T> => ({ ok: true, data });
+export const err = (error: string, code?: string): Err => ({ ok: false, error, code });

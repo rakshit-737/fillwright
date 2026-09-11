@@ -1,0 +1,69 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  verify:
+    name: Typecheck, lint, test, build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Unit and integration tests
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+      # Fails on a manifest reference to a missing file, any remote code, a
+      # permission outside the agreed set, a non-empty host_permissions, or a
+      # weakened CSP. These are the guarantees the product is built on, so they
+      # are enforced by the build rather than by review.
+      - name: Verify the build
+        run: npm run verify
+
+  browser:
+    name: End-to-end in Chrome
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # Drives the built extension in Chrome for Testing: real service worker,
+      # real shadow DOM, real CSP. jsdom cannot cover any of that, and the one
+      # time it was relied on alone it missed a field-mapping bug that affected
+      # every flat form.
+      - name: End-to-end
+        run: npm run test:e2e
+        env:
+          CI: 'true'
+
+      - name: Upload failure artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-dist
+          path: dist-e2e/
+          retention-days: 5

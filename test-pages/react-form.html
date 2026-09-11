@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Fillwright — controlled inputs</title>
+    <link rel="stylesheet" href="./shared.css" />
+  </head>
+  <body>
+    <h1>Controlled inputs</h1>
+    <p class="lead">
+      These inputs behave like React controlled components: the value is owned by JavaScript state
+      and any write that does not go through the native setter plus an input event gets reverted.
+      If Fillwright fills these and the state panel below updates, the fill path is correct.
+    </p>
+
+    <form>
+      <label for="c1">First Name</label>
+      <input id="c1" name="firstName" />
+
+      <label for="c2">Email</label>
+      <input id="c2" name="email" type="email" />
+
+      <label for="c3">University / College</label>
+      <input id="c3" name="school" />
+
+      <label for="c4">Professional Summary</label>
+      <textarea id="c4" name="summary" rows="4"></textarea>
+
+      <button type="submit">Submit</button>
+    </form>
+
+    <h2>Component state</h2>
+    <pre id="state">{}</pre>
+
+    <script src="./shared.js"></script>
+    <script>
+      // A miniature version of what React does: own the value, and revert any
+      // assignment that did not come with a real input event.
+      var state = {};
+      var stateView = document.getElementById('state');
+
+      function render() {
+        stateView.textContent = JSON.stringify(state, null, 2);
+      }
+
+      document.querySelectorAll('#c1, #c2, #c3, #c4').forEach(function (element) {
+        state[element.name] = '';
+
+        element.addEventListener('input', function (event) {
+          state[element.name] = event.target.value;
+          render();
+        });
+
+        // Revert anything written without an input event, exactly as a
+        // controlled component would on its next render.
+        setInterval(function () {
+          if (element.value !== state[element.name]) {
+            element.value = state[element.name];
+          }
+        }, 400);
+      });
+
+      render();
+    </script>
+  </body>
+</html>

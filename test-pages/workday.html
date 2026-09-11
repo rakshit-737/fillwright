@@ -1,0 +1,100 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Fillwright — Workday-style form</title>
+    <link rel="stylesheet" href="./shared.css" />
+  </head>
+  <body>
+    <h1>Application</h1>
+    <p class="lead">
+      Workday-style markup: no &lt;label&gt; elements at all, aria-labelledby instead, ids containing
+      colons and brackets, and a collapsed section.
+    </p>
+
+    <form>
+      <h2 id="sec-name">Legal Name</h2>
+      <div>
+        <span id="lbl-first">First Name</span>
+        <input aria-labelledby="lbl-first" id="name:legal[0].first" data-automation-id="legalNameSection_firstName" />
+      </div>
+      <div>
+        <span id="lbl-last">Last Name</span>
+        <input aria-labelledby="lbl-last" id="name:legal[0].last" data-automation-id="legalNameSection_lastName" />
+      </div>
+
+      <h2 id="sec-contact">Contact Information</h2>
+      <div>
+        <span id="lbl-email">Email Address</span>
+        <input aria-labelledby="lbl-email" type="email" id="contact:email[0]" />
+      </div>
+      <div>
+        <span id="lbl-phone">Phone Number</span>
+        <input aria-labelledby="lbl-phone" type="tel" id="contact:phone[0]" />
+      </div>
+      <div>
+        <span id="lbl-city">City</span>
+        <input aria-labelledby="lbl-city" id="address:city[0]" />
+      </div>
+      <div>
+        <span id="lbl-postal">Postal Code</span>
+        <input aria-labelledby="lbl-postal" id="address:postal[0]" />
+      </div>
+
+      <h2 id="sec-edu">Education</h2>
+      <div>
+        <span id="lbl-school">School or University</span>
+        <input aria-labelledby="lbl-school" id="edu:school[0]" />
+      </div>
+      <div>
+        <span id="lbl-deg">Degree</span>
+        <input aria-labelledby="lbl-deg" id="edu:degree[0]" />
+      </div>
+      <div>
+        <span id="lbl-major">Field of Study</span>
+        <input aria-labelledby="lbl-major" id="edu:major[0]" />
+      </div>
+      <div>
+        <span id="lbl-gpa">Overall Result (GPA)</span>
+        <input aria-labelledby="lbl-gpa" id="edu:gpa[0]" />
+      </div>
+
+      <h2>Additional</h2>
+      <p class="hint">
+        This section is collapsed. The Workday adapter expands aria-expanded="false" controls before
+        scanning; it never clicks anything that reads as submit or apply.
+      </p>
+      <button type="button" id="expander" aria-expanded="false" data-automation-id="addButton">
+        Add Work Experience
+      </button>
+      <div id="collapsed" hidden></div>
+
+      <button type="submit">Submit</button>
+    </form>
+
+    <script src="./shared.js"></script>
+    <script>
+      document.getElementById('expander').addEventListener('click', function () {
+        this.setAttribute('aria-expanded', 'true');
+        var target = document.getElementById('collapsed');
+        target.hidden = false;
+
+        var rows = [
+          ['Employer', 'exp:company[0]'],
+          ['Job Title', 'exp:title[0]'],
+        ];
+        rows.forEach(function (row, index) {
+          var wrap = document.createElement('div');
+          var span = document.createElement('span');
+          span.id = 'lbl-exp-' + index;
+          span.textContent = row[0];
+          var input = document.createElement('input');
+          input.id = row[1];
+          input.setAttribute('aria-labelledby', span.id);
+          wrap.append(span, input);
+          target.appendChild(wrap);
+        });
+      });
+    </script>
+  </body>
+</html>

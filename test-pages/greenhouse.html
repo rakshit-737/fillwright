@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Fillwright — Greenhouse-style form</title>
+    <link rel="stylesheet" href="./shared.css" />
+  </head>
+  <body>
+    <h1>Senior Backend Engineer</h1>
+    <p class="lead">Greenhouse-style markup: proper labels, autocomplete attributes, custom questions.</p>
+
+    <form id="application_form">
+      <h2>Basic information</h2>
+
+      <label for="first_name">First Name <span class="req">*</span></label>
+      <input type="text" id="first_name" name="job_application[first_name]" autocomplete="given-name" required />
+
+      <label for="last_name">Last Name <span class="req">*</span></label>
+      <input type="text" id="last_name" name="job_application[last_name]" autocomplete="family-name" required />
+
+      <label for="email">Email <span class="req">*</span></label>
+      <input type="email" id="email" name="job_application[email]" autocomplete="email" required />
+
+      <label for="phone">Phone</label>
+      <input type="tel" id="phone" name="job_application[phone]" autocomplete="tel" />
+
+      <label for="location">Location (City)</label>
+      <input type="text" id="location" name="job_application[location]" />
+
+      <h2>Attachments</h2>
+      <label for="resume">Resume/CV <span class="req">*</span></label>
+      <input type="file" id="resume" name="job_application[resume]" accept=".pdf,.doc,.docx" />
+      <p class="hint">Fillwright cannot attach this for you — browsers do not allow it.</p>
+
+      <label for="cover_letter">Cover Letter</label>
+      <input type="file" id="cover_letter" name="job_application[cover_letter]" />
+
+      <h2>Details</h2>
+
+      <label for="q_linkedin">LinkedIn Profile</label>
+      <input type="text" id="q_linkedin" name="job_application[answers_attributes][0][text_value]" />
+
+      <label for="q_github">GitHub URL</label>
+      <input type="text" id="q_github" name="job_application[answers_attributes][1][text_value]" />
+
+      <label for="q_portfolio">Website / Portfolio</label>
+      <input type="text" id="q_portfolio" name="job_application[answers_attributes][2][text_value]" />
+
+      <label for="q_school">University / College</label>
+      <input type="text" id="q_school" name="job_application[answers_attributes][3][text_value]" />
+
+      <label for="q_degree">Degree</label>
+      <select id="q_degree" name="job_application[answers_attributes][4][value]">
+        <option value="">Select…</option>
+        <option>High School Diploma</option>
+        <option>B.Tech</option>
+        <option>Bachelor of Science</option>
+        <option>Master of Science</option>
+        <option>PhD</option>
+      </select>
+
+      <label for="q_grad">Expected Graduation Date</label>
+      <input type="text" id="q_grad" name="job_application[answers_attributes][5][text_value]" placeholder="MM/YYYY" />
+
+      <label for="q_start">Earliest start date</label>
+      <input type="text" id="q_start" name="job_application[answers_attributes][6][text_value]" />
+
+      <label for="q_hear">How did you hear about this role?</label>
+      <input type="text" id="q_hear" name="job_application[answers_attributes][7][text_value]" />
+
+      <h2>Work authorisation</h2>
+      <fieldset>
+        <legend>Are you legally authorized to work in the United States?</legend>
+        <label class="inline"><input type="radio" name="auth" value="Yes" /> Yes</label>
+        <label class="inline"><input type="radio" name="auth" value="No" /> No</label>
+      </fieldset>
+      <fieldset>
+        <legend>Will you now or in the future require sponsorship for employment visa status?</legend>
+        <label class="inline"><input type="radio" name="sponsor" value="Yes" /> Yes</label>
+        <label class="inline"><input type="radio" name="sponsor" value="No" /> No</label>
+      </fieldset>
+
+      <h2>Additional questions</h2>
+      <label for="q_why">Why do you want to work here?</label>
+      <textarea id="q_why" name="job_application[answers_attributes][8][text_value]" rows="5"></textarea>
+
+      <button type="submit">Submit Application</button>
+    </form>
+
+    <script src="./shared.js"></script>
+  </body>
+</html>

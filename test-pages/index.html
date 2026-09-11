@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Fillwright test pages</title>
+    <style>
+      body {
+        font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+        max-width: 46rem;
+        margin: 0 auto;
+        padding: 3rem 1.5rem 6rem;
+        line-height: 1.6;
+        color: #16151a;
+        background: #fbfaf8;
+      }
+      h1 { font-size: 1.75rem; margin-bottom: 0.25rem; }
+      .lead { color: #56545e; margin-top: 0; }
+      ul { list-style: none; padding: 0; }
+      li { margin-bottom: 0.75rem; }
+      a {
+        display: block;
+        padding: 0.9rem 1rem;
+        border: 1px solid #e6e3de;
+        border-radius: 10px;
+        background: #fff;
+        color: inherit;
+        text-decoration: none;
+      }
+      a:hover { border-color: #4b3ecf; }
+      .name { font-weight: 600; }
+      .desc { font-size: 0.85rem; color: #56545e; }
+      .note {
+        margin-top: 2.5rem;
+        padding: 1rem;
+        border-left: 3px solid #4b3ecf;
+        background: #ecebfb;
+        font-size: 0.9rem;
+      }
+      @media (prefers-color-scheme: dark) {
+        body { background: #121116; color: #f2f0f4; }
+        a { background: #1a191f; border-color: #2c2a34; }
+        .lead, .desc { color: #a8a5b1; }
+        .note { background: #232043; }
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Fillwright test pages</h1>
+    <p class="lead">
+      Offline forms shaped like real application systems. Nothing here submits anywhere — every form
+      has its action removed and logs to the console instead.
+    </p>
+
+    <ul>
+      <li>
+        <a href="./greenhouse.html">
+          <span class="name">Greenhouse-style form</span>
+          <span class="desc">Labelled inputs, autocomplete attributes, file upload, custom questions.</span>
+        </a>
+      </li>
+      <li>
+        <a href="./workday.html">
+          <span class="name">Workday-style form</span>
+          <span class="desc">No &lt;label&gt; elements — aria-labelledby only, awkward ids, multi-step.</span>
+        </a>
+      </li>
+      <li>
+        <a href="./react-form.html">
+          <span class="name">React-style controlled inputs</span>
+          <span class="desc">Value tracked in JS state; proves the native setter path works.</span>
+        </a>
+      </li>
+      <li>
+        <a href="./edge-cases.html">
+          <span class="name">Edge cases</span>
+          <span class="desc">Prefilled fields, referee details, demographics, shadow DOM, dynamic fields.</span>
+        </a>
+      </li>
+    </ul>
+
+    <p class="note">
+      <strong>How to test:</strong> load the unpacked extension, import a resume on the options page,
+      then open a form here and press the Fillwright toolbar button (or Alt+Shift+F). Serve this
+      folder over <code>http://localhost</code> — <code>file://</code> URLs cannot be scripted by
+      extensions without extra permissions Fillwright deliberately does not request.
+    </p>
+  </body>
+</html>

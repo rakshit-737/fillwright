@@ -11,6 +11,7 @@ import { fileURLToPath } from 'node:url';
 import { startServer } from './server.mjs';
 import { runV05Suite } from './suite-v05.mjs';
 import { runAtsSuite } from './suite-ats.mjs';
+import { runA11ySuite } from './suite-a11y.mjs';
 import {
   launch,
   evalInWorker,
@@ -1157,6 +1158,10 @@ async function main() {
       assertEqual,
       evalInWorker,
     });
+
+    /* --- accessibility ---------------------------------------------------- */
+
+    await runA11ySuite({ browser, worker, extensionId, server, test, assert, evalInWorker });
   } finally {
     await browser.close();
     await server.close();

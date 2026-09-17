@@ -134,7 +134,7 @@
 }
 .fw-stat__label {
   font-size: 11px;
-  color: #8b8892;
+  color: #6b6873;
 }
 .fw-stat--ok .fw-stat__value {
   color: #1f7a4d;
@@ -203,11 +203,11 @@
   white-space: nowrap;
 }
 .fw-item__old {
-  color: #8b8892;
+  color: #6b6873;
   text-decoration: line-through;
 }
 .fw-item__arrow {
-  color: #8b8892;
+  color: #6b6873;
 }
 .fw-item__new {
   color: #4b3ecf;
@@ -215,7 +215,7 @@
 }
 .fw-item__status {
   font-size: 11px;
-  color: #8b8892;
+  color: #6b6873;
 }
 
 .fw-badge {
@@ -237,7 +237,7 @@
 }
 .fw-badge--muted {
   background: #f4f2ef;
-  color: #8b8892;
+  color: #6b6873;
 }
 
 .fw-actions {
@@ -286,7 +286,7 @@
   margin: 0;
 }
 .fw-note {
-  color: #8b8892;
+  color: #6b6873;
   font-size: 11px;
   margin: 0;
   line-height: 1.45;
@@ -330,7 +330,7 @@
   .fw-note,
   .fw-item__old,
   .fw-item__arrow {
-    color: #77737f;
+    color: #9794a0;
   }
   .fw-muted {
     color: #a8a5b1;
@@ -532,7 +532,7 @@
   font-weight: 700;
   letter-spacing: 0.05em;
   text-transform: uppercase;
-  color: #8b8892;
+  color: #6b6873;
 }
 
 .fw-diag__list {
@@ -546,7 +546,7 @@
 }
 
 .fw-diag__key {
-  color: #8b8892;
+  color: #6b6873;
 }
 .fw-diag__value {
   margin: 0;
@@ -624,7 +624,7 @@
   font-weight: 700;
   letter-spacing: 0.06em;
   text-transform: uppercase;
-  color: #8b8892;
+  color: #6b6873;
 }
 .fw-title {
   overflow: hidden;
@@ -722,7 +722,7 @@
 }
 .fw-tally__item--muted .fw-tally__icon {
   background: #f4f2ef;
-  color: #8b8892;
+  color: #6b6873;
 }
 
 .fw-profile {
@@ -782,11 +782,14 @@
   }
 }
 .fw-widget[data-reduced-motion='true'] .fw-spinner {
-  animation-duration: 2400ms;
+  animation: none;
 }
 @media (prefers-reduced-motion: reduce) {
   .fw-spinner {
-    animation-duration: 2400ms;
+    animation: none;
+  }
+  .fw-widget {
+    animation: none;
   }
 }
 
@@ -806,7 +809,7 @@
   font-weight: 700;
   letter-spacing: 0.05em;
   text-transform: uppercase;
-  color: #8b8892;
+  color: #6b6873;
 }
 .fw-chips {
   display: flex;
@@ -881,7 +884,7 @@
 @media (prefers-color-scheme: dark) {
   .fw-eyebrow,
   .fw-match__head {
-    color: #77737f;
+    color: #9794a0;
   }
   .fw-icon {
     color: #a8a5b1;

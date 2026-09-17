@@ -234,27 +234,6 @@
   font-size: var(--fw-text-sm);
 }
 
-.fw-spinner {
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  border: 2px solid var(--fw-line-strong);
-  border-top-color: var(--fw-accent);
-  animation: fw-spin 700ms linear infinite;
-}
-
-@keyframes fw-spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .fw-spinner {
-    animation-duration: 2s;
-  }
-}
-
 .fw-scan-error {
   margin: 0;
   padding: var(--fw-space-2) var(--fw-space-3);

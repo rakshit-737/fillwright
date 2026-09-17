@@ -242,6 +242,10 @@ export function ImportResume({ settings }: { settings: Settings | null }) {
             <input
               ref={fileInput}
               type="file"
+              // The "Choose a file" button is the control; this input is its
+              // implementation, so it is labelled and kept out of the tab order.
+              aria-label="Resume file"
+              tabIndex={-1}
               className="fw-sr-only"
               accept=".pdf,.docx,.txt,.md,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain"
               onChange={(event) => {

@@ -115,6 +115,7 @@ export class FillwrightWidget {
   /** The page element focused before the panel took focus. */
   private returnFocus: HTMLElement | null = null;
   private suppressFocus = false;
+  private lastAnnounced = '';
 
   /** Rows whose "Why?" explanation is open. */
   private explanations = new Set<string>();
@@ -269,7 +270,12 @@ export class FillwrightWidget {
       locked: 'Fillwright is locked.',
       undo: summary ? `Restored ${summary.filled} fields.` : '',
     };
-    this.live.textContent = text[this.state] ?? '';
+    // Announce a change once. Redrawing the same state (opening the list,
+    // a quiet rescan with the same counts) must not repeat it.
+    const next = text[this.state] ?? '';
+    if (!next || next === this.lastAnnounced) return;
+    this.lastAnnounced = next;
+    this.live.textContent = next;
   }
 
   /* ------------------------------------------------------------ drawing */

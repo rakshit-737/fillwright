@@ -40,3 +40,31 @@ export function collectPageSignals(doc: Document): PageSignals {
     passwordFields: doc.querySelectorAll('input[type="password"]').length,
   };
 }
+
+/**
+ * A best guess at the posting's company and role, for the optional local
+ * history. Page text only, capped, and used only when history is switched on.
+ */
+export function guessPosting(doc: Document): { company: string; role: string } {
+  const clean = (text: string | null | undefined) => (text ?? '').replace(/\s+/g, ' ').trim();
+  const meta = (property: string) =>
+    clean(doc.querySelector(`meta[property="${property}"]`)?.getAttribute('content'));
+
+  let role = clean(doc.querySelector('h1')?.textContent) || meta('og:title');
+  let company = meta('og:site_name');
+
+  // Titles like "Job Application for Engineer at Acme" or "Engineer - Acme Careers".
+  const title = clean(doc.title);
+  const at = title.match(/(?:application for\s+)?(.+?)\s+(?:at|@)\s+(.+?)(?:\s*[|–—-].*)?$/i);
+  if (at) {
+    role ||= clean(at[1]);
+    company ||= clean(at[2]);
+  } else if (!company) {
+    const parts = title
+      .split(/\s+[|–—-]\s+/)
+      .map(clean)
+      .filter(Boolean);
+    if (parts.length > 1) company = parts[parts.length - 1]!.replace(/\s+careers?$/i, '');
+  }
+  return { company: company.slice(0, 120), role: role.slice(0, 120) };
+}

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { send } from '@/utils/messaging';
+import { registerLeaveGuard } from './leaveGuard';
 import type { Profile } from '@/types/profile';
 
 export type SaveState = 'idle' | 'dirty' | 'saving' | 'saved' | 'error';
@@ -61,9 +62,10 @@ export function useProfile(profileId: string | null): ProfileEditor {
 
   useEffect(load, [load]);
 
-  const persist = useCallback(async () => {
+  /** Saves pending edits. Resolves false when a save was attempted and failed. */
+  const persist = useCallback(async (): Promise<boolean> => {
     const draft = pending.current;
-    if (!draft) return;
+    if (!draft) return true;
     pending.current = null;
     setSaveState('saving');
     const result = await send<Profile>({ type: 'ui:save-profile', profile: draft });
@@ -73,6 +75,7 @@ export function useProfile(profileId: string | null): ProfileEditor {
       setSaveState('saved');
       if (savedTimer.current) clearTimeout(savedTimer.current);
       savedTimer.current = setTimeout(() => setSaveState('idle'), 1600);
+      return true;
     } else {
       // Keep the edits: a later save (or the retry button) writes them, unless
       // the user has typed something newer in the meantime.
@@ -80,6 +83,7 @@ export function useProfile(profileId: string | null): ProfileEditor {
       setSaveState('error');
       setError(result.error);
       setErrorCode(result.code ?? '');
+      return false;
     }
   }, []);
 
@@ -102,6 +106,36 @@ export function useProfile(profileId: string | null): ProfileEditor {
   const flush = useCallback(async () => {
     if (timer.current) clearTimeout(timer.current);
     await persist();
+  }, [persist]);
+
+  const failed = useRef(false);
+  useEffect(() => {
+    failed.current = saveState === 'error';
+  }, [saveState]);
+
+  // Leaving the pane flushes pending edits first, and asks before discarding
+  // edits whose save failed.
+  useEffect(() => {
+    const release = registerLeaveGuard(async () => {
+      if (timer.current) clearTimeout(timer.current);
+      // The outcome of this flush decides, not the last rendered state, which
+      // may be mid-save.
+      const saved = pending.current ? await persist() : !failed.current;
+      if (saved) return true;
+      return window.confirm(
+        'Some changes to your profile have not been saved.\n\n' +
+          'Leave this page anyway? Those changes will be lost.',
+      );
+    });
+    // Closing the tab with a failed save: let the browser ask.
+    const onBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (failed.current) event.preventDefault();
+    };
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => {
+      release();
+      window.removeEventListener('beforeunload', onBeforeUnload);
+    };
   }, [persist]);
 
   // Never lose an in-flight edit when the pane unmounts or the tab closes.

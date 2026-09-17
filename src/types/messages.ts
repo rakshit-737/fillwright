@@ -26,6 +26,8 @@ export interface ApplicationHistoryEntry {
   appliedAt: string;
   /** Fillwright never records what was typed — only that a fill happened. */
   fieldsFilled: number;
+  /** Which of the user's profiles was used. */
+  profileId?: string;
 }
 
 /* ---------- popup / options → background ---------- */

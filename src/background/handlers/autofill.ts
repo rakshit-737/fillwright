@@ -236,7 +236,10 @@ export function registerAutofillHandlers(): void {
   handle('content:log-application', async (request, sender) => {
     const payload = request as Extract<ContentRequest, { type: 'content:log-application' }>;
     const origin = originFromUrl(sender.tab?.url ?? sender.url ?? '');
+    if (!origin) return err('Unknown sender', 'ENOSENDER');
+    const { activeProfileId } = await getSettings();
     const entry = await logApplication({
+      ...(activeProfileId ? { profileId: activeProfileId } : {}),
       company: sanitizeString(payload.company, 120),
       role: sanitizeString(payload.role, 120),
       origin,

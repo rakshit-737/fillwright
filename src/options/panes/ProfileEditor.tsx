@@ -1,5 +1,8 @@
+import { useId, useState } from 'react';
 import { useProfile, saveStateLabel } from '../useProfile';
 import { LoadError } from '@/components/LoadError';
+import { AutofillPreview } from '@/components/AutofillPreview';
+import { checkEmail, checkPhone, checkUrl, splitList } from '@/profile/input-checks';
 import { EntryList, moveItem } from '@/components/EntryList';
 import {
   CheckField,
@@ -147,6 +150,15 @@ export function ProfileEditor({ settings }: { settings: Settings | null }) {
             onChange={(next) => update((draft) => void (draft.personal.pronouns = next))}
           />
         </div>
+        <AutofillPreview
+          profile={profile}
+          fields={[
+            'personal.firstName',
+            'personal.lastName',
+            'personal.fullName',
+            'personal.preferredName',
+          ]}
+        />
       </section>
 
       {/* ----------------------------------------------------------- contact */}
@@ -156,6 +168,7 @@ export function ProfileEditor({ settings }: { settings: Settings | null }) {
           <TrackedField
             label="Email"
             type="email"
+            check={checkEmail}
             value={profile.personal.email}
             important
             onChange={(next) => update((draft) => void (draft.personal.email = next))}
@@ -163,6 +176,7 @@ export function ProfileEditor({ settings }: { settings: Settings | null }) {
           <TrackedField
             label="Phone"
             type="tel"
+            check={checkPhone}
             value={profile.personal.phone}
             important
             hint="Include the country code if you apply internationally."
@@ -171,6 +185,7 @@ export function ProfileEditor({ settings }: { settings: Settings | null }) {
           <TrackedField
             label="Alternate email"
             type="email"
+            check={checkEmail}
             value={profile.personal.alternateEmail}
             onChange={(next) => update((draft) => void (draft.personal.alternateEmail = next))}
           />
@@ -212,6 +227,17 @@ export function ProfileEditor({ settings }: { settings: Settings | null }) {
             onChange={(next) => update((draft) => void (draft.address.country = next))}
           />
         </div>
+        <AutofillPreview
+          profile={profile}
+          fields={[
+            'personal.email',
+            'personal.phone',
+            'address.city',
+            'address.state',
+            'address.country',
+            'address.formatted',
+          ]}
+        />
       </section>
 
       {/* ------------------------------------------------------------- links */}
@@ -221,6 +247,7 @@ export function ProfileEditor({ settings }: { settings: Settings | null }) {
           <TrackedField
             label="LinkedIn"
             type="url"
+            check={checkUrl}
             value={profile.links.linkedin}
             important
             onChange={(next) => update((draft) => void (draft.links.linkedin = next))}
@@ -228,34 +255,43 @@ export function ProfileEditor({ settings }: { settings: Settings | null }) {
           <TrackedField
             label="GitHub"
             type="url"
+            check={checkUrl}
             value={profile.links.github}
             onChange={(next) => update((draft) => void (draft.links.github = next))}
           />
           <TrackedField
             label="Portfolio"
             type="url"
+            check={checkUrl}
             value={profile.links.portfolio}
             onChange={(next) => update((draft) => void (draft.links.portfolio = next))}
           />
           <TrackedField
             label="Personal website"
             type="url"
+            check={checkUrl}
             value={profile.links.website}
             onChange={(next) => update((draft) => void (draft.links.website = next))}
           />
           <TrackedField
             label="Twitter / X"
             type="url"
+            check={checkUrl}
             value={profile.links.twitter}
             onChange={(next) => update((draft) => void (draft.links.twitter = next))}
           />
           <TrackedField
             label="Stack Overflow"
             type="url"
+            check={checkUrl}
             value={profile.links.stackoverflow}
             onChange={(next) => update((draft) => void (draft.links.stackoverflow = next))}
           />
         </div>
+        <AutofillPreview
+          profile={profile}
+          fields={['links.linkedin', 'links.github', 'links.portfolio', 'links.website']}
+        />
       </section>
 
       {/* ----------------------------------------------------------- summary */}
@@ -272,6 +308,19 @@ export function ProfileEditor({ settings }: { settings: Settings | null }) {
 
       {/* --------------------------------------------------------- education */}
       <EntryList<EducationEntry>
+        footer={
+          <AutofillPreview
+            profile={profile}
+            entries={Math.min(3, profile.education.length)}
+            fields={[
+              'education.institution',
+              'education.degree',
+              'education.major',
+              'education.graduationDate',
+              'education.gpa',
+            ]}
+          />
+        }
         title="Education"
         entries={profile.education}
         keyOf={(entry) => entry.id}
@@ -385,6 +434,19 @@ export function ProfileEditor({ settings }: { settings: Settings | null }) {
 
       {/* -------------------------------------------------------- experience */}
       <EntryList<ExperienceEntry>
+        footer={
+          <AutofillPreview
+            profile={profile}
+            entries={Math.min(3, profile.experience.length)}
+            fields={[
+              'experience.company',
+              'experience.title',
+              'experience.startDate',
+              'experience.endDate',
+              'experience.yearsOfExperience',
+            ]}
+          />
+        }
         title="Experience"
         description="Roles, internships and contract work."
         entries={profile.experience}
@@ -557,12 +619,14 @@ export function ProfileEditor({ settings }: { settings: Settings | null }) {
               label="Live URL"
               value={entry.url}
               type="url"
+              check={checkUrl}
               onChange={(value) => set((draft) => void (draft.url = value))}
             />
             <PlainField
               label="Repository"
               value={entry.repositoryUrl}
               type="url"
+              check={checkUrl}
               onChange={(value) => set((draft) => void (draft.repositoryUrl = value))}
             />
             <div className="fw-grid2__full">
@@ -668,6 +732,15 @@ export function ProfileEditor({ settings }: { settings: Settings | null }) {
             ))}
           </ul>
         )}
+        <BulkSkills
+          existing={profile.skills.map((skill) => skill.name)}
+          onAdd={(names) =>
+            update((draft) => {
+              for (const name of names) draft.skills.push({ ...emptySkill(), name });
+            })
+          }
+        />
+        <AutofillPreview profile={profile} fields={['profile.skills']} />
       </section>
 
       {/* ---------------------------------------------------- certifications */}
@@ -730,6 +803,7 @@ export function ProfileEditor({ settings }: { settings: Settings | null }) {
             <PlainField
               label="Credential URL"
               type="url"
+              check={checkUrl}
               value={entry.credentialUrl}
               onChange={(v) => set((d) => void (d.credentialUrl = v))}
             />
@@ -919,6 +993,46 @@ export function ProfileEditor({ settings }: { settings: Settings | null }) {
           </ul>
         )}
       </section>
+    </div>
+  );
+}
+
+/** Paste a list of skills — comma, semicolon or line separated. */
+function BulkSkills({ existing, onAdd }: { existing: string[]; onAdd: (names: string[]) => void }) {
+  const [text, setText] = useState('');
+  const [note, setNote] = useState('');
+  const id = useId();
+  const add = () => {
+    const names = splitList(text, existing);
+    if (names.length === 0) {
+      setNote('Nothing new to add — those skills are already listed.');
+      return;
+    }
+    onAdd(names);
+    setText('');
+    setNote(`Added ${names.length} skill${names.length === 1 ? '' : 's'}.`);
+  };
+  return (
+    <div className="fw-bulk">
+      <label className="fw-tf__label" htmlFor={id}>
+        Add several at once
+      </label>
+      <div className="fw-bulk__row">
+        <textarea
+          id={id}
+          className="fw-textarea"
+          rows={2}
+          value={text}
+          placeholder="Python, React, PostgreSQL"
+          onChange={(event) => setText(event.target.value)}
+        />
+        <button className="fw-btn fw-btn--sm" onClick={add} disabled={!text.trim()}>
+          Add skills
+        </button>
+      </div>
+      <p className="fw-field__hint" role="status">
+        {note || 'Separate with commas or new lines. Duplicates are skipped.'}
+      </p>
     </div>
   );
 }

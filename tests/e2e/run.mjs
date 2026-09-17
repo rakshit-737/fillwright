@@ -13,6 +13,7 @@ import { runV05Suite } from './suite-v05.mjs';
 import { runAtsSuite } from './suite-ats.mjs';
 import { runA11ySuite } from './suite-a11y.mjs';
 import { runOnboardingSuite } from './suite-onboarding.mjs';
+import { runEditorSuite } from './suite-editor.mjs';
 import {
   launch,
   evalInWorker,
@@ -1165,6 +1166,17 @@ async function main() {
     await runA11ySuite({ browser, worker, extensionId, server, test, assert, evalInWorker });
 
     /* --- first run --------------------------------------------------------- */
+
+    await runEditorSuite({
+      browser,
+      extensionId,
+      server,
+      test,
+      assert,
+      assertEqual,
+      worker,
+      evalInWorker,
+    });
 
     await runOnboardingSuite({ browser, extensionId, test, assert, assertEqual });
   } finally {

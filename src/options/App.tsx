@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { LoadError } from '@/components/LoadError';
+import { canLeave } from './leaveGuard';
 import { useHashRoute } from './useHashRoute';
 import { PrivacyCenter } from './panes/PrivacyCenter';
 import { Permissions } from './panes/Permissions';
@@ -125,7 +126,11 @@ export function App() {
                     <button
                       className={`fw-navlink${route === item.id ? ' fw-navlink--active' : ''}`}
                       aria-current={route === item.id ? 'page' : undefined}
-                      onClick={() => navigate(item.id)}
+                      onClick={() =>
+                        void canLeave().then((leave) => {
+                          if (leave) navigate(item.id);
+                        })
+                      }
                     >
                       {item.label}
                     </button>

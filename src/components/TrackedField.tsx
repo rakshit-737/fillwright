@@ -1,4 +1,5 @@
-import { useId } from 'react';
+import { useId, useState } from 'react';
+import type { InputCheck } from '@/profile/input-checks';
 import { ConfidenceBadge, SourceTag } from './ConfidenceBadge';
 import { tv } from '@/profile/factory';
 import type { TrackedValue } from '@/types/profile';
@@ -13,6 +14,8 @@ interface Props {
   multiline?: boolean;
   /** Marks the field as one that materially improves autofill coverage. */
   important?: boolean;
+  /** A gentle check: a note to show, and a tidied value to apply on blur. */
+  check?: (value: string) => InputCheck;
 }
 
 /**
@@ -32,8 +35,13 @@ export function TrackedField({
   hint,
   multiline = false,
   important = false,
+  check,
 }: Props) {
   const id = useId();
+  const noteId = `${id}-note`;
+  const [touched, setTouched] = useState(false);
+  const result = check ? check(value.value) : { message: '' };
+  const showNote = touched && result.message !== '';
   const fromResume = value.provenance.source === 'resume';
   const empty = value.value.trim() === '';
 
@@ -80,10 +88,23 @@ export function TrackedField({
           placeholder={placeholder}
           autoComplete="off"
           spellCheck={type === 'text'}
+          aria-invalid={showNote || undefined}
+          aria-describedby={showNote ? noteId : undefined}
           onChange={(event) => handle(event.target.value)}
+          onBlur={() => {
+            setTouched(true);
+            if (result.normalized !== undefined && result.normalized !== value.value) {
+              handle(result.normalized);
+            }
+          }}
         />
       )}
 
+      {showNote && (
+        <p className="fw-tf__note" id={noteId} role="status">
+          {result.message}
+        </p>
+      )}
       <div className="fw-tf__foot">
         {hint && <span className="fw-field__hint">{hint}</span>}
         {!empty && <SourceTag provenance={value.provenance} />}
@@ -102,6 +123,7 @@ export function PlainField({
   hint,
   multiline = false,
   rows = 3,
+  check,
 }: {
   label: string;
   value: string;
@@ -111,8 +133,13 @@ export function PlainField({
   hint?: string;
   multiline?: boolean;
   rows?: number;
+  check?: (value: string) => InputCheck;
 }) {
   const id = useId();
+  const noteId = `${id}-note`;
+  const [touched, setTouched] = useState(false);
+  const result = check ? check(value) : { message: '' };
+  const showNote = touched && result.message !== '';
   return (
     <div className="fw-tf">
       <label className="fw-tf__label" htmlFor={id}>
@@ -135,8 +162,21 @@ export function PlainField({
           value={value}
           placeholder={placeholder}
           autoComplete="off"
+          aria-invalid={showNote || undefined}
+          aria-describedby={showNote ? noteId : undefined}
           onChange={(event) => onChange(event.target.value)}
+          onBlur={() => {
+            setTouched(true);
+            if (result.normalized !== undefined && result.normalized !== value) {
+              onChange(result.normalized);
+            }
+          }}
         />
+      )}
+      {showNote && (
+        <p className="fw-tf__note" id={noteId} role="status">
+          {result.message}
+        </p>
       )}
       {hint && <span className="fw-field__hint">{hint}</span>}
     </div>

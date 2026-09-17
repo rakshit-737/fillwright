@@ -1,5 +1,5 @@
 import { harvestFields } from '@/field-detection/harvest';
-import { collectPageSignals } from './page-signals';
+import { collectPageSignals, guessPosting } from './page-signals';
 import { fillFields, undoFill, type UndoRecord } from '@/autofill/fill';
 import { collectPostingText, type JobMatch } from '@/autofill/job-match';
 import { addEntries, findAddControls } from '@/autofill/repeat';
@@ -430,6 +430,13 @@ async function applyFill(entries: FillPlanEntry[]): Promise<FillSummary & { ok: 
   });
   if (filled > 0) {
     void send({ type: 'content:step-progress', filled, stepKey: stepKey() });
+    // Recorded only if the user switched history on; the worker checks.
+    notify({
+      type: 'content:log-application',
+      ...guessPosting(document),
+      origin: location.origin,
+      fieldsFilled: filled,
+    });
   }
 
   return { ok: true, filled, failures, remaining: left.length, manual };

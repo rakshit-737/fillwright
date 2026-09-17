@@ -16,6 +16,8 @@ export interface EntryListProps<T> {
   onUpdate: (index: number, mutate: (draft: T) => void) => void;
   addLabel: string;
   emptyHint: string;
+  /** Rendered at the end of the section, e.g. an autofill preview. */
+  footer?: ReactNode;
 }
 
 /**
@@ -38,8 +40,10 @@ export function EntryList<T>({
   onUpdate,
   addLabel,
   emptyHint,
+  footer,
 }: EntryListProps<T>) {
   const [open, setOpen] = useState<Set<string>>(new Set());
+  const [moved, setMoved] = useState('');
 
   const toggle = (key: string) => {
     setOpen((current) => {
@@ -76,7 +80,28 @@ export function EntryList<T>({
                   <button
                     className="fw-entry__toggle"
                     aria-expanded={isOpen}
+                    aria-keyshortcuts="Alt+ArrowUp Alt+ArrowDown"
+                    data-entry-key={key}
                     onClick={() => toggle(key)}
+                    onKeyDown={(event) => {
+                      // Alt+Arrow reorders without leaving the keyboard; focus
+                      // follows the entry to its new place.
+                      if (!event.altKey) return;
+                      const direction =
+                        event.key === 'ArrowUp' ? -1 : event.key === 'ArrowDown' ? 1 : 0;
+                      if (direction === 0) return;
+                      event.preventDefault();
+                      const target = index + direction;
+                      if (target < 0 || target >= entries.length) return;
+                      onMove(index, direction);
+                      const selector = `[data-entry-key="${CSS.escape(key)}"]`;
+                      requestAnimationFrame(() =>
+                        document.querySelector<HTMLElement>(selector)?.focus(),
+                      );
+                      setMoved(
+                        `${summary.primary || 'Entry'} moved to position ${target + 1} of ${entries.length}.`,
+                      );
+                    }}
                   >
                     <svg
                       className="fw-entry__chevron"
@@ -162,6 +187,13 @@ export function EntryList<T>({
           })}
         </ul>
       )}
+      <p className="fw-sr-only" role="status" aria-live="polite">
+        {moved}
+      </p>
+      {entries.length > 1 && (
+        <p className="fw-field__hint">Tip: focus an entry and press Alt+↑ or Alt+↓ to reorder.</p>
+      )}
+      {footer}
     </section>
   );
 }

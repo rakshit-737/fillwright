@@ -156,6 +156,27 @@ setting a value, so it is constrained:
 
 - only controls that identify themselves as comboboxes (`role="combobox"`,
   `aria-haspopup="listbox"`, or a known library class) are ever clicked;
+- **a role is a claim, not a proof.** A page can dress a real submit button or
+  link up as a combobox, an option or a radio. Every press Fillwright makes —
+  opening a dropdown, choosing an option, answering a button-based radio group,
+  adding an entry, expanding a section — first goes through
+  `src/autofill/press-guard.ts`, which refuses links, submit/reset/image
+  inputs, `formaction`, and `<button>`s that would submit their form (a
+  `<button>` without `type="button"` does). Up to 0.4.0 the dropdown path
+  lacked this check, so a hostile page could have turned "pick India" into a
+  form submission; `test-pages/hostile-roles.html` and
+  `tests/press-guard.test.ts` now pin it down;
+- **search boxes see as little as possible.** A searchable dropdown's input
+  belongs to the page, which can record each keystroke before an option is
+  chosen. Fillwright types nothing when the options are already listed; for
+  lists that load as you type (Workday), it types the shortest prefix that
+  works — three to six characters of the value, never the whole value — and
+  clears it again if nothing matched. Up to 0.4.0 the entire profile value was
+  typed;
+- virtualised lists are scrolled a bounded number of pages (150), and only
+  within the list the control owns;
+- multi-select dropdowns are only ever added to — chips are never clicked,
+  and Backspace is never sent;
 - an ambiguous option set is refused rather than guessed at — "Bachelor"
   matching both "Bachelor of Arts" and "Bachelor of Science" selects nothing;
 - a dropdown Fillwright opened is always closed again, including when the
@@ -174,8 +195,19 @@ setting a value, so it is constrained:
   candidate token; only origin + path is ever retained (`pageKeyFromUrl`).
 - **No personal data is logged.** ESLint's `no-console` rule is an error, with
   only `warn`/`error` permitted, and those carry no field values.
-- **History is metadata only** — company, role, origin, date, and a count — and
-  is off by default.
+- **History is metadata only** — company, role, origin, date, a count and which
+  of your profiles was used — and is off by default. Company and role are a
+  best guess from the page title and heading, capped at 120 characters. (Before
+  0.5.0 nothing recorded history at all, even when it was switched on.)
+- **The panel cannot be read by the page.** Its shadow root is closed, so page
+  scripts cannot read proposed values — including sensitive answers — before
+  you approve them. `verify-build.mjs` and `npm run presubmit` fail on an open
+  root; only the never-shipped end-to-end build reopens it.
+- **Errors do not leak.** Handlers return a code; every surface maps the code to
+  a sentence from `src/utils/errors.ts`, and anything that looks like a stack
+  trace, an extension URL or a raw exception is replaced. The worker logs only
+  the message type and the error's name, never its message, which can quote
+  the data that caused it.
 
 ### 3.4 Supply chain
 
@@ -191,6 +223,35 @@ Deliberately **not** taken on: an IndexedDB wrapper (hand-rolled, ~100 lines), a
 router (hand-rolled, ~25 lines), a zip writer for packaging, an archiver, an
 image library for icons. Everything that touches the profile is code in this
 repository.
+
+### 3.4b What each extension surface can ask the worker
+
+| Sender | Messages | What comes back |
+|---|---|---|
+| Fillwright's own pages (options, popup, practice form) | `ui:*` | Anything the UI needs, including the profile |
+| A content script (inside a web page) | `content:*` only — plus `ui:open-security`, which opens a page and returns nothing | A fill plan for the fields it reported; profile *names* for the switcher; skill names that already appear in the posting; a locked/unlocked flag; with drafting on, career facts the user ticks; a relevance level for Assist/Smart |
+
+`senderMayCall` in `src/background/router.ts` enforces the split by the
+sender's URL, which the page cannot forge. The content script itself has no
+message listener: nothing is ever pushed to a page.
+
+In Assist and Smart modes, the content script on an https page sends the page's
+field labels and names (the same signals an explicit scan sends, through the
+same validator) and its title, top headings and button captions to the worker,
+which answers only "likely / possible / none". Nothing from that exchange is
+stored.
+
+### 3.4c Developer tooling
+
+- `npm run perf` injects a probe (`tests/perf/probe.ts`) that is bundled only
+  into `dist-e2e/`. `npm run presubmit` fails if it, or any other test marker,
+  appears in the release zip.
+- `npm run screenshots` uses an obviously fictional profile on a fictional
+  company page. No real person's data is involved.
+- `npm run probe:ai` calls only the model availability check, never a prompt.
+- `npm run audit` (part of `npm run check` and CI) fails on any high or
+  critical advisory. In 0.5.0 all findings were in build and test tooling;
+  the toolchain was upgraded (Vite 8, Vitest 5, Puppeteer 25) to clear them.
 
 ### 3.5 Local device compromise
 
@@ -258,7 +319,9 @@ These are enforced in code, not merely documented:
 
 ## 5. Automated checks
 
-`npm run check` runs typecheck → lint → 227 tests → build → `verify-build.mjs`.
+`npm run check` runs typecheck → lint → dependency audit → unit tests → build →
+`verify-build.mjs`. `npm run presubmit` then packages the release and inspects
+the zip itself (see `store/CHECKLIST.md`).
 
 `npm run test:e2e` additionally drives the built extension in Chrome and asserts
 the security properties in the real runtime rather than in a simulation:
@@ -274,7 +337,15 @@ the security properties in the real runtime rather than in a simulation:
   vault does not look like data loss;
 - a locked vault refuses to return a profile and fills nothing;
 - the wrong passphrase is refused, the right one restores access, and a
-  passphrase change invalidates the old one while preserving the data.
+  passphrase change invalidates the old one while preserving the data;
+- a plan read while the vault was open is not written after it locks;
+- controls disguised as dropdowns, options and radios are never pressed;
+- a searchable dropdown never receives more than six characters of a value;
+- Assist and Smart stay silent on sign-in and newsletter pages, and Manual
+  mode leaves no script registered;
+- one-off corrections are forgotten on reload;
+- every options pane, the popup and the panel pass axe-core's WCAG 2.1 AA
+  rules in light and dark themes.
 
 That suite exists because it earned its place: the first time it ran, it caught a
 field-mapping defect that 173 jsdom tests had missed. See §6.6.
@@ -287,7 +358,8 @@ field-mapping defect that 173 jsdom tests had missed. See §6.6.
 - a non-empty `host_permissions`, or `<all_urls>` anywhere;
 - a CSP missing `script-src 'self'` / `connect-src 'self'`, or allowing
   `unsafe-eval` / `unsafe-inline`;
-- an ES module `import` surviving into `content.js`.
+- an ES module `import` surviving into `content.js`;
+- a panel shadow root that is not closed.
 
 ---
 
@@ -295,13 +367,17 @@ field-mapping defect that 173 jsdom tests had missed. See §6.6.
 
 1. **Local device access defeats it.** See 3.5.
 2. **Closed shadow roots and cross-origin iframes are invisible.** By browser
-   design. Same-origin frames are handled via per-frame injection.
+   design. Same-origin frames are handled via per-frame injection; for a
+   cross-origin form frame the panel says it cannot reach the form.
 3. **Heuristics are heuristics.** The classifier will sometimes be wrong. This
    is why every fill is previewed, low-confidence matches are never written
    automatically, and undo exists.
 4. **Optional encryption protects data at rest, not in use.** While the profile
    is unlocked it is plaintext in memory.
-5. **No formal third-party audit** has been carried out.
+5. **No formal third-party audit** has been carried out. The 0.5.0 review was
+   an internal pass plus an automated reviewer; it found the role-spoofing
+   issue in §3.2b only after a targeted check, which is a reason to want an
+   external one.
 6. **jsdom is not a browser.** It was the sole validation surface for one
    release cycle and that was a mistake — it missed a bug where, on any form
    whose inputs are direct children of `<form>`, the "text near this control"
@@ -312,6 +388,17 @@ field-mapping defect that 173 jsdom tests had missed. See §6.6.
    places — nearby text is now strictly preceding and adjacent, and negative
    rules only see the signals that identify a control — and locked down by
    `tests/context-isolation.test.ts` plus the Chrome suite.
+7. **Search prefixes are visible to the site.** Up to six characters of a
+   value (for example "Vel" for a university) can be observed by a site whose
+   dropdown loads options as you type. The value itself is what the form is
+   about to receive anyway, but the site sees those characters while the fill
+   is still in progress.
+8. **Assist and Smart read every https page you visit** — locally, and only
+   labels, headings and button text — to decide whether to offer help. Manual
+   mode (the default) reads nothing until you click.
+9. **On-device drafting is not verified against a real model.** Chrome for
+   Testing 153 exposes the API in the worker but has no model on the test
+   machine; the flow is tested with a stand-in model.
 
 ---
 

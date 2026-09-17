@@ -2,6 +2,88 @@
 
 Notable changes, newest first. Versions follow semantic versioning.
 
+## 0.5.0
+
+From feature-complete to shippable: verified in a real browser against
+real-world ATS layouts, with error recovery, accessibility, performance
+budgets and Web Store material.
+
+### Security
+
+- **Disguised controls are never pressed.** A page could mark a real submit
+  button or link as a dropdown (`role="combobox"`), an option or a radio, and
+  Fillwright would press it. Every press now goes through one guard that
+  refuses links, submit/reset/image inputs, `formaction` and form-submitting
+  `<button>`s, whatever role they claim. The dropdown case existed in 0.4.0.
+- **Searchable dropdowns see a short prefix, not your value.** The whole
+  profile value used to be typed into the site's search box. Now nothing is
+  typed when options are already listed, and otherwise 3–6 characters, cleared
+  again if nothing matched.
+- **Thrown errors no longer reach the user or the logs verbatim.**
+- A plan read while the vault was open is no longer written after it locks.
+- The unused optional `tabs` permission is gone, and the content script no
+  longer has a message listener (nothing sent it anything).
+- `npm run audit` gates `npm run check` and CI; the dev toolchain moved to
+  Vite 8, Vitest 5 and Puppeteer 25 to clear high/critical advisories (all in
+  tooling, none shipped).
+
+### Fixed
+
+- Application history was never recorded, even when switched on.
+- Wrappers repeated once per field (Greenhouse `div.field`, Lever
+  `li.application-question`) were read as numbered blocks, so "Degree" came
+  from education entry 2 and "Current company" from entry 5.
+- Generated ids like `school-7` were read as block positions.
+- "How many years of experience do you have with Python?" was answered with
+  total years of experience.
+- Dropdown matching used raw substrings: "Indiana" matched "India".
+- Lever's labels (sibling divs) were not read; a lone "Name" on an email form
+  stayed in review; "Preferred work setting" was not recognised.
+- Button-based radio groups (Ashby) were invisible.
+- A same-origin iframe form showed an extra empty panel; a cross-origin one
+  said "no fields" instead of explaining.
+- A form that rejected every value listed each failure and offered a retry
+  that could not work.
+- 43 options/popup paths ignored failures, showed raw errors or could spin
+  forever.
+- The popup on `chrome://`, the Web Store, `file://` or a PDF only failed after
+  a click.
+- The shortcut-free passive modes only registered for https, so localhost forms
+  could not use them.
+- Dark and light secondary text failed WCAG contrast; the resume file input was
+  unlabelled; the panel re-announced its tally on every redraw; reduced motion
+  only slowed spinners; Tab could leave the open panel.
+- `content.js` had grown to 106 KB; the MutationObserver callback took ~10 ms on
+  a large DOM burst.
+- Onboarding always restarted at step 1.
+
+### Added
+
+- **Real-browser coverage** for Assist/Smart, add-another, one-off and
+  remembered corrections, mapping management, SPA navigation, panel dragging and
+  focus, import/export, multi-fill undo, drafting (fact picker first, no contact
+  or sensitive facts), error recovery, ATS layouts, hostile markup,
+  accessibility (axe-core, light and dark), onboarding and the editor.
+  96 end-to-end tests, 326 unit tests.
+- **ATS fixtures** for Greenhouse, Lever, Workday, Ashby, iCIMS/SmartRecruiters
+  and LinkedIn Easy Apply.
+- **Dropdowns:** async lists that load while typing, virtualised lists,
+  multi-select (additive only), and aliases for countries, degrees and months.
+- **Error recovery:** one error vocabulary (`src/utils/errors.ts`), each message
+  with one next step; worker retry; quota and frame messages.
+- **Performance budget** (`npm run perf`): bundle 92.4 → 82 KB, injection 32 →
+  22 ms, observer callback 9.8 → < 0.01 ms (Chrome for Testing 131).
+- **Onboarding:** five resumable steps with inline import, a practice form
+  filled by the real engine, and privacy facts read from the running extension.
+- **Profile editor:** inline email/URL/phone checks, a leave guard for failed
+  saves, Alt+↑/↓ reordering, bulk skill paste, "What autofill will see", and
+  "last used" (history on only).
+- **Web Store:** `store/` listing, permission justifications, privacy-practices
+  declaration, screenshots and checklist; `npm run presubmit` and
+  `npm run screenshots`.
+- `npm run probe:ai`: Chrome for Testing 153 exposes `LanguageModel` in the
+  worker and extension pages (not web pages); 131 exposes nothing.
+
 ## 0.4.0
 
 A product pass over the on-page experience, plus three security fixes.

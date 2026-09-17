@@ -1,3 +1,5 @@
+import { isPressSafe } from '@/autofill/press-guard';
+
 /**
  * Site adapters.
  *
@@ -147,6 +149,7 @@ export async function applyAdapter(adapter: SiteAdapter): Promise<void> {
  * an adapter's selector matched.
  */
 export function isSafeToExpand(element: HTMLElement): boolean {
+  if (!isPressSafe(element)) return false;
   if (element.closest('[data-fillwright-ui]')) return false;
   // A <button> with no explicit type defaults to type="submit", so checking the
   // type alone would refuse almost every expander. What actually matters is

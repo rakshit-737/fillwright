@@ -104,8 +104,8 @@ declaration, screenshots and a checklist are in [`store/`](./store).
 ## Testing it
 
 ```bash
-npm test             # 319 unit and integration tests (jsdom)
-npm run test:e2e     # 95 end-to-end tests in real Chrome, including axe-core
+npm test             # 326 unit and integration tests (jsdom)
+npm run test:e2e     # 96 end-to-end tests in real Chrome, including axe-core
 npm run perf         # performance budget in Chrome for Testing
 npm run check        # typecheck → lint → audit → test → build → verify
 npm run presubmit    # check + package + inspect the zip
@@ -182,6 +182,7 @@ npx serve test-pages     # then open http://localhost:3000
 | `virtual-list.html` | A 600-entry virtualised dropdown |
 | `spa-steps.html`, `add-another.html`, `one-off.html`, `rejecting.html`, `frame-host.html` | Router navigation, adding blocks, one-off corrections, a form that rejects every write, a form in someone else's frame |
 | `newsletter.html`, `login.html` | Pages that are *not* applications, where proactive modes must stay silent |
+| `hostile-roles.html` | Submit buttons and links disguised as dropdowns, options and radios |
 
 Every fixture states its expected behaviour at the top of the page.
 

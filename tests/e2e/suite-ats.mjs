@@ -351,6 +351,34 @@ export async function runAtsSuite(ctx) {
     await page.close();
   });
 
+  /* --- hostile markup ----------------------------------------------- */
+
+  await test('ats/hostile: controls disguised as dropdowns and radios are never pressed', async () => {
+    const url = `${server.origin}/hostile-roles.html`;
+    const page = await browser.newPage();
+    await page.goto(url, { waitUntil: 'networkidle0' });
+    await activate(url);
+    await waitForWidget(page, (s) => s.text.includes('application field'), 15_000);
+    await reviewItems(page);
+    // Tick everything that can be ticked, then fill.
+    await page.evaluate(() => {
+      const root = document.querySelector('[data-fillwright-widget]').shadowRoot;
+      root.querySelectorAll('input.fw-check').forEach((box) => {
+        if (!box.checked) box.click();
+      });
+    });
+    await fill(page);
+    const after = await page.evaluate(() => ({
+      submitted: window.__submitted,
+      href: location.href,
+      first: document.getElementById('h-first').value,
+    }));
+    assertEqual(after.submitted, 0, 'a disguised submit button was pressed');
+    assertEqual(after.href, url, 'a disguised link was followed');
+    assertEqual(after.first, P.first, 'ordinary fields should still fill');
+    await page.close();
+  });
+
   await ctx.workdayPage?.close();
   await control.close();
 }

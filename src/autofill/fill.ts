@@ -1,6 +1,7 @@
 import type { FillOutcome, FillPlanEntry } from '@/types/fields';
 import { isCombobox, selectInCombobox } from './combobox';
 import { ariaOptionValue } from '@/field-detection/harvest';
+import { isPressSafe } from './press-guard';
 
 /**
  * Writes values into form controls.
@@ -367,7 +368,7 @@ function isAriaRadio(element: HTMLElement): boolean {
  */
 function setAriaRadioGroup(members: HTMLElement[], value: string): boolean {
   const target = members.find((member) => matches(ariaOptionValue(member), value));
-  if (!target || !isAriaRadio(target)) return false;
+  if (!target || !isAriaRadio(target) || !isPressSafe(target)) return false;
   if (target.getAttribute('aria-checked') === 'true') return true;
   target.focus({ preventScroll: true });
   target.click();

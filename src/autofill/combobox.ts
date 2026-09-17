@@ -1,4 +1,5 @@
 import { containsWords, normalizeOptionText, sameByAlias } from './aliases';
+import { isPressSafe } from './press-guard';
 
 /**
  * Custom dropdowns.
@@ -173,6 +174,15 @@ async function selectOne(
   }
 
   const target = await bringIntoDom(list, match.option.label, match.seenAt);
+  if (target && !isPressSafe(target)) {
+    clearSearch(search);
+    closeList(control, element);
+    return {
+      ok: false,
+      selected: '',
+      reason: 'That option is also a submit or link control, so Fillwright left it for you.',
+    };
+  }
   if (!target) {
     clearSearch(search);
     closeList(control, element);
@@ -220,9 +230,9 @@ async function openList(
   if (existing && readOptions(existing).length > 0) return existing;
 
   element.focus({ preventScroll: true });
-  // A click is what every one of these widgets listens for. It is a dropdown
-  // toggle, never a submit control — `isCombobox` has already established that.
-  control.click();
+  // A click is what every one of these widgets listens for. The page chose the
+  // role, so the press guard decides whether this is really just a toggle.
+  if (isPressSafe(control)) control.click();
 
   let list = await waitForOptions(control, timeoutMs);
   if (list) return list;

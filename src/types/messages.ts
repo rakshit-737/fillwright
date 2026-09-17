@@ -1,11 +1,4 @@
-import type {
-  CanonicalField,
-  FillOutcome,
-  FillPlan,
-  FillPlanEntry,
-  ScanResult,
-  SavedMapping,
-} from './fields';
+import type { CanonicalField, FillOutcome, ScanResult, SavedMapping } from './fields';
 import type { Profile } from './profile';
 import type { Settings } from './settings';
 
@@ -60,16 +53,13 @@ export type UiRequest =
   | { type: 'ui:vault-disable'; passphrase: string }
   | { type: 'ui:scan-active-tab' }
   /** The onboarding practice page asks for a plan for its own fields. */
-  | { type: 'ui:practice-plan'; fields: unknown }
-  | { type: 'ui:request-fill'; entries: FillPlanEntry[] }
-  | { type: 'ui:undo-fill' };
+  | { type: 'ui:practice-plan'; fields: unknown };
 
 /* ---------- content script → background ---------- */
 
 export type ContentRequest =
   | { type: 'content:ready'; url: string }
   | { type: 'ui:open-security' }
-  | { type: 'content:scan-result'; scan: ScanResult }
   | {
       type: 'content:request-mappings';
       scan: ScanResult;
@@ -104,15 +94,6 @@ export type ContentRequest =
   | { type: 'content:switch-profile'; profileId: string }
   | { type: 'content:draft-facts' }
   | { type: 'content:draft'; question: string; factIds: string[]; maxCharacters?: number };
-
-/* ---------- background → content script ---------- */
-
-export type BackgroundCommand =
-  | { type: 'bg:scan' }
-  | { type: 'bg:show-plan'; plan: FillPlan }
-  | { type: 'bg:fill'; entries: FillPlanEntry[] }
-  | { type: 'bg:undo' }
-  | { type: 'bg:teardown' };
 
 export type AnyRequest = UiRequest | ContentRequest;
 

@@ -21,6 +21,9 @@ import type { Profile } from '@/types/profile';
 /**
  * Export / import.
  *
+ * Trust boundary: the import file is untrusted input from disk, handled in the
+ * worker; it is rebuilt field by field before anything is stored.
+ *
  * The export is a plain JSON file the user saves themselves; nothing is
  * uploaded. The import is the more dangerous direction — the file could have
  * been edited, truncated, or crafted — so it is never trusted as-is. Every

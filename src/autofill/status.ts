@@ -1,6 +1,10 @@
 import type { MappingStatus } from '@/types/fields';
 
-/** Short, user-facing names for each mapping status. Pure data. */
+/**
+ * Short, user-facing names for each mapping status.
+ *
+ * Trust boundary: none — static strings shared by the panel and the planner.
+ */
 export const STATUS_LABELS: Record<MappingStatus, string> = {
   ready: 'Ready to fill',
   review: 'Check this one',

@@ -4,6 +4,8 @@
  * Self-contained on purpose: no custom properties inherited from the page, no
  * external font, and every value spelled out so a page's `* { }` rule cannot
  * change how the panel reads. Imported with ?inline so the build minifies it.
+ *
+ * Trust boundary: static, bundled CSS inside a closed shadow root.
  */
 :host,
 * {

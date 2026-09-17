@@ -8,6 +8,8 @@ import type { ContentRequest } from '@/types/messages';
 import type { Profile } from '@/types/profile';
 
 /**
+ * Trust boundary: service worker, answering content scripts (untrusted pages).
+ *
  * Handlers behind the on-page panel's secondary features: the job-posting
  * match, the profile switcher and optional answer drafting.
  *

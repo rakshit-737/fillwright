@@ -334,22 +334,4 @@ export function registerAutofillHandlers(): void {
     const filled = Array.isArray(outcomes) ? outcomes.filter((outcome) => outcome?.ok).length : 0;
     return ok({ filled });
   });
-
-  /** Relays a fill request from the popup to the tab the user is looking at. */
-  handle('ui:request-fill', async (request) => {
-    const { entries } = request as Extract<UiRequest, { type: 'ui:request-fill' }>;
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (!tab?.id) return err('No active tab', 'ENOTAB');
-    const response = await chrome.tabs
-      .sendMessage(tab.id, { type: 'bg:fill', entries })
-      .catch(() => null);
-    return response ? ok(response) : err('The page did not respond.', 'ENORESP');
-  });
-
-  handle('ui:undo-fill', async () => {
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (!tab?.id) return err('No active tab', 'ENOTAB');
-    const response = await chrome.tabs.sendMessage(tab.id, { type: 'bg:undo' }).catch(() => null);
-    return response ? ok(response) : err('The page did not respond.', 'ENORESP');
-  });
 }

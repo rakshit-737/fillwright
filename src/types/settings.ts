@@ -80,7 +80,7 @@ export interface Settings {
   version: number;
 }
 
-export const SETTINGS_VERSION = 1;
+export const SETTINGS_VERSION = 2;
 
 export const DEFAULT_SETTINGS: Settings = {
   activeProfileId: null,

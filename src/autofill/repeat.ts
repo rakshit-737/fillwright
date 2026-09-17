@@ -3,6 +3,9 @@ import { isSafeToExpand } from '@/adapters';
 /**
  * "Add another" controls.
  *
+ * Trust boundary: content script, acting on an untrusted page. This is the
+ * only place Fillwright presses a page button, and only on explicit request.
+ *
  * When a profile has three education entries and the form shows one block,
  * the form usually offers a "+ Add education" button. Fillwright can press it
  * for the user — but only when the user asks, only a bounded number of times,

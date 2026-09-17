@@ -86,30 +86,9 @@ function boot(): void {
   }
   scope[MARKER] = true;
 
-  chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-    if (!message || typeof message.type !== 'string') return false;
-
-    switch (message.type) {
-      case 'bg:scan':
-        void open();
-        sendResponse({ ok: true });
-        return false;
-      case 'bg:fill':
-        // Filling is asynchronous now that custom dropdowns are driven through
-        // their real open/select interaction, so the channel is held open.
-        void applyFill(message.entries ?? []).then(sendResponse);
-        return true;
-      case 'bg:undo':
-        void applyUndo().then(sendResponse);
-        return true;
-      case 'bg:teardown':
-        teardown();
-        sendResponse({ ok: true });
-        return false;
-      default:
-        return false;
-    }
-  });
+  // No message listener: the worker never sends commands to this script.
+  // Everything starts from the user's click (a fresh injection) or from the
+  // page itself, so there is no inbound channel to guard.
 
   // Typing is tracked only as a timestamp, so a rescan never steals focus or
   // re-renders under someone mid-word. The keys themselves are never read.

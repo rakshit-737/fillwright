@@ -129,6 +129,9 @@ runs, one Windows 11 laptop), comparing the v0.4.0 tag with this release:
 | Harvest + classify, `hard-mode.html` | < 120 ms | 8.5 ms | 9.5 ms |
 | MutationObserver callback, 2,000-node burst | < 2 ms | 9.8 ms | < 0.01 ms |
 
+On Chrome for Testing 153 (after the toolchain upgrade) the same build
+measures 81.7 KB, 11.8 ms, 6.4 ms and < 0.01 ms.
+
 Passive checks in Assist/Smart mode run at most once every 1.5 s and never
 while the page is scrolling (unit-tested in `tests/observe.test.ts`). Timings
 vary by machine; the budgets have wide margins on purpose.
@@ -150,7 +153,9 @@ buffer it is handed and every test until then had used plain text. Both are now
 covered here.
 
 Stable Chrome 137 and later refuse to load unpacked extensions from the command
-line, so the suite uses Chrome for Testing, which puppeteer downloads. Set
+line, so the suite uses Chrome for Testing, which puppeteer downloads (153 at
+the time of writing; run `npx puppeteer browsers install chrome` if it is
+missing). Set
 `CHROME_PATH` to override. `HEADED=1 npm run test:e2e` runs it visibly.
 
 Local test forms are in `test-pages/`. Serve them over HTTP (extensions cannot

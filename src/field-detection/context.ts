@@ -5,6 +5,9 @@ import { collectPageSignals } from '@/content/page-signals';
 /**
  * Is this page actually a job application?
  *
+ * Trust boundary: pure scoring, run in the worker over signals a content
+ * script collected from an untrusted page (validated before use).
+ *
  * Asked only when Fillwright was NOT explicitly invoked — in Assist or Smart
  * mode, where it runs on a page by itself and has to decide whether offering
  * help would be useful or merely intrusive. An explicit activation always

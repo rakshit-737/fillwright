@@ -1,4 +1,7 @@
-/* The onboarding practice form. Plain, like a real job board. */
+/*
+ * The onboarding practice form. Plain, like a real job board.
+ * Trust boundary: static CSS for an extension page.
+ */
 .practice {
   max-width: 40rem;
   margin: 0 auto;

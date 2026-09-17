@@ -3,6 +3,10 @@ import { getSettings } from '@/storage/settings';
 /**
  * Assist / Smart mode plumbing.
  *
+ * Trust boundary: service worker. Decides, from settings and granted
+ * permissions only, whether the content script is registered on pages the
+ * user has not clicked on.
+ *
  * In Manual mode Fillwright is injected only when the user invokes it, through
  * `activeTab`, and needs no site access at all. The other modes need to run on
  * pages the user has not clicked on yet, which is only possible with the

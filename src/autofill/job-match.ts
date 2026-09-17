@@ -1,6 +1,10 @@
 /**
  * Job description → profile match.
  *
+ * Trust boundary: the posting text is read in the content script (page data,
+ * untrusted); matching runs in the worker against the profile's skill names,
+ * and only skill names that already appear in the posting are returned.
+ *
  * Reads the job posting text that is already visible on the page and reports
  * which skills it mentions that the user's profile does, and does not, contain.
  *

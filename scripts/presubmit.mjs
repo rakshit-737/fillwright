@@ -82,7 +82,7 @@ for (const name of names) {
   if (/__fwPerf|end-to-end test build|FW_SOURCE_DIST/.test(body)) {
     fail(`${name} contains test-only code`);
   }
-  if (/attachShadow\(\{\s*mode:\s*["']open/.test(body)) {
+  if (/attachShadow\(\{\s*mode:\s*["'`]open/.test(body)) {
     fail(`${name} attaches an OPEN shadow root (test build leaked)`);
   }
 
@@ -109,7 +109,7 @@ for (const name of names) {
 }
 
 const content = text('content.js');
-if (!/attachShadow\(\{\s*mode:\s*["']closed["']/.test(content)) {
+if (!/attachShadow\(\{\s*mode:\s*(["'`])closed/.test(content)) {
   fail('content.js does not use a closed shadow root');
 }
 const contentKB = files['content.js'].length / 1024;

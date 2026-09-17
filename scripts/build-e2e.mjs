@@ -43,10 +43,10 @@ writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
 const contentPath = resolve(target, 'content.js');
 const content = readFileSync(contentPath, 'utf8');
 const reopened = content.replace(
-  /attachShadow\(\{(\s*)mode:(\s*)(["'])closed\3/,
+  /attachShadow\(\{(\s*)mode:(\s*)(["'`])closed\3/,
   'attachShadow({$1mode:$2$3open$3',
 );
-const alreadyOpen = /attachShadow\(\{\s*mode:\s*["']open/.test(content);
+const alreadyOpen = /attachShadow\(\{\s*mode:\s*["'`]open/.test(content);
 if (reopened === content && !(process.env.FW_SOURCE_DIST && alreadyOpen)) {
   // Only an older build measured for comparison may already be open.
   console.error('[fillwright] could not find the closed shadow root in content.js');

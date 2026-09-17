@@ -1121,7 +1121,17 @@ async function main() {
 
     /* --- v0.5: proactive modes, corrections, SPA, focus, portability --- */
 
-    await runV05Suite({ browser, worker, extensionId, server, test, assert, assertEqual, scanPage });
+    await runV05Suite({
+      browser,
+      worker,
+      extensionId,
+      server,
+      test,
+      assert,
+      assertEqual,
+      scanPage,
+      evalInWorker,
+    });
   } finally {
     await browser.close();
     await server.close();

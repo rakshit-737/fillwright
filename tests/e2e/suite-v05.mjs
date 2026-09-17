@@ -577,5 +577,146 @@ export async function runV05Suite(ctx) {
     await page.close();
   });
 
+  /* --- on-device drafting --------------------------------------------- */
+
+  const clickRowLinkIn = (page, prefix, text) =>
+    page.evaluate(
+      (p, t) => {
+        const root = document.querySelector('[data-fillwright-widget]').shadowRoot;
+        const row = Array.from(root.querySelectorAll('.fw-item')).find((item) =>
+          item.querySelector('.fw-item__label')?.textContent.trim().startsWith(p),
+        );
+        const link = Array.from(row?.querySelectorAll('button') ?? []).find(
+          (b) => b.textContent.trim() === t,
+        );
+        if (!link) return false;
+        link.click();
+        return true;
+      },
+      prefix,
+      text,
+    );
+
+  const draftPanel = (page) =>
+    page.evaluate(() => {
+      const panel = document
+        .querySelector('[data-fillwright-widget]')
+        .shadowRoot.querySelector('.fw-draft');
+      if (!panel) return null;
+      return {
+        text: panel.textContent.replace(/\s+/g, ' ').trim(),
+        busy: panel.getAttribute('aria-busy'),
+        facts: Array.from(panel.querySelectorAll('.fw-facts label')).map((l) => l.textContent),
+        draft: panel.querySelector('textarea')?.value ?? null,
+      };
+    });
+
+  await ui({
+    type: 'ui:set-settings',
+    patch: { ai: { enabled: true, provider: 'chrome-builtin', assistAnswerDrafting: true } },
+  });
+
+  await test('drafting says plainly when this Chrome has no on-device model', async () => {
+    const page = await openAndReview('greenhouse.html?draft-unavailable');
+    const errors = [];
+    page.on('pageerror', (error) => errors.push(error.message));
+    assert(
+      await clickRowLinkIn(page, 'Why do you want', 'Draft with on-device AI'),
+      'no draft link on the essay row',
+    );
+    await page.waitForFunction(
+      () =>
+        document
+          .querySelector('[data-fillwright-widget]')
+          .shadowRoot.querySelector('.fw-draft .fw-error') !== null,
+      { timeout: 10_000 },
+    );
+    const panel = await draftPanel(page);
+    assert(
+      /on-device|model/i.test(panel.text) && !/undefined|TypeError|Error:/.test(panel.text),
+      `unclear message: ${panel.text}`,
+    );
+    assertEqual(
+      await page.evaluate(() => document.getElementById('q_why').value),
+      '',
+      'form changed',
+    );
+    assertEqual(errors.length, 0, `page error: ${errors.join(' | ')}`);
+    await page.close();
+  });
+
+  await test('drafting shows the fact picker first and never offers contact or sensitive facts', async () => {
+    // A stand-in for Chrome's on-device model, installed into the TEST
+    // browser's worker only. It records what it was given.
+    await ctx.evalInWorker(
+      worker,
+      `(() => {
+        globalThis.__prompts = [];
+        globalThis.LanguageModel = {
+          availability: async () => 'available',
+          create: async () => ({
+            prompt: async (text) => { globalThis.__prompts.push(text); return 'I build reliable payment systems.'; },
+            destroy() {},
+          }),
+        };
+        return true;
+      })()`,
+    );
+
+    const page = await openAndReview('greenhouse.html?draft-fake');
+    assert(
+      await clickRowLinkIn(page, 'Why do you want', 'Draft with on-device AI'),
+      'no draft link',
+    );
+    await page.waitForFunction(
+      () =>
+        document
+          .querySelector('[data-fillwright-widget]')
+          .shadowRoot.querySelector('.fw-draft .fw-facts') !== null,
+      { timeout: 10_000 },
+    );
+    const picker = await draftPanel(page);
+    assert(picker.facts.length > 0, 'no facts offered');
+    assertEqual(picker.draft, null, 'a draft was generated before the user chose facts');
+    const offered = picker.facts.join(' | ');
+    assert(!offered.includes(PROFILE_EMAIL), `email offered: ${offered}`);
+    assert(!/\+91|98450/.test(offered), `phone offered: ${offered}`);
+    assert(!/authori[sz]|gender|visa|sponsor/i.test(offered), `sensitive fact offered: ${offered}`);
+
+    assert(await clickRowLinkIn(page, 'Why do you want', 'Write a draft'), 'no Write a draft');
+    await page.waitForFunction(
+      () =>
+        document
+          .querySelector('[data-fillwright-widget]')
+          .shadowRoot.querySelector('.fw-draft textarea') !== null,
+      { timeout: 10_000 },
+    );
+    assertEqual(
+      await page.evaluate(() => document.getElementById('q_why').value),
+      '',
+      'a draft reached the form before "Use this answer"',
+    );
+    const prompts = await ctx.evalInWorker(worker, 'globalThis.__prompts');
+    assertEqual(prompts.length, 1, 'expected one prompt');
+    assert(!prompts[0].includes(PROFILE_EMAIL), 'the prompt contained the email address');
+
+    assert(await clickRowLinkIn(page, 'Why do you want', 'Use this answer'), 'no Use this answer');
+    await page.waitForFunction(() => document.getElementById('q_why').value.length > 0, {
+      timeout: 10_000,
+    });
+    assertEqual(
+      await page.evaluate(() => document.getElementById('q_why').value),
+      'I build reliable payment systems.',
+      'the approved draft was not written',
+    );
+    await ctx.evalInWorker(
+      worker,
+      'delete globalThis.LanguageModel; delete globalThis.__prompts; true',
+    );
+    await page.close();
+  });
+
+  await ui({ type: 'ui:set-settings', patch: { ai: { enabled: false, provider: 'none' } } });
+
   await control.close();
 }

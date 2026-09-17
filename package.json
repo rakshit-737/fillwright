@@ -2,7 +2,7 @@
   "name": "fillwright",
   "private": true,
   "version": "0.4.0",
-  "description": "Fillwright \u2014 privacy-first, local-only resume autofill for job applications.",
+  "description": "Fillwright — privacy-first, local-only resume autofill for job applications.",
   "type": "module",
   "scripts": {
     "dev": "vite build --mode development --watch",
@@ -20,7 +20,8 @@
     "check": "npm run typecheck && npm run lint && npm run test && npm run build && npm run verify",
     "test:e2e": "npm run build:e2e && node tests/e2e/run.mjs",
     "build:e2e": "npm run build && node scripts/build-e2e.mjs",
-    "normalize-eol": "node scripts/normalize-eol.mjs"
+    "normalize-eol": "node scripts/normalize-eol.mjs",
+    "probe:ai": "npm run build:e2e && node scripts/probe-ai.mjs"
   },
   "dependencies": {
     "fflate": "^0.8.2",

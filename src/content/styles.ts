@@ -419,4 +419,7 @@ export const WIDGET_CSS = `
     .fw-why__lead strong { color: #f2f0f4; }
     .fw-draft__text { background: #1a191f; border-color: #3b3845; }
   }
+
+  .fw-note--warn { color: #9a6209; }
+  @media (prefers-color-scheme: dark) { .fw-note--warn { color: #eab765; } }
 `;

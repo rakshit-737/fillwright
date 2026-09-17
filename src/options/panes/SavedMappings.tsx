@@ -23,6 +23,7 @@ export function SavedMappings() {
   const refresh = useCallback(async () => {
     const result = await send<SavedMapping[]>({ type: 'ui:list-saved-mappings' });
     if (result.ok) setMappings(result.data);
+    else setNotice(`What Fillwright learned couldn’t be loaded. ${result.error}`);
     setLoading(false);
   }, []);
 
@@ -39,10 +40,12 @@ export function SavedMappings() {
   }, [mappings]);
 
   const remove = async (mapping: SavedMapping) => {
-    await send({ type: 'ui:delete-saved-mapping', id: mapping.id });
+    const result = await send({ type: 'ui:delete-saved-mapping', id: mapping.id });
     await refresh();
     setNotice(
-      `Forgot “${mapping.label || 'that field'}”. Fillwright will classify it normally again.`,
+      result.ok
+        ? `Forgot “${mapping.label || 'that field'}”. Fillwright will classify it normally again.`
+        : `Nothing was forgotten. ${result.error}`,
     );
   };
 
@@ -59,8 +62,12 @@ export function SavedMappings() {
   };
 
   const setPaused = async (mapping: SavedMapping, disabled: boolean) => {
-    await send({ type: 'ui:update-saved-mapping', id: mapping.id, disabled });
+    const result = await send({ type: 'ui:update-saved-mapping', id: mapping.id, disabled });
     await refresh();
+    if (!result.ok) {
+      setNotice(`Nothing was changed. ${result.error}`);
+      return;
+    }
     setNotice(
       disabled
         ? `Paused “${mapping.label || 'that field'}”. Fillwright ignores it until you resume it.`
@@ -77,9 +84,13 @@ export function SavedMappings() {
     ) {
       return;
     }
-    await send({ type: 'ui:clear-saved-mappings', origin });
+    const result = await send({ type: 'ui:clear-saved-mappings', origin });
     await refresh();
-    setNotice(`Forgot everything for ${hostOf(origin)}.`);
+    setNotice(
+      result.ok
+        ? `Forgot everything for ${hostOf(origin)}.`
+        : `Nothing was forgotten. ${result.error}`,
+    );
   };
 
   const forgetAll = async () => {
@@ -91,9 +102,13 @@ export function SavedMappings() {
     ) {
       return;
     }
-    await send({ type: 'ui:clear-saved-mappings' });
+    const result = await send({ type: 'ui:clear-saved-mappings' });
     await refresh();
-    setNotice('Fillwright has forgotten every website correction.');
+    setNotice(
+      result.ok
+        ? 'Fillwright has forgotten every website correction.'
+        : `Nothing was forgotten. ${result.error}`,
+    );
   };
 
   if (loading) {

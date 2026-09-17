@@ -6,6 +6,7 @@ import { logApplication } from '@/storage/history';
 import { buildMappings, buildFillPlan } from '@/autofill/plan';
 import { originFromUrl, pageKeyFromUrl, sanitizeString } from '@/security/validate';
 import { validateScan } from '@/security/scan-guard';
+import { describeError, unsupportedPageCode } from '@/utils/errors';
 import { FIELD_CATALOG } from '@/field-detection/catalog';
 import type { CanonicalField, SavedMapping, ScanResult } from '@/types/fields';
 import type { ContentRequest, UiRequest } from '@/types/messages';
@@ -25,37 +26,48 @@ import type { ContentRequest, UiRequest } from '@/types/messages';
  */
 export async function scanActiveTab() {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  if (!tab?.id || !tab.url) return err('No active tab', 'ENOTAB');
-  if (!/^https?:/.test(tab.url)) {
-    return err('Fillwright only works on web pages.', 'EBADSCHEME');
-  }
+  if (!tab?.id) return fail('ENOTAB');
+  // Chrome withholds the URL when it has not granted access to this tab.
+  if (!tab.url) return fail('ENOACCESS');
+  const unsupported = unsupportedPageCode(tab.url);
+  if (unsupported) return fail(unsupported);
 
-  try {
-    // Marks this injection as an explicit activation, so the content script
-    // scans immediately instead of applying the passive-mode checks. A
-    // serialised function, not a string — nothing here is evaluated as code.
-    await chrome.scripting.executeScript({
-      target: { tabId: tab.id, allFrames: true },
-      func: () => {
-        (globalThis as unknown as { __fillwrightActivation?: number }).__fillwrightActivation =
-          Date.now();
-      },
-    });
-    // activeTab grants access only because the user just invoked us. The
-    // script is a bundled file — never remote, never generated from a string.
-    // Re-running it on an already-injected page triggers a fresh scan.
-    await chrome.scripting.executeScript({
-      target: { tabId: tab.id, allFrames: true },
-      files: ['content.js'],
-    });
-  } catch (cause) {
-    return err(
-      cause instanceof Error ? cause.message : 'Fillwright could not read this page.',
-      'EINJECT',
-    );
-  }
+  // Marks this injection as an explicit activation, so the content script
+  // scans immediately instead of applying the passive-mode checks. A
+  // serialised function, not a string — nothing here is evaluated as code.
+  const mark = () => {
+    (globalThis as unknown as { __fillwrightActivation?: number }).__fillwrightActivation =
+      Date.now();
+  };
 
-  return ok({ started: true });
+  // activeTab grants access only because the user just invoked us. The script
+  // is a bundled file — never remote, never generated from a string. Re-running
+  // it on an already-injected page triggers a fresh scan.
+  //
+  // Every frame is tried first, so same-origin application iframes work. A
+  // cross-origin frame the tab grant does not cover makes that call fail as a
+  // whole; the top frame alone is then tried, and it reports the frame to the
+  // user itself.
+  for (const allFrames of [true, false]) {
+    try {
+      await chrome.scripting.executeScript({ target: { tabId: tab.id, allFrames }, func: mark });
+      await chrome.scripting.executeScript({
+        target: { tabId: tab.id, allFrames },
+        files: ['content.js'],
+      });
+      return ok({ started: true, allFrames });
+    } catch (cause) {
+      if (!allFrames) {
+        const text = cause instanceof Error ? cause.message : '';
+        return fail(/gallery|webstore/i.test(text) ? 'ESTORE' : 'EINJECT');
+      }
+    }
+  }
+  return fail('EINJECT');
+}
+
+function fail(code: string) {
+  return err(describeError(code).message, code);
 }
 
 export interface StepProgress {
@@ -136,10 +148,10 @@ export function registerAutofillHandlers(): void {
 
     const settings = await getSettings();
     if (!settings.activeProfileId) {
-      return err('No profile is set up yet. Import a resume first.', 'ENOPROFILE');
+      return fail('ENOPROFILE');
     }
     const profile = await getProfile(settings.activeProfileId);
-    if (!profile) return err('The active profile could not be loaded.', 'ENOPROFILE');
+    if (!profile) return fail('ENOPROFILE');
 
     // Paused rules are kept for the user to re-enable, but never applied.
     const saved = (await listMappings(origin)).filter((mapping) => !mapping.disabled);

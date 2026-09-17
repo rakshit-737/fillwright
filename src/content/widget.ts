@@ -3,6 +3,7 @@ import type { JobMatch } from '@/autofill/job-match';
 import type { RepeatKind } from '@/autofill/repeat';
 import { renderReviewList, type DraftView } from './review';
 import { WIDGET_CSS } from './styles';
+import type { UserError } from '@/utils/errors';
 
 /**
  * The on-page Fillwright panel.
@@ -52,6 +53,8 @@ export interface PageMeta {
   progress: { steps: number; filled: number } | null;
   jobMatch: JobMatch | null;
   addOffers: AddOffer[];
+  /** A one-line, non-blocking message, e.g. "could not remember that". */
+  notice?: string;
 }
 
 export interface WidgetCallbacks {
@@ -65,6 +68,9 @@ export interface WidgetCallbacks {
   onSwitchProfile: (profileId: string) => void;
   onAddEntries: (offer: AddOffer) => void;
   onUnlock: () => void;
+  /** Opens one of Fillwright's own pages (import, privacy, …). */
+  onOpenPage: (route: string) => void;
+  onReload: () => void;
   /** Whether a written question can be drafted at all (AI on and available). */
   canDraft: (entry: FillPlanEntry) => boolean;
   onDraftStart: (entry: FillPlanEntry) => void;
@@ -104,7 +110,7 @@ export class FillwrightWidget {
   private stale = false;
   private minimized = false;
   private lastSummary: FillSummary | null = null;
-  private lastError = '';
+  private lastError: UserError = { message: '', action: 'retry', actionLabel: 'Try again' };
   private detectedCount = 0;
   /** The page element focused before the panel took focus. */
   private returnFocus: HTMLElement | null = null;
@@ -197,8 +203,8 @@ export class FillwrightWidget {
     this.go('analyzing');
   }
 
-  renderError(message: string): void {
-    this.lastError = message;
+  renderError(error: UserError): void {
+    this.lastError = error;
     this.go('error');
   }
 
@@ -259,7 +265,7 @@ export class FillwrightWidget {
       filling: 'Filling fields.',
       success: summary ? `Application form filled. ${summary.filled} fields updated.` : '',
       partial: summary ? `${summary.filled} fields updated. Some need your attention.` : '',
-      error: this.lastError,
+      error: this.lastError.message,
       locked: 'Fillwright is locked.',
       undo: summary ? `Restored ${summary.filled} fields.` : '',
     };
@@ -368,21 +374,42 @@ export class FillwrightWidget {
     body.appendChild(row);
   }
 
+  /**
+   * One error screen: what happened, and exactly one thing to do about it.
+   * "Close" is always available and is not counted as an action.
+   */
   private drawError(): void {
-    const card = this.card('Something went wrong');
+    const error = this.lastError;
+    const card = this.card('Fillwright couldn’t finish');
     const body = this.body(card);
-    body.appendChild(el('p', 'fw-error', this.lastError || 'Fillwright could not finish.'));
-    body.appendChild(
-      el(
-        'p',
-        'fw-note',
-        'Nothing on the form was changed. You can try again, or fill it in yourself.',
-      ),
-    );
+    const message = el('p', 'fw-error', error.message || 'Fillwright couldn’t finish.');
+    message.setAttribute('role', 'alert');
+    body.appendChild(message);
+
     const actions = el('div', 'fw-actions');
     actions.appendChild(this.button('Close', 'ghost', () => this.callbacks.onClose()));
-    actions.appendChild(this.button('Try again', 'primary', () => this.callbacks.onRescan()));
+    const run = this.actionFor(error);
+    if (run) actions.appendChild(this.button(error.actionLabel, 'primary', run));
     body.appendChild(actions);
+  }
+
+  private actionFor(error: UserError): (() => void) | null {
+    switch (error.action) {
+      case 'retry':
+        return () => this.callbacks.onRescan();
+      case 'reload-page':
+        return () => this.callbacks.onReload();
+      case 'unlock':
+        return () => this.callbacks.onUnlock();
+      case 'open-import':
+        return () => this.callbacks.onOpenPage('import');
+      case 'open-privacy':
+        return () => this.callbacks.onOpenPage('privacy');
+      case 'open-settings':
+        return () => this.callbacks.onOpenPage('assistance');
+      default:
+        return null;
+    }
   }
 
   /**
@@ -412,6 +439,12 @@ export class FillwrightWidget {
     const body = this.body(card);
 
     body.appendChild(this.profileLine());
+
+    if (this.meta.notice) {
+      const notice = el('p', 'fw-note fw-note--warn', this.meta.notice);
+      notice.setAttribute('role', 'status');
+      body.appendChild(notice);
+    }
 
     if (this.stale) {
       const banner = el('div', 'fw-banner');
@@ -572,7 +605,18 @@ export class FillwrightWidget {
       tally.appendChild(this.tally('✎', `${summary.manual} need your input`, 'muted'));
     if (tally.childElementCount > 0) body.appendChild(tally);
 
-    if (summary.failures.length > 0) {
+    // When the page refused every single value, one sentence explains it
+    // better than a list of identical failures.
+    const allRejected = summary.filled === 0 && summary.failures.length >= 3;
+    if (allRejected) {
+      const note = el(
+        'p',
+        'fw-error',
+        `This form didn’t accept any of the ${summary.failures.length} values — its own code rejected them. Nothing on the form was changed. You can still fill it in by hand.`,
+      );
+      note.setAttribute('role', 'alert');
+      body.appendChild(note);
+    } else if (summary.failures.length > 0) {
       const list = el('ul', 'fw-list');
       list.setAttribute('aria-label', 'Fields that could not be filled');
       for (const failure of summary.failures.slice(0, 6)) {
@@ -597,7 +641,7 @@ export class FillwrightWidget {
     );
 
     const actions = el('div', 'fw-actions');
-    const retryable = summary.failures.filter((failure) => failure.retryable);
+    const retryable = allRejected ? [] : summary.failures.filter((failure) => failure.retryable);
     if (retryable.length > 0) {
       actions.appendChild(
         this.button('Try again', 'ghost', () => {

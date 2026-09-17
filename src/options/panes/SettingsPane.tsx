@@ -10,6 +10,7 @@ interface Props {
 
 export function SettingsPane({ settings, onChange }: Props) {
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState('');
 
   if (!settings) return <div className="fw-pane fw-muted">Loading settings…</div>;
 
@@ -17,7 +18,12 @@ export function SettingsPane({ settings, onChange }: Props) {
     setSaving(true);
     const result = await send<Settings>({ type: 'ui:set-settings', patch: next });
     setSaving(false);
-    if (result.ok) onChange(result.data);
+    if (result.ok) {
+      onChange(result.data);
+      setSaveError('');
+    } else {
+      setSaveError(`That setting wasn’t saved. ${result.error}`);
+    }
   };
 
   return (
@@ -29,6 +35,12 @@ export function SettingsPane({ settings, onChange }: Props) {
           {saving && <span className="fw-saving"> Saving…</span>}
         </p>
       </header>
+
+      {saveError && (
+        <div className="fw-notice fw-notice--danger" role="alert">
+          {saveError}
+        </div>
+      )}
 
       <AutofillModeSection settings={settings} onChange={onChange} />
 
@@ -255,6 +267,10 @@ function AutofillModeSection({
     }
     const result = await send<Settings>({ type: 'ui:set-settings', patch: { autofill: { mode } } });
     if (result.ok) onChange(result.data);
+    else {
+      setNotice(`The mode wasn’t changed. ${result.error}`);
+      return;
+    }
     if (mode === 'manual' && (await chrome.permissions.contains(SITE_ACCESS).catch(() => false))) {
       setNotice(
         'Manual mode is on. Fillwright still holds site access — remove it below if you no longer need it.',
@@ -264,12 +280,18 @@ function AutofillModeSection({
 
   const revoke = async () => {
     const removed = await chrome.permissions.remove(SITE_ACCESS).catch(() => false);
-    await send({ type: 'ui:set-settings', patch: { autofill: { mode: 'manual' } } }).then(
-      (result) => {
-        if (result.ok) onChange(result.data as Settings);
-      },
+    const result = await send<Settings>({
+      type: 'ui:set-settings',
+      patch: { autofill: { mode: 'manual' } },
+    });
+    if (result.ok) onChange(result.data);
+    setNotice(
+      !removed
+        ? 'Chrome didn’t remove site access. You can remove it on chrome://extensions.'
+        : result.ok
+          ? 'Site access removed. Fillwright is in Manual mode.'
+          : `Site access removed, but the mode wasn’t switched to Manual. ${result.error}`,
     );
-    setNotice(removed ? 'Site access removed.' : 'Chrome did not remove site access.');
   };
 
   return (
@@ -301,7 +323,11 @@ function AutofillModeSection({
         Keyboard shortcut: {shortcut ? <kbd className="fw-kbd">{shortcut}</kbd> : 'not set'}.{' '}
         <button
           className="fw-linkbtn"
-          onClick={() => void chrome.tabs.create({ url: 'chrome://extensions/shortcuts' })}
+          onClick={() =>
+            void chrome.tabs
+              .create({ url: 'chrome://extensions/shortcuts' })
+              .catch(() => setNotice('Open chrome://extensions/shortcuts to change the shortcut.'))
+          }
         >
           Change shortcut
         </button>

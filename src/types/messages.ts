@@ -89,8 +89,12 @@ export type ContentRequest =
   /** Multi-step progress for this tab, kept in the worker's session storage. */
   | { type: 'content:step-progress'; filled: number; stepKey: string }
   | { type: 'content:get-progress' }
+  /** Whether the vault is locked right now. No key material, no data. */
+  | { type: 'content:vault-state' }
   | { type: 'content:job-match'; text: string }
   | { type: 'content:list-profiles' }
+  /** Opens one of a fixed set of Fillwright pages (import, privacy, …). */
+  | { type: 'content:open-page'; route: string }
   | { type: 'content:switch-profile'; profileId: string }
   | { type: 'content:draft-facts' }
   | { type: 'content:draft'; question: string; factIds: string[]; maxCharacters?: number };

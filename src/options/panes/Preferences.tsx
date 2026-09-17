@@ -1,5 +1,6 @@
 import { useId, useState } from 'react';
 import { useProfile, saveStateLabel } from '../useProfile';
+import { LoadError } from '@/components/LoadError';
 import { CheckField, PlainField, SelectField, TagsField } from '@/components/TrackedField';
 import { newId, now } from '@/profile/factory';
 import type { Settings } from '@/types/settings';
@@ -45,10 +46,21 @@ export function Preferences({ settings }: { settings: Settings | null }) {
   }
 
   if (!profile) {
+    if (editor.error) {
+      return (
+        <LoadError
+          message={editor.error}
+          actionLabel={editor.errorCode === 'ELOCKED' ? 'Unlock Fillwright' : 'Try again'}
+          onRetry={() =>
+            editor.errorCode === 'ELOCKED' ? (location.hash = '#/security') : editor.reload()
+          }
+        />
+      );
+    }
     return (
       <div className="fw-pane">
         <h1 className="fw-pane__title">Application preferences</h1>
-        <p className="fw-muted">{editor.error || 'No profile is active yet.'}</p>
+        <p className="fw-muted">No profile is active yet.</p>
       </div>
     );
   }
@@ -79,6 +91,7 @@ export function Preferences({ settings }: { settings: Settings | null }) {
             aria-live="polite"
           >
             {saveStateLabel(editor.saveState)}
+            {editor.saveState === 'error' && ` — ${editor.error}`}
           </span>
         </div>
         <p className="fw-pane__subtitle">

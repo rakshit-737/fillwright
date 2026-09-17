@@ -27,6 +27,12 @@ export function PrivacyCenter() {
     if (p.ok) setProfiles(p.data);
     if (h.ok) setHistory(h.data);
     if (m.ok) setMappings(m.data);
+    const failed = [p, h, m].find((result) => !result.ok);
+    if (failed && !failed.ok) {
+      setNotice(
+        `Some of these numbers couldn’t be loaded, so they may be out of date. ${failed.error}`,
+      );
+    }
   }, []);
 
   useEffect(() => {
@@ -44,7 +50,11 @@ export function PrivacyCenter() {
     setBusy(true);
     const result = await send({ type: 'ui:erase-all-data' });
     setBusy(false);
-    setNotice(result.ok ? 'All Fillwright data has been erased from this device.' : result.error);
+    setNotice(
+      result.ok
+        ? 'All Fillwright data has been erased from this device.'
+        : `Nothing was erased. ${result.error}`,
+    );
     await refresh();
   };
 
@@ -102,7 +112,9 @@ export function PrivacyCenter() {
       setNotice(
         result.code === 'ELOCKED'
           ? 'Fillwright is locked. Unlock it under Security, then import again.'
-          : result.error,
+          : result.code === 'EQUOTA'
+            ? result.error
+            : `Nothing was imported. ${result.error}`,
       );
       return;
     }
@@ -262,9 +274,14 @@ export function PrivacyCenter() {
           <button
             className="fw-btn"
             onClick={async () => {
-              await send({ type: 'ui:clear-history' });
+              if (!window.confirm('Clear your application history? This cannot be undone.')) return;
+              const result = await send({ type: 'ui:clear-history' });
               await refresh();
-              setNotice('Application history cleared.');
+              setNotice(
+                result.ok
+                  ? 'Application history cleared.'
+                  : `History wasn’t cleared. ${result.error}`,
+              );
             }}
             disabled={busy || history.length === 0}
           >

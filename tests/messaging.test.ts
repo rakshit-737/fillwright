@@ -54,7 +54,8 @@ describe('a request that never comes back', () => {
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.code).toBe('ETIMEOUT');
-      expect(result.error).toMatch(/timed out/i);
+      // The code stays specific; the text is the one the user can act on.
+      expect(result.error).toMatch(/did not answer/i);
     }
   });
 

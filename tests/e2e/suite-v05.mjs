@@ -718,5 +718,89 @@ export async function runV05Suite(ctx) {
 
   await ui({ type: 'ui:set-settings', patch: { ai: { enabled: false, provider: 'none' } } });
 
+  /* --- error recovery ------------------------------------------------- */
+
+  await test('errors: a form that rejects every value gets one plain summary', async () => {
+    const page = await browser.newPage();
+    await page.goto(url('rejecting.html'), { waitUntil: 'domcontentloaded' });
+    await scanPage(worker, url('rejecting.html'));
+    await waitForWidget(page, (s) => s.text.includes('application field'));
+    assert(await clickWidgetButton(page, 'Fill'), 'no Fill button');
+    const widget = await waitForWidget(page, (s) => s.text.includes('didn’t accept any'));
+    assertEqual(widget.items.length, 0, 'failures were listed one by one');
+    assert(widget.text.includes('Nothing on the form was changed'), 'no reassurance');
+    assert(!widget.buttons.includes('Try again'), 'a pointless retry was offered');
+    const values = await page.evaluate(() =>
+      Array.from(document.querySelectorAll('input'))
+        .map((input) => input.value)
+        .join(''),
+    );
+    assertEqual(values, '', 'the form was changed');
+    await page.close();
+  });
+
+  await test('errors: a form in an unreachable frame is explained', async () => {
+    if (!ctx.foreign) {
+      console.log('      (skipped: 127.0.0.2 is not bindable here)');
+      return;
+    }
+    const host = url(
+      `frame-host.html?frame=${encodeURIComponent(`${ctx.foreign.origin}/greenhouse.html`)}`,
+    );
+    const page = await browser.newPage();
+    await page.goto(host, { waitUntil: 'networkidle0' });
+    const started = await scanPage(worker, host);
+    assert(started?.ok !== false, `activation failed: ${JSON.stringify(started)}`);
+    const widget = await waitForWidget(page, (s) => s.text.includes('frame'));
+    assert(widget.text.includes('can’t reach'), `unexpected text: ${widget.text}`);
+    assert(widget.text.includes('Nothing on the form was changed'), 'no reassurance');
+    await page.close();
+  });
+
+  await test('errors: a vault locked after the scan shows the unlock screen, not a fill', async () => {
+    const PASS = 'correct horse battery staple v05';
+    const enabled = await ui({ type: 'ui:vault-enable', passphrase: PASS });
+    assert(enabled.ok, `vault enable failed: ${enabled.error}`);
+    try {
+      const page = await browser.newPage();
+      await page.goto(url('greenhouse.html?locked'), { waitUntil: 'domcontentloaded' });
+      await scanPage(worker, url('greenhouse.html?locked'));
+      await waitForWidget(page, (s) => s.text.includes('application field'));
+      await ui({ type: 'ui:vault-lock' });
+      assert(await clickWidgetButton(page, 'Fill'), 'no Fill button');
+      const widget = await waitForWidget(page, (s) => s.text.includes('Fillwright is locked'));
+      assert(widget.buttons.includes('Unlock Fillwright'), 'no unlock action');
+      assertEqual(
+        await page.evaluate(() => document.getElementById('first_name').value),
+        '',
+        'a stale plan was written after locking',
+      );
+      await page.close();
+    } finally {
+      await ui({ type: 'ui:vault-unlock', passphrase: PASS });
+      const disabled = await ui({ type: 'ui:vault-disable', passphrase: PASS });
+      assert(disabled.ok, `vault disable failed: ${disabled.error}`);
+    }
+  });
+
+  await test('errors: the popup explains a page it cannot fill before you try', async () => {
+    // Opened as a tab, the popup's own extension page is the active tab — one
+    // of the pages Chrome keeps off-limits.
+    const popup = await browser.newPage();
+    await popup.goto(`chrome-extension://${extensionId}/popup.html`, { waitUntil: 'networkidle0' });
+    await popup.waitForFunction(() => document.querySelector('.fw-page-block') !== null, {
+      timeout: 10_000,
+    });
+    const state = await popup.evaluate(() => ({
+      text: document.querySelector('.fw-page-block').textContent,
+      disabled: Array.from(document.querySelectorAll('button')).find((b) =>
+        b.textContent.includes('Fill this page'),
+      )?.disabled,
+    }));
+    assert(state.text.includes('off-limits'), `unclear message: ${state.text}`);
+    assertEqual(state.disabled, true, 'Fill this page should be disabled here');
+    await popup.close();
+  });
+
   await control.close();
 }

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { send } from '@/utils/messaging';
+import { describeError, looksTechnical } from '@/utils/errors';
 import { ExtractionError, extractResumeText, parseResume, type ParsedResume } from '@/parser';
 import { mergeResumeIntoProfile, type MergeChange } from '@/profile/merge';
 import { assertNoSensitiveInference } from '@/security/sensitive';
@@ -56,7 +57,8 @@ export function ImportResume({ settings }: { settings: Settings | null }) {
         setExistingResume(null);
         return;
       }
-      const attachment = await getResume(resumeId);
+      // Best effort: a locked vault or a storage hiccup only hides the notice.
+      const attachment = await getResume(resumeId).catch(() => undefined);
       if (!cancelled) setExistingResume(attachment ?? null);
     })();
     return () => {
@@ -65,11 +67,19 @@ export function ImportResume({ settings }: { settings: Settings | null }) {
   }, [profileId, stage.name]);
 
   const handleText = useCallback((text: string, source: SourceInfo) => {
-    const parsed = parseResume(text);
-    // Defence in depth: fail loudly if the parser ever starts producing
-    // sensitive fields, rather than letting them flow into the profile.
-    assertNoSensitiveInference(parsed);
-    setStage({ name: 'review', parsed, source });
+    try {
+      const parsed = parseResume(text);
+      // Defence in depth: fail loudly if the parser ever starts producing
+      // sensitive fields, rather than letting them flow into the profile.
+      assertNoSensitiveInference(parsed);
+      setStage({ name: 'review', parsed, source });
+    } catch {
+      setStage({
+        name: 'error',
+        message:
+          'Fillwright couldn’t read that text as a resume. Nothing was saved. Check it’s the full resume, or try the original file.',
+      });
+    }
   }, []);
 
   const handleFile = useCallback(
@@ -120,7 +130,7 @@ export function ImportResume({ settings }: { settings: Settings | null }) {
     try {
       const current = await send<Profile>({ type: 'ui:get-profile', profileId });
       if (!current.ok) {
-        setStage({ name: 'error', message: describeSaveFailure(current.error) });
+        setStage({ name: 'error', message: describeSaveFailure(current.error, current.code) });
         return;
       }
 
@@ -151,7 +161,7 @@ export function ImportResume({ settings }: { settings: Settings | null }) {
 
       const saved = await send<Profile>({ type: 'ui:save-profile', profile });
       if (!saved.ok) {
-        setStage({ name: 'error', message: describeSaveFailure(saved.error) });
+        setStage({ name: 'error', message: describeSaveFailure(saved.error, saved.code) });
         return;
       }
       setStage({ name: 'done', changeCount: changes.length });
@@ -499,8 +509,11 @@ export type { MergeChange };
  * "Something went wrong" tells the user nothing and leaves them guessing
  * whether to retry, change the file, or give up.
  */
-function describeSaveFailure(cause: unknown): string {
+function describeSaveFailure(cause: unknown, code?: string): string {
   const message = cause instanceof Error ? cause.message : String(cause ?? '');
+  if (code === 'ELOCKED')
+    return 'Fillwright is locked. Unlock it under Security, then import again.';
+  if (code === 'EQUOTA') return describeError('EQUOTA').message;
 
   if (/detached/i.test(message)) {
     return 'The file could not be read a second time. Please choose it again and retry.';
@@ -517,9 +530,9 @@ function describeSaveFailure(cause: unknown): string {
   if (/timed out/i.test(message)) {
     return 'Saving took too long and was stopped. Please try again.';
   }
-  return message
-    ? `Your profile could not be saved: ${message}`
-    : 'Your profile could not be saved. Please try again.';
+  return message && !looksTechnical(message)
+    ? `Your profile could not be saved. ${message}`
+    : 'Your profile could not be saved. Please try again — nothing was lost.';
 }
 
 /** A failed file copy is recoverable: the parsed profile is unaffected. */

@@ -22,12 +22,14 @@ export function History({
   const [query, setQuery] = useState('');
   const [sort, setSort] = useState<SortOrder>('newest');
   const [loading, setLoading] = useState(true);
+  const [notice, setNotice] = useState('');
 
   const enabled = settings?.privacy.keepApplicationHistory ?? false;
 
   const refresh = useCallback(async () => {
     const result = await send<ApplicationHistoryEntry[]>({ type: 'ui:list-history' });
     if (result.ok) setEntries(result.data);
+    else setNotice(`Your history couldn’t be loaded. ${result.error}`);
     setLoading(false);
   }, []);
 
@@ -60,12 +62,14 @@ export function History({
       patch: { privacy: { keepApplicationHistory: value } },
     });
     if (result.ok) onSettingsChange(result.data);
+    else setNotice(`The setting wasn’t changed. ${result.error}`);
   };
 
   const clear = async () => {
     if (!window.confirm('Clear your application history? This cannot be undone.')) return;
-    await send({ type: 'ui:clear-history' });
+    const result = await send({ type: 'ui:clear-history' });
     await refresh();
+    setNotice(result.ok ? 'History cleared.' : `History wasn’t cleared. ${result.error}`);
   };
 
   return (
@@ -77,6 +81,12 @@ export function History({
           you typed, and never uploaded.
         </p>
       </header>
+
+      {notice && (
+        <div className="fw-notice" role="status">
+          {notice}
+        </div>
+      )}
 
       <section className="fw-section">
         <CheckField

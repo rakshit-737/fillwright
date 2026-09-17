@@ -1,4 +1,5 @@
 import type { AnyRequest, Result } from '@/types/messages';
+import { userMessage } from './errors';
 
 /**
  * Typed wrapper around chrome.runtime.sendMessage.
@@ -45,11 +46,20 @@ export async function send<T>(request: AnyRequest, options: SendOptions = {}): P
   };
 
   const first = await attempt();
-  if (first.ok || !retry || !isTransient(first)) return first;
+  if (first.ok || !retry || !isTransient(first)) return presentable(first);
 
   // The first send wakes a sleeping worker; give it one more chance before
   // reporting a failure the user can do nothing about.
-  return attempt();
+  return presentable(await attempt());
+}
+
+/**
+ * Every failure leaves here with text a person can act on. The code is kept
+ * so callers can still branch on it (ELOCKED, EQUOTA, …).
+ */
+function presentable<T>(result: Result<T>): Result<T> {
+  if (result.ok) return result;
+  return { ...result, error: userMessage(result.code, result.error) };
 }
 
 /** Failures that are worth one retry, as opposed to real errors from a handler. */

@@ -8,6 +8,8 @@ export interface ProfileEditor {
   profile: Profile | null;
   loading: boolean;
   error: string;
+  /** Code of the last failure, e.g. ELOCKED, so panes can offer the right fix. */
+  errorCode: string;
   saveState: SaveState;
   /** Applies a mutation to a draft copy and schedules a save. */
   update: (mutate: (draft: Profile) => void) => void;
@@ -30,6 +32,7 @@ export function useProfile(profileId: string | null): ProfileEditor {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [errorCode, setErrorCode] = useState('');
   const [saveState, setSaveState] = useState<SaveState>('idle');
 
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -43,12 +46,14 @@ export function useProfile(profileId: string | null): ProfileEditor {
       return;
     }
     setLoading(true);
-    send<Profile>({ type: 'ui:get-profile', profileId }).then((result) => {
+    void send<Profile>({ type: 'ui:get-profile', profileId }).then((result) => {
       if (result.ok) {
         setProfile(result.data);
         setError('');
+        setErrorCode('');
       } else {
         setError(result.error);
+        setErrorCode(result.code ?? '');
       }
       setLoading(false);
     });
@@ -69,8 +74,12 @@ export function useProfile(profileId: string | null): ProfileEditor {
       if (savedTimer.current) clearTimeout(savedTimer.current);
       savedTimer.current = setTimeout(() => setSaveState('idle'), 1600);
     } else {
+      // Keep the edits: a later save (or the retry button) writes them, unless
+      // the user has typed something newer in the meantime.
+      pending.current ??= draft;
       setSaveState('error');
       setError(result.error);
+      setErrorCode(result.code ?? '');
     }
   }, []);
 
@@ -109,7 +118,7 @@ export function useProfile(profileId: string | null): ProfileEditor {
     };
   }, [persist]);
 
-  return { profile, loading, error, saveState, update, flush, reload: load };
+  return { profile, loading, error, errorCode, saveState, update, flush, reload: load };
 }
 
 export function saveStateLabel(state: SaveState): string {
@@ -121,7 +130,7 @@ export function saveStateLabel(state: SaveState): string {
     case 'saved':
       return 'Saved';
     case 'error':
-      return 'Could not save';
+      return 'Not saved yet — your changes are kept';
     default:
       return '';
   }

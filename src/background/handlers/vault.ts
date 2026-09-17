@@ -3,7 +3,14 @@ import { getSettings, setSettings } from '@/storage/settings';
 import { pruneOrphanResumes, rewriteAll } from '@/storage/profiles';
 import { deriveKey } from '@/security/crypto';
 import { changePassphrase, disable, enable, getMeta, lock, status, unlock } from '@/security/vault';
-import type { UiRequest } from '@/types/messages';
+import type { ContentRequest, UiRequest } from '@/types/messages';
+
+const OPENABLE_ROUTES: ReadonlySet<string> = new Set([
+  'security',
+  'import',
+  'privacy',
+  'assistance',
+]);
 
 /**
  * Vault handlers.
@@ -18,6 +25,23 @@ export function registerVaultHandlers(): void {
   handle('ui:open-security', async () => {
     await chrome.tabs.create({ url: chrome.runtime.getURL('options.html#/security') });
     return ok({ opened: true });
+  });
+
+  /**
+   * The panel's "Import a resume" / "Open Privacy Center" actions. Only a fixed
+   * list of routes can be opened, so a page cannot steer the user anywhere else.
+   */
+  handle('content:open-page', async (request) => {
+    const { route } = request as Extract<ContentRequest, { type: 'content:open-page' }>;
+    if (!OPENABLE_ROUTES.has(route)) return err('Unknown page', 'EBADROUTE');
+    await chrome.tabs.create({ url: chrome.runtime.getURL(`options.html#/${route}`) });
+    return ok({ opened: true });
+  });
+
+  handle('content:vault-state', async () => {
+    const settings = await getSettings();
+    const current = await status(settings.privacy.autoLockMinutes);
+    return ok({ locked: current.state === 'locked' });
   });
 
   handle('ui:vault-status', async () => {

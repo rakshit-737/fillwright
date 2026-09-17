@@ -1,4 +1,5 @@
 import { useProfile, saveStateLabel } from '../useProfile';
+import { LoadError } from '@/components/LoadError';
 import { EntryList, moveItem } from '@/components/EntryList';
 import {
   CheckField,
@@ -54,12 +55,21 @@ export function ProfileEditor({ settings }: { settings: Settings | null }) {
   }
 
   if (!profile) {
+    if (editor.error) {
+      return (
+        <LoadError
+          message={editor.error}
+          actionLabel={editor.errorCode === 'ELOCKED' ? 'Unlock Fillwright' : 'Try again'}
+          onRetry={() =>
+            editor.errorCode === 'ELOCKED' ? (location.hash = '#/security') : editor.reload()
+          }
+        />
+      );
+    }
     return (
       <div className="fw-pane">
         <h1 className="fw-pane__title">Profile</h1>
-        <p className="fw-muted">
-          {editor.error || 'No profile is active yet. Import a resume to create one.'}
-        </p>
+        <p className="fw-muted">No profile is active yet. Import a resume to create one.</p>
       </div>
     );
   }
@@ -78,6 +88,11 @@ export function ProfileEditor({ settings }: { settings: Settings | null }) {
           >
             {status}
           </span>
+          {editor.saveState === 'error' && (
+            <button className="fw-btn fw-btn--sm" onClick={() => void editor.flush()}>
+              {editor.errorCode === 'ELOCKED' ? 'Unlock, then retry' : 'Retry saving'}
+            </button>
+          )}
         </div>
         <p className="fw-pane__subtitle">
           Everything here stays on this device. Edits you make are never replaced by a future resume

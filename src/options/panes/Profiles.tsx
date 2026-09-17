@@ -38,6 +38,7 @@ export function Profiles({
   const refresh = useCallback(async () => {
     const result = await send<ProfileSummary[]>({ type: 'ui:list-profiles' });
     if (!result.ok) {
+      setNotice(`Your profiles couldn’t be loaded. ${result.error}`);
       setLoading(false);
       return;
     }
@@ -48,7 +49,17 @@ export function Profiles({
     const detailed: ProfileCard[] = [];
     for (const summary of result.data) {
       const full = await send<Profile>({ type: 'ui:get-profile', profileId: summary.id });
-      if (!full.ok) continue;
+      if (!full.ok) {
+        // Still list it — a profile that can't be opened right now (a locked
+        // vault, say) should not look as if it had vanished.
+        detailed.push({
+          ...summary,
+          completion: 0,
+          gaps: [full.error],
+          counts: { education: 0, experience: 0, skills: 0 },
+        });
+        continue;
+      }
       const completeness = computeCompleteness(full.data);
       detailed.push({
         ...summary,
@@ -79,6 +90,8 @@ export function Profiles({
       setNotice(
         `Now using “${cards.find((card) => card.id === profileId)?.name ?? 'this profile'}”.`,
       );
+    } else {
+      setNotice(`The active profile wasn’t changed. ${result.error}`);
     }
   };
 
@@ -92,7 +105,9 @@ export function Profiles({
       ...(cloneFromId ? { cloneFromId } : {}),
     });
     setBusy('');
-    if (result.ok) {
+    if (!result.ok) {
+      setNotice(`No profile was created. ${result.error}`);
+    } else {
       await refresh();
       setRenaming(result.data.id);
       setDraftName(name);
@@ -109,9 +124,11 @@ export function Profiles({
     setRenaming(null);
     if (!trimmed) return;
     const current = await send<Profile>({ type: 'ui:get-profile', profileId });
-    if (!current.ok) return;
-    await send({ type: 'ui:save-profile', profile: { ...current.data, name: trimmed } });
+    const saved = current.ok
+      ? await send({ type: 'ui:save-profile', profile: { ...current.data, name: trimmed } })
+      : current;
     await refresh();
+    if (!saved.ok) setNotice(`The profile wasn’t renamed. ${saved.error}`);
   };
 
   const remove = async (card: ProfileCard) => {
@@ -122,12 +139,16 @@ export function Profiles({
     );
     if (!confirmed) return;
     setBusy(card.id);
-    await send({ type: 'ui:delete-profile', profileId: card.id });
+    const deleted = await send({ type: 'ui:delete-profile', profileId: card.id });
     const state = await send<Settings>({ type: 'ui:get-settings' });
     if (state.ok) onSettingsChange(state.data);
     setBusy('');
     await refresh();
-    setNotice(`“${card.name}” was deleted.`);
+    setNotice(
+      deleted.ok
+        ? `“${card.name}” was deleted.`
+        : `“${card.name}” wasn’t deleted. ${deleted.error}`,
+    );
   };
 
   if (loading) {

@@ -9,6 +9,8 @@ import type { DraftFact } from './review';
 import { applyAdapter, detectAdapter } from '@/adapters';
 import type { CanonicalField, DetectedField, FillPlan, FillPlanEntry } from '@/types/fields';
 import type { AutofillMode } from '@/types/settings';
+import { describeError } from '@/utils/errors';
+import { request, notify } from './transport';
 
 /**
  * Fillwright content script.
@@ -109,9 +111,7 @@ function boot(): void {
   watchNavigation();
   watchForNewFields();
 
-  chrome.runtime.sendMessage({ type: 'content:ready', url: location.href }).catch(() => {
-    /* The worker may be asleep; the next request wakes it. */
-  });
+  notify({ type: 'content:ready', url: location.href });
 
   if (activated) void open();
   else void passiveBoot();
@@ -207,34 +207,43 @@ async function runScan(quiet: boolean): Promise<void> {
   const visible = fields.filter((field) => field.visible && !field.disabled);
   const fieldMap = new Map(visible.map((field) => [field.id, field]));
 
-  const response = await chrome.runtime
-    .sendMessage({
-      type: 'content:request-mappings',
-      scan: {
-        url: location.href,
-        pageKey: location.href,
-        adapterId: adapter?.id ?? null,
-        scannedAt: new Date().toISOString(),
-        fields: visible,
-        mappings: [],
-      },
-      overrides: [...overrides].map(([fingerprint, canonical]) => ({ fingerprint, canonical })),
-    })
-    .catch(() => null);
+  // Nothing to read here, but a cross-origin frame fills the page: the form
+  // is almost certainly inside it, where this script cannot go.
+  if (visible.length === 0 && hasUnreachableFormFrame()) {
+    if (!quiet) widget.renderError(describeError('EFRAME', undefined, true));
+    return;
+  }
 
-  if (!response?.ok) {
-    if (response?.code === 'ELOCKED') {
+  const response = await request<{
+    plan: FillPlan;
+    profileName?: string;
+    settings?: { highlightFilledFields?: boolean; diagnostics?: boolean };
+  }>({
+    type: 'content:request-mappings',
+    scan: {
+      url: location.href,
+      pageKey: location.href,
+      adapterId: adapter?.id ?? null,
+      scannedAt: new Date().toISOString(),
+      fields: visible,
+      mappings: [],
+    },
+    overrides: [...overrides].map(([fingerprint, canonical]) => ({ fingerprint, canonical })),
+  });
+
+  if (!response.ok) {
+    if (response.code === 'ELOCKED') {
       widget.renderLocked();
       // Uninvited, a locked vault is shown as the small pill, not a dialog.
       if (quiet && !engaged) widget.minimize();
       return;
     }
     if (quiet) return;
-    widget.renderError(friendlyError(response?.code, response?.error));
+    widget.renderError(describeError(response.code, response.error, true));
     return;
   }
 
-  const plan = response.data.plan as FillPlan;
+  const plan = response.data.plan;
   session = {
     elements,
     fields: fieldMap,
@@ -304,13 +313,15 @@ function createWidget(): FillwrightWidget {
       onListProfiles: async () =>
         (await send<ProfileChoice[]>({ type: 'content:list-profiles' })) ?? [],
       onSwitchProfile: (profileId) => {
-        void send({ type: 'content:switch-profile', profileId }).then(() => open());
+        void request({ type: 'content:switch-profile', profileId }).then((reply) => {
+          if (reply.ok) void open();
+          else widget?.renderError(describeError(reply.code, reply.error, true));
+        });
       },
       onAddEntries: (offer) => void addMissingEntries(offer),
-      onUnlock: () => {
-        // The content script cannot open an extension page itself; the worker does.
-        void chrome.runtime.sendMessage({ type: 'ui:open-security' }).catch(() => undefined);
-      },
+      onUnlock: () => openExtensionPage('security'),
+      onOpenPage: (route) => openExtensionPage(route),
+      onReload: () => location.reload(),
       canDraft: () => draftAvailable !== false,
       onDraftStart: (entry) => void startDraft(entry),
       onDraftGenerate: (entry, factIds) => void generateDraft(entry, factIds),
@@ -325,6 +336,14 @@ function createWidget(): FillwrightWidget {
 
 async function runFill(entries: FillPlanEntry[]): Promise<void> {
   if (!widget) return;
+  // The plan holds values read while the vault was open. If it has locked
+  // since, those values are not written: the user unlocks and scans again.
+  const gate = await request<{ locked: boolean }>({ type: 'content:vault-state' });
+  if (gate.ok && gate.data.locked) {
+    session = session ? { ...session, plan: null } : null;
+    widget.renderLocked();
+    return;
+  }
   widget.renderFilling();
   const summary = await applyFill(entries);
   widget.markFilled(summary);
@@ -373,12 +392,10 @@ async function applyFill(entries: FillPlanEntry[]): Promise<FillSummary & { ok: 
   const manual = left.filter((entry) => entry.status === 'manual-required').length;
 
   // Counts only — no field values ever leave this page.
-  chrome.runtime
-    .sendMessage({
-      type: 'content:fill-complete',
-      outcomes: outcomes.map(({ fieldId, ok }) => ({ fieldId, ok })),
-    })
-    .catch(() => undefined);
+  notify({
+    type: 'content:fill-complete',
+    outcomes: outcomes.map(({ fieldId, ok }) => ({ fieldId, ok })),
+  });
   if (filled > 0) {
     void send({ type: 'content:step-progress', filled, stepKey: stepKey() });
   }
@@ -400,10 +417,17 @@ async function teachMapping(
   if (!entry.fingerprint) return;
   if (remember) {
     overrides.delete(entry.fingerprint);
-    await send({
+    const saved = await request({
       type: 'content:save-mapping',
       mapping: { fingerprint: entry.fingerprint, label: entry.label, canonical: field },
     });
+    if (!saved.ok) {
+      // Still apply it for this form, and say it was not remembered.
+      overrides.set(entry.fingerprint, field);
+      widget?.setMeta({
+        notice: 'Applied to this form, but Fillwright could not remember it for next time.',
+      });
+    }
   } else {
     overrides.set(entry.fingerprint, field);
   }
@@ -414,9 +438,11 @@ async function addMissingEntries(offer: AddOffer): Promise<void> {
   widget?.renderAnalyzing();
   const pressed = await addEntries(offer.kind, offer.missing);
   if (pressed === 0) {
-    widget?.renderError(
-      `Fillwright could not find a single, clearly labelled “Add ${offer.kind}” button. Please add the entries yourself, then scan again.`,
-    );
+    widget?.renderError({
+      message: `Fillwright couldn’t find one clearly labelled “Add ${offer.kind}” button, so it didn’t press anything. Nothing on the form was changed. Add the entries yourself, then scan again.`,
+      action: 'retry',
+      actionLabel: 'Scan again',
+    });
     return;
   }
   await open();
@@ -450,18 +476,16 @@ async function startDraft(entry: FillPlanEntry): Promise<void> {
   if (!widget) return;
   widget.drafts.set(entry.fieldId, { phase: 'loading' });
   widget.refresh();
-  const response = await chrome.runtime
-    .sendMessage({ type: 'content:draft-facts' })
-    .catch(() => null);
-  if (!response?.ok) {
-    if (response?.code === 'EAIOFF') draftAvailable = false;
+  const response = await request<DraftFact[]>({ type: 'content:draft-facts' });
+  if (!response.ok) {
+    if (response.code === 'EAIOFF') draftAvailable = false;
     widget.drafts.set(entry.fieldId, {
       phase: 'error',
-      message: response?.error ?? 'The on-device model could not be reached.',
+      message: `${describeError(response.code, response.error).message} Nothing on the form was changed.`,
     });
   } else {
     draftAvailable = true;
-    const facts = response.data as DraftFact[];
+    const facts = response.data;
     widget.drafts.set(entry.fieldId, {
       phase: 'facts',
       facts,
@@ -480,20 +504,21 @@ async function generateDraft(entry: FillPlanEntry, factIds: string[]): Promise<v
 
   const field = session?.fields.get(entry.fieldId);
   const question = field?.signals.labelText || field?.signals.ariaLabel || entry.label;
-  const response = await chrome.runtime
-    .sendMessage({
-      type: 'content:draft',
-      question,
-      factIds,
-      ...(field?.signals.maxLength ? { maxCharacters: field.signals.maxLength } : {}),
-    })
-    .catch(() => null);
+  const response = await request<{ text: string }>({
+    type: 'content:draft',
+    question,
+    factIds,
+    ...(field?.signals.maxLength ? { maxCharacters: field.signals.maxLength } : {}),
+  });
 
   widget.drafts.set(
     entry.fieldId,
-    response?.ok
+    response.ok
       ? { phase: 'result', text: String(response.data.text ?? ''), facts, chosen }
-      : { phase: 'error', message: response?.error ?? 'No draft was produced.' },
+      : {
+          phase: 'error',
+          message: `${describeError(response.code, response.error).message} Nothing on the form was changed.`,
+        },
   );
   widget.refresh();
 }
@@ -653,29 +678,38 @@ function stepKey(): string {
   return `${location.pathname}#${marker.replace(/\s+/g, ' ').trim().slice(0, 60)}`;
 }
 
-function friendlyError(code: string | undefined, fallback: string | undefined): string {
-  switch (code) {
-    case 'ENOPROFILE':
-      return 'Fillwright has no profile yet. Import your resume in Fillwright’s settings, then try again.';
-    case 'EBADSCAN':
-      return 'This page’s form could not be read safely, so Fillwright left it alone.';
-    case 'EBADORIGIN':
-    case 'ENOSENDER':
-      return 'Fillwright only works on regular web pages.';
-    default:
-      return (
-        fallback ??
-        'Fillwright could not reach its background service. Reload the page and try again.'
-      );
-  }
-}
-
 async function send<T = unknown>(message: {
   type: string;
   [key: string]: unknown;
 }): Promise<T | null> {
-  const response = await chrome.runtime.sendMessage(message).catch(() => null);
-  return response?.ok ? (response.data as T) : null;
+  const reply = await request<T>(message);
+  return reply.ok ? reply.data : null;
+}
+
+/** Only these extension pages may be opened from a web page. */
+const OPENABLE = new Set(['security', 'import', 'privacy', 'assistance']);
+
+function openExtensionPage(route: string): void {
+  if (!OPENABLE.has(route)) return;
+  notify({ type: 'content:open-page', route });
+}
+
+/**
+ * True when a large, visible iframe from another origin is on the page —
+ * where an application form usually lives when the top page has none.
+ */
+function hasUnreachableFormFrame(): boolean {
+  return Array.from(document.querySelectorAll('iframe')).some((frame) => {
+    let crossOrigin: boolean;
+    try {
+      crossOrigin = frame.contentDocument === null;
+    } catch {
+      crossOrigin = true;
+    }
+    if (!crossOrigin) return false;
+    const box = frame.getBoundingClientRect();
+    return box.width >= 300 && box.height >= 300;
+  });
 }
 
 function teardown(): void {

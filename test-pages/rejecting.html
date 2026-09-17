@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Apply — Operations Analyst (locked-down form)</title>
+    <link rel="stylesheet" href="./shared.css" />
+  </head>
+  <body>
+    <h1>Apply: Operations Analyst</h1>
+    <p class="lead">
+      Expected: this form's own code throws away every value that isn't typed one key at a time.
+      Fillwright notices every write was rejected and says so in one sentence — not one row per
+      field — and leaves the form unchanged.
+    </p>
+    <form>
+      <label for="r-first">First Name</label>
+      <input id="r-first" name="first_name" autocomplete="given-name" />
+      <label for="r-last">Last Name</label>
+      <input id="r-last" name="last_name" autocomplete="family-name" />
+      <label for="r-email">Email</label>
+      <input id="r-email" name="email" type="email" autocomplete="email" />
+      <label for="r-phone">Phone</label>
+      <input id="r-phone" name="phone" type="tel" autocomplete="tel" />
+      <button type="submit">Submit application</button>
+    </form>
+    <script>
+      // Accept a change only when it grows the value by a single character.
+      document.querySelectorAll('input').forEach((input) => {
+        let accepted = input.value;
+        input.addEventListener('input', () => {
+          if (input.value.length - accepted.length === 1) accepted = input.value;
+          else input.value = accepted;
+        });
+        input.addEventListener('change', () => {
+          if (input.value !== accepted) input.value = accepted;
+        });
+      });
+    </script>
+    <script src="./shared.js"></script>
+  </body>
+</html>

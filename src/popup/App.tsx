@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { send } from '@/utils/messaging';
+import { describeError, unsupportedPageCode } from '@/utils/errors';
 import { computeCompleteness, type Completeness } from '@/profile/completeness';
 import type { ProfileSummary } from '@/storage/profiles';
 import type { Settings } from '@/types/settings';
@@ -50,6 +51,12 @@ export function App() {
         // A locked vault is expected, not an error: the popup says so and
         // offers the one action that fixes it.
         else if (profileResult.code === 'ELOCKED') locked = true;
+        // Anything else is a real failure — never show "set up" to someone who
+        // already has a profile.
+        else if (profileResult.code !== 'ENOTFOUND') {
+          setLoad({ phase: 'error', message: profileResult.error });
+          return;
+        }
       }
       if (cancelled) return;
 
@@ -73,7 +80,26 @@ export function App() {
   const switchProfile = async (profileId: string) => {
     const result = await send({ type: 'ui:set-active-profile', profileId });
     if (result.ok) setReload((value) => value + 1);
+    else {
+      setScanState('error');
+      setScanError(`The profile wasn’t switched. ${result.error}`);
+    }
   };
+
+  // Some tabs can never be filled. Say so before the user tries.
+  const [pageBlock, setPageBlock] = useState('');
+  useEffect(() => {
+    chrome.tabs
+      .query({ active: true, currentWindow: true })
+      .then(([tab]) => {
+        // Opening the popup grants activeTab, which reveals the URL of any
+        // page Fillwright can work on. Chrome withholds it only for pages it
+        // keeps off-limits, so a missing URL is itself the answer.
+        const code = !tab ? null : tab.url ? unsupportedPageCode(tab.url) : 'ERESTRICTED';
+        setPageBlock(code ? describeError(code).message : '');
+      })
+      .catch(() => setPageBlock(''));
+  }, []);
 
   const scanPage = async () => {
     setScanState('scanning');
@@ -88,8 +114,15 @@ export function App() {
   };
 
   const openOptions = (hash = '') => {
-    chrome.tabs.create({ url: chrome.runtime.getURL(`options.html${hash}`) });
-    window.close();
+    chrome.tabs
+      .create({ url: chrome.runtime.getURL(`options.html${hash}`) })
+      .then(() => window.close())
+      .catch(() => {
+        setScanState('error');
+        setScanError(
+          'Fillwright’s settings couldn’t be opened. Right-click the toolbar icon and choose Options.',
+        );
+      });
   };
 
   if (load.phase === 'loading') {
@@ -219,6 +252,11 @@ export function App() {
           </ul>
 
           <div className="fw-popup__actions">
+            {pageBlock && (
+              <p className="fw-muted fw-page-block" role="status">
+                {pageBlock}
+              </p>
+            )}
             {scanState === 'error' && (
               <p className="fw-scan-error" role="alert">
                 {scanError}
@@ -227,7 +265,7 @@ export function App() {
             <button
               className="fw-btn fw-btn--primary"
               onClick={scanPage}
-              disabled={scanState === 'scanning' || !ready}
+              disabled={scanState === 'scanning' || !ready || Boolean(pageBlock)}
               title={
                 ready ? 'Scan this page for application fields' : 'Add more profile details first'
               }

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { send } from '@/utils/messaging';
+import { LoadError } from '@/components/LoadError';
 import { passphraseStrength } from '@/security/crypto';
 import type { Settings } from '@/types/settings';
 
@@ -44,9 +45,16 @@ export function Security({
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
 
+  const [loadError, setLoadError] = useState('');
+
   const refresh = useCallback(async () => {
     const result = await send<VaultState>({ type: 'ui:vault-status' });
-    if (result.ok) setVault(result.data);
+    if (result.ok) {
+      setVault(result.data);
+      setLoadError('');
+    } else {
+      setLoadError(result.error);
+    }
   }, []);
 
   useEffect(() => {
@@ -101,9 +109,10 @@ export function Security({
   };
 
   const lockNow = async () => {
-    await send({ type: 'ui:vault-lock' });
+    const result = await send({ type: 'ui:vault-lock' });
     await refresh();
-    setNotice('Locked. Your passphrase is needed to use Fillwright again.');
+    if (result.ok) setNotice('Locked. Your passphrase is needed to use Fillwright again.');
+    else setError(result.error);
   };
 
   const change = async () => {
@@ -157,8 +166,14 @@ export function Security({
     if (result.ok) {
       onSettingsChange(result.data);
       await refresh();
+    } else {
+      setError(`The auto-lock time wasn’t changed. ${result.error}`);
     }
   };
+
+  if (!vault && loadError) {
+    return <LoadError message={loadError} onRetry={() => void refresh()} />;
+  }
 
   if (!vault) {
     return (

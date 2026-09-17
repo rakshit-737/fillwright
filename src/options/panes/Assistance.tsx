@@ -20,14 +20,23 @@ export function Assistance({
 }) {
   const [availability, setAvailability] = useState<Availability | null>(null);
   const [checking, setChecking] = useState(true);
+  const [saveError, setSaveError] = useState('');
 
   const provider = getProvider(settings?.ai.provider ?? 'none');
   const builtin = getProvider('chrome-builtin');
 
   const check = useCallback(async () => {
     setChecking(true);
-    setAvailability(await builtin.availability());
-    setChecking(false);
+    try {
+      setAvailability(await builtin.availability());
+    } catch {
+      setAvailability({
+        state: 'unavailable',
+        reason: 'Chrome didn’t say whether its on-device model is available.',
+      });
+    } finally {
+      setChecking(false);
+    }
   }, [builtin]);
 
   useEffect(() => {
@@ -36,7 +45,12 @@ export function Assistance({
 
   const patch = async (next: Partial<Settings['ai']>) => {
     const result = await send<Settings>({ type: 'ui:set-settings', patch: { ai: next } });
-    if (result.ok) onSettingsChange(result.data);
+    if (result.ok) {
+      onSettingsChange(result.data);
+      setSaveError('');
+    } else {
+      setSaveError(`That setting wasn’t saved. ${result.error}`);
+    }
   };
 
   const enabled = settings?.ai.enabled ?? false;
@@ -51,6 +65,12 @@ export function Assistance({
           answer. Off by default, and never required.
         </p>
       </header>
+
+      {saveError && (
+        <div className="fw-notice fw-notice--danger" role="alert">
+          {saveError}
+        </div>
+      )}
 
       <section className="fw-section">
         <h2 className="fw-section__title">What this can and cannot do</h2>

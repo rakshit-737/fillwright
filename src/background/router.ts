@@ -1,5 +1,6 @@
 import { err, ok, type AnyRequest, type Result } from '@/types/messages';
 import { isEnvelope } from '@/security/validate';
+import { describeError } from '@/utils/errors';
 
 export type Handler = (
   request: AnyRequest,
@@ -37,21 +38,36 @@ export function installRouter(): void {
     handler(message as AnyRequest, sender).then(
       (result) => sendResponse(result),
       (cause: unknown) => {
-        const detail = cause instanceof Error ? cause.message : 'Unknown error';
-        // A locked vault is an expected state, not a fault. It gets its own
-        // code so every surface can offer "unlock" instead of showing an error.
-        const code =
-          cause instanceof Error && (cause as { code?: string }).code === 'ELOCKED'
-            ? 'ELOCKED'
-            : 'EHANDLER';
-        if (code !== 'ELOCKED') {
-          console.error('[fillwright] handler failed', message.type, detail);
+        const code = codeForFailure(cause);
+        if (code === 'EHANDLER') {
+          // The type and the error name only — an error message can quote the
+          // data that caused it, so it is never logged.
+          console.error('[fillwright] handler failed', message.type, errorName(cause));
         }
-        sendResponse(err(detail, code));
+        // The user-facing text comes from one table; raw messages never cross.
+        sendResponse(err(describeError(code).message, code));
       },
     );
     return true;
   });
+}
+
+/**
+ * Turns a thrown error into a stable code. A locked vault and a full disk are
+ * expected states with their own recovery, not faults.
+ */
+export function codeForFailure(cause: unknown): string {
+  const name = errorName(cause);
+  if ((cause as { code?: string } | null)?.code === 'ELOCKED') return 'ELOCKED';
+  if (name === 'QuotaExceededError' || /quota/i.test(String((cause as Error)?.message ?? ''))) {
+    return 'EQUOTA';
+  }
+  return 'EHANDLER';
+}
+
+function errorName(cause: unknown): string {
+  if (cause && typeof cause === 'object' && 'name' in cause) return String(cause.name);
+  return typeof cause;
 }
 
 /**

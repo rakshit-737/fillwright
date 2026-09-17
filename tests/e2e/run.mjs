@@ -294,6 +294,9 @@ async function readInputs(page, ids) {
 
 async function main() {
   const server = await startServer(resolve(root, 'test-pages'));
+  // A second loopback address is a different origin that the test build has
+  // no host access to — the "form in someone else's iframe" case.
+  const foreign = await startServer(resolve(root, 'test-pages'), 0, '127.0.0.2').catch(() => null);
   const { browser, worker, extensionId } = await launch({ headless: process.env.HEADED !== '1' });
 
   console.log(`\nFillwright end-to-end (real Chrome)`);
@@ -1131,10 +1134,12 @@ async function main() {
       assertEqual,
       scanPage,
       evalInWorker,
+      foreign,
     });
   } finally {
     await browser.close();
     await server.close();
+    await foreign?.close();
   }
 
   /* ------------------------------------------------------------- report */

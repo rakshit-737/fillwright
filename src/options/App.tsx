@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { LoadError } from '@/components/LoadError';
 import { useHashRoute } from './useHashRoute';
 import { PrivacyCenter } from './panes/PrivacyCenter';
 import { Permissions } from './panes/Permissions';
@@ -32,12 +33,19 @@ const NAV: Array<{ id: string; label: string; group: string }> = [
 export function App() {
   const [route, navigate] = useHashRoute('profile');
   const [settings, setSettings] = useState<Settings | null>(null);
+  const [loadError, setLoadError] = useState('');
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
-    send<Settings>({ type: 'ui:get-settings' }).then((result) => {
-      if (result.ok) setSettings(result.data);
+    void send<Settings>({ type: 'ui:get-settings' }).then((result) => {
+      if (result.ok) {
+        setSettings(result.data);
+        setLoadError('');
+      } else {
+        setLoadError(result.error);
+      }
     });
-  }, []);
+  }, [attempt]);
 
   // Honour the user's theme choice on the options page chrome itself.
   useEffect(() => {
@@ -52,6 +60,10 @@ export function App() {
 
   // Onboarding takes over the whole page: there is nothing useful to navigate
   // to until a profile exists.
+  if (loadError && !settings) {
+    return <LoadError message={loadError} onRetry={() => setAttempt((n) => n + 1)} />;
+  }
+
   if (route === 'welcome') {
     return <Welcome onDone={() => navigate('import')} />;
   }

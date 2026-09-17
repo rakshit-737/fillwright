@@ -106,6 +106,9 @@ export class FillwrightWidget {
   private lastSummary: FillSummary | null = null;
   private lastError = '';
   private detectedCount = 0;
+  /** The page element focused before the panel took focus. */
+  private returnFocus: HTMLElement | null = null;
+  private suppressFocus = false;
 
   /** Rows whose "Why?" explanation is open. */
   private explanations = new Set<string>();
@@ -155,6 +158,7 @@ export class FillwrightWidget {
   }
 
   destroy(): void {
+    this.restoreFocus();
     this.host.remove();
   }
 
@@ -271,7 +275,7 @@ export class FillwrightWidget {
 
     if (this.minimized) {
       this.drawPill();
-      if (hadFocus) this.focusFirst();
+      if (hadFocus && !this.suppressFocus) this.focusFirst();
       return;
     }
 
@@ -721,6 +725,25 @@ export class FillwrightWidget {
       this.minimize();
       return;
     }
+    // While the panel is open, Tab cycles inside it. Esc is the way out, and
+    // returns focus to wherever the user was on the page.
+    if (event.key === 'Tab' && !this.minimized) {
+      const focusable = this.focusables();
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      const active = this.root.activeElement;
+      if (first && last) {
+        if (event.shiftKey && (active === first || !active)) {
+          event.preventDefault();
+          last.focus();
+        } else if (!event.shiftKey && (active === last || !active)) {
+          event.preventDefault();
+          first.focus();
+        }
+      }
+      event.stopPropagation();
+      return;
+    }
     const target = event.composedPath()[0];
     if (target instanceof HTMLElement && target.classList.contains('fw-grip')) {
       const step = event.shiftKey ? 48 : 16;
@@ -742,8 +765,27 @@ export class FillwrightWidget {
 
   minimize(): void {
     if (this.state === 'filling' || this.state === 'analyzing') return;
+    const hadFocus = this.root.activeElement !== null;
     this.minimized = true;
+    this.suppressFocus = true;
     this.draw();
+    this.suppressFocus = false;
+    if (hadFocus) this.restoreFocus();
+  }
+
+  private focusables(): HTMLElement[] {
+    return Array.from(
+      this.panel.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex="0"]',
+      ),
+    );
+  }
+
+  /** Hands focus back to the page element the user was on before opening. */
+  private restoreFocus(): void {
+    const target = this.returnFocus;
+    this.returnFocus = null;
+    if (target?.isConnected) target.focus({ preventScroll: true });
   }
 
   private focusFirst(): void {
@@ -756,6 +798,12 @@ export class FillwrightWidget {
 
   /** Called once when the user explicitly opened the panel. */
   focus(): void {
+    const active = document.activeElement;
+    if (active instanceof HTMLElement && active !== this.host && active !== document.body) {
+      this.returnFocus = active;
+    }
+    this.minimized = false;
+    this.draw();
     this.focusFirst();
   }
 

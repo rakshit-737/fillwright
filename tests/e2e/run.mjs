@@ -9,6 +9,7 @@
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { startServer } from './server.mjs';
+import { runV05Suite } from './suite-v05.mjs';
 import {
   launch,
   evalInWorker,
@@ -1117,6 +1118,10 @@ async function main() {
       assert(stored, 'the profile could not be read back');
       assert(stored.resumes >= 1, 'the resume file was not kept');
     });
+
+    /* --- v0.5: proactive modes, corrections, SPA, focus, portability --- */
+
+    await runV05Suite({ browser, worker, extensionId, server, test, assert, assertEqual, scanPage });
   } finally {
     await browser.close();
     await server.close();

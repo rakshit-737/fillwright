@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Careers portal — sign in</title>
+    <link rel="stylesheet" href="./shared.css" />
+  </head>
+  <body>
+    <h1>Sign in to your candidate account</h1>
+    <p class="lead">
+      Expected: NOT offered. A sign-in page mentions careers but has a password and no career
+      fields. Fillwright stays silent in Assist and Smart mode.
+    </p>
+    <form>
+      <label for="lg-first">First name</label>
+      <input id="lg-first" name="first_name" autocomplete="given-name" />
+      <label for="lg-email">Email</label>
+      <input id="lg-email" name="email" type="email" autocomplete="username" />
+      <label for="lg-pass">Password</label>
+      <input id="lg-pass" name="password" type="password" autocomplete="current-password" />
+      <button type="submit">Sign in</button>
+    </form>
+    <script src="./shared.js"></script>
+  </body>
+</html>

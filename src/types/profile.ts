@@ -90,7 +90,8 @@ export interface ExperienceEntry {
   id: string;
   company: string;
   title: string;
-  employmentType: 'full-time' | 'part-time' | 'internship' | 'contract' | 'freelance' | 'other' | '';
+  employmentType:
+    'full-time' | 'part-time' | 'internship' | 'contract' | 'freelance' | 'other' | '';
   location: string;
   locationType: 'onsite' | 'remote' | 'hybrid' | '';
   startDate: string;

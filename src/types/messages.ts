@@ -1,4 +1,11 @@
-import type { CanonicalField, FillOutcome, FillPlan, FillPlanEntry, ScanResult, SavedMapping } from './fields';
+import type {
+  CanonicalField,
+  FillOutcome,
+  FillPlan,
+  FillPlanEntry,
+  ScanResult,
+  SavedMapping,
+} from './fields';
 import type { Profile } from './profile';
 import type { Settings } from './settings';
 
@@ -70,7 +77,13 @@ export type ContentRequest =
     }
   | { type: 'content:fill-complete'; outcomes: FillOutcome[] }
   | { type: 'content:save-mapping'; mapping: Omit<SavedMapping, 'id' | 'createdAt' | 'useCount'> }
-  | { type: 'content:log-application'; company: string; role: string; origin: string; fieldsFilled: number }
+  | {
+      type: 'content:log-application';
+      company: string;
+      role: string;
+      origin: string;
+      fieldsFilled: number;
+    }
   /** Passive (Assist/Smart) boot: what should an uninvited script do here? */
   | { type: 'content:get-mode' }
   /** Multi-step progress for this tab, kept in the worker's session storage. */

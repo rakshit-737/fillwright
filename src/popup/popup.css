@@ -30,7 +30,11 @@
   width: 18px;
   height: 18px;
   border-radius: 5px;
-  background: linear-gradient(135deg, var(--fw-accent), color-mix(in oklab, var(--fw-accent) 60%, #ff8fa3));
+  background: linear-gradient(
+    135deg,
+    var(--fw-accent),
+    color-mix(in oklab, var(--fw-accent) 60%, #ff8fa3)
+  );
 }
 
 .fw-brand__name {
@@ -49,7 +53,9 @@
   background: transparent;
   color: var(--fw-ink-muted);
   cursor: pointer;
-  transition: background var(--fw-duration-fast) var(--fw-ease), color var(--fw-duration-fast) var(--fw-ease);
+  transition:
+    background var(--fw-duration-fast) var(--fw-ease),
+    color var(--fw-duration-fast) var(--fw-ease);
 }
 
 .fw-icon-btn:hover {
@@ -181,8 +187,10 @@
   font-size: var(--fw-text-sm);
   font-weight: 550;
   cursor: pointer;
-  transition: background var(--fw-duration-fast) var(--fw-ease),
-    border-color var(--fw-duration-fast) var(--fw-ease), transform var(--fw-duration-fast) var(--fw-ease);
+  transition:
+    background var(--fw-duration-fast) var(--fw-ease),
+    border-color var(--fw-duration-fast) var(--fw-ease),
+    transform var(--fw-duration-fast) var(--fw-ease);
 }
 
 .fw-btn:hover {

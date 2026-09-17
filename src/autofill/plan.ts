@@ -10,12 +10,7 @@ import type {
 import type { Profile } from '@/types/profile';
 import type { Settings } from '@/types/settings';
 import { classifyField, describeField, isThirdPartyField } from '@/field-detection/classify';
-import {
-  assignGroups,
-  countBlocks,
-  groupKindOf,
-  type FieldGroup,
-} from '@/field-detection/groups';
+import { assignGroups, countBlocks, groupKindOf, type FieldGroup } from '@/field-detection/groups';
 import { resolveForField } from './resolve';
 import { isSensitiveField, requiresExplicitConsent } from '@/security/sensitive';
 import { normalizeLabel } from '@/field-detection/normalize';
@@ -114,12 +109,16 @@ export function buildMappings(
       return { ...base, status: 'unmapped' };
     }
 
-    if (classification.field === 'documents.resume' || classification.field === 'documents.coverLetter') {
+    if (
+      classification.field === 'documents.resume' ||
+      classification.field === 'documents.coverLetter'
+    ) {
       // File inputs cannot be populated programmatically, by browser design.
       return {
         ...base,
         status: 'manual-required',
-        rationale: 'browsers do not allow an extension to attach a file — please choose it yourself',
+        rationale:
+          'browsers do not allow an extension to attach a file — please choose it yourself',
       };
     }
 
@@ -165,7 +164,11 @@ export function buildMappings(
     // saved answer. Consenting to a background check is not something an
     // extension should do unattended.
     if (requiresExplicitConsent(classification.field)) {
-      return { ...entry, status: 'needs-consent', rationale: `${entry.rationale} This one always needs your confirmation.` };
+      return {
+        ...entry,
+        status: 'needs-consent',
+        rationale: `${entry.rationale} This one always needs your confirmation.`,
+      };
     }
 
     if (field.hasExistingValue && !settings.autofill.allowOverwrite) {

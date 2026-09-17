@@ -37,7 +37,8 @@ export async function scanActiveTab() {
     await chrome.scripting.executeScript({
       target: { tabId: tab.id, allFrames: true },
       func: () => {
-        (globalThis as unknown as { __fillwrightActivation?: number }).__fillwrightActivation = Date.now();
+        (globalThis as unknown as { __fillwrightActivation?: number }).__fillwrightActivation =
+          Date.now();
       },
     });
     // activeTab grants access only because the user just invoked us. The
@@ -83,7 +84,8 @@ function emptyProgress(origin: string): StepProgress {
 async function readProgress(tabId: number, origin: string): Promise<StepProgress | null> {
   const key = progressKey(tabId);
   const stored = (await chrome.storage.session.get(key))[key] as StepProgress | undefined;
-  if (!stored || stored.origin !== origin || Date.now() - stored.updatedAt > PROGRESS_TTL_MS) return null;
+  if (!stored || stored.origin !== origin || Date.now() - stored.updatedAt > PROGRESS_TTL_MS)
+    return null;
   return stored;
 }
 
@@ -117,7 +119,10 @@ export function registerAutofillHandlers(): void {
    * This is the only path by which profile data reaches a page.
    */
   handle('content:request-mappings', async (request, sender) => {
-    const { scan, overrides } = request as Extract<ContentRequest, { type: 'content:request-mappings' }>;
+    const { scan, overrides } = request as Extract<
+      ContentRequest,
+      { type: 'content:request-mappings' }
+    >;
 
     const guard = validateScan(scan);
     if (!guard.ok) return err(guard.error, 'EBADSCAN');
@@ -207,7 +212,8 @@ export function registerAutofillHandlers(): void {
     const origin = originFromUrl(sender.tab?.url ?? sender.url ?? '');
     return ok({
       mode: settings.autofill.mode,
-      enabled: settings.ui.showFloatingWidget && Boolean(origin) && Boolean(settings.activeProfileId),
+      enabled:
+        settings.ui.showFloatingWidget && Boolean(origin) && Boolean(settings.activeProfileId),
       progress: sender.tab?.id !== undefined ? await readProgress(sender.tab.id, origin) : null,
     });
   });
@@ -220,7 +226,10 @@ export function registerAutofillHandlers(): void {
 
   /** Counts per step of a multi-step application. Values are never recorded. */
   handle('content:step-progress', async (request, sender) => {
-    const { filled, stepKey } = request as Extract<ContentRequest, { type: 'content:step-progress' }>;
+    const { filled, stepKey } = request as Extract<
+      ContentRequest,
+      { type: 'content:step-progress' }
+    >;
     const origin = originFromUrl(sender.tab?.url ?? sender.url ?? '');
     if (sender.tab?.id === undefined || !origin) return err('Unknown sender', 'ENOSENDER');
     const key = sanitizeString(stepKey, 200);

@@ -30,9 +30,15 @@ export interface ResumeSection {
  * come first so "Work Experience" is not claimed by a looser "Work" rule.
  */
 const HEADINGS: Array<{ re: RegExp; kind: SectionKind }> = [
-  { re: /^(?:technical\s+)?skills?(?:\s*(?:&|and)\s*(?:tools|technologies|abilities|competenc\w+))?$/i, kind: 'skills' },
+  {
+    re: /^(?:technical\s+)?skills?(?:\s*(?:&|and)\s*(?:tools|technologies|abilities|competenc\w+))?$/i,
+    kind: 'skills',
+  },
   { re: /^(?:core\s+)?competenc\w+$/i, kind: 'skills' },
-  { re: /^(?:technologies|tech\s+stack|tools(?:\s*&\s*technologies)?|areas?\s+of\s+expertise)$/i, kind: 'skills' },
+  {
+    re: /^(?:technologies|tech\s+stack|tools(?:\s*&\s*technologies)?|areas?\s+of\s+expertise)$/i,
+    kind: 'skills',
+  },
 
   { re: /^(?:work|professional|employment|industry|relevant)\s+experience$/i, kind: 'experience' },
   { re: /^experiences?$/i, kind: 'experience' },
@@ -44,26 +50,53 @@ const HEADINGS: Array<{ re: RegExp; kind: SectionKind }> = [
   { re: /^academic(?:s|\s+(?:background|qualifications?|history|record))?$/i, kind: 'education' },
   { re: /^qualifications?$/i, kind: 'education' },
 
-  { re: /^(?:personal\s+|academic\s+|key\s+|selected\s+|technical\s+)?projects?$/i, kind: 'projects' },
+  {
+    re: /^(?:personal\s+|academic\s+|key\s+|selected\s+|technical\s+)?projects?$/i,
+    kind: 'projects',
+  },
   { re: /^portfolio$/i, kind: 'projects' },
 
-  { re: /^(?:certifications?|certificates?|licen[cs]es?(?:\s*&\s*certifications?)?|credentials?)$/i, kind: 'certifications' },
-  { re: /^(?:courses?|online\s+courses?|(?:relevant\s+)?coursework|training)$/i, kind: 'certifications' },
+  {
+    re: /^(?:certifications?|certificates?|licen[cs]es?(?:\s*&\s*certifications?)?|credentials?)$/i,
+    kind: 'certifications',
+  },
+  {
+    re: /^(?:courses?|online\s+courses?|(?:relevant\s+)?coursework|training)$/i,
+    kind: 'certifications',
+  },
 
-  { re: /^(?:achievements?|accomplishments?|awards?(?:\s*(?:&|and)\s*(?:honou?rs?|recognitions?))?|honou?rs?(?:\s*(?:&|and)\s*awards?)?|recognitions?)$/i, kind: 'achievements' },
-  { re: /^(?:positions?\s+of\s+responsibility|leadership(?:\s+experience)?|extra[\s-]?curricular(?:\s+activities)?|activities)$/i, kind: 'achievements' },
+  {
+    re: /^(?:achievements?|accomplishments?|awards?(?:\s*(?:&|and)\s*(?:honou?rs?|recognitions?))?|honou?rs?(?:\s*(?:&|and)\s*awards?)?|recognitions?)$/i,
+    kind: 'achievements',
+  },
+  {
+    re: /^(?:positions?\s+of\s+responsibility|leadership(?:\s+experience)?|extra[\s-]?curricular(?:\s+activities)?|activities)$/i,
+    kind: 'achievements',
+  },
 
   { re: /^(?:languages?(?:\s+known)?|language\s+proficiency)$/i, kind: 'languages' },
 
-  { re: /^(?:publications?|research(?:\s+(?:papers?|experience|work))?|papers?|patents?)$/i, kind: 'publications' },
+  {
+    re: /^(?:publications?|research(?:\s+(?:papers?|experience|work))?|papers?|patents?)$/i,
+    kind: 'publications',
+  },
 
-  { re: /^(?:volunteer(?:ing|\s+(?:experience|work))?|community(?:\s+(?:service|involvement))?|social\s+work)$/i, kind: 'volunteer' },
+  {
+    re: /^(?:volunteer(?:ing|\s+(?:experience|work))?|community(?:\s+(?:service|involvement))?|social\s+work)$/i,
+    kind: 'volunteer',
+  },
 
-  { re: /^(?:interests?|hobbies(?:\s*(?:&|and)\s*interests?)?|personal\s+interests?)$/i, kind: 'interests' },
+  {
+    re: /^(?:interests?|hobbies(?:\s*(?:&|and)\s*interests?)?|personal\s+interests?)$/i,
+    kind: 'interests',
+  },
 
   { re: /^references?(?:\s+available.*)?$/i, kind: 'references' },
 
-  { re: /^(?:summary|professional\s+summary|career\s+summary|objectives?|career\s+objectives?|profile|about(?:\s+me)?|overview)$/i, kind: 'summary' },
+  {
+    re: /^(?:summary|professional\s+summary|career\s+summary|objectives?|career\s+objectives?|profile|about(?:\s+me)?|overview)$/i,
+    kind: 'summary',
+  },
 ];
 
 export function classifyHeading(rawLine: string): SectionKind | null {
@@ -106,7 +139,12 @@ export function splitSections(text: string): ResumeSection[] {
     // the entry beneath them.
     if (trimmed && isAllCaps(trimmed) && looksLikeHeading(trimmed) && current.kind !== 'header') {
       sections.push(current);
-      current = { kind: 'other', heading: normalizeWhitespace(trimmed), lines: [], startLine: index };
+      current = {
+        kind: 'other',
+        heading: normalizeWhitespace(trimmed),
+        lines: [],
+        startLine: index,
+      };
       return;
     }
 

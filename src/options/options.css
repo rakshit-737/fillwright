@@ -80,7 +80,8 @@
   color: var(--fw-ink-muted);
   font-size: var(--fw-text-sm);
   cursor: pointer;
-  transition: background var(--fw-duration-fast) var(--fw-ease),
+  transition:
+    background var(--fw-duration-fast) var(--fw-ease),
     color var(--fw-duration-fast) var(--fw-ease);
 }
 

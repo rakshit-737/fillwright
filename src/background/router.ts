@@ -1,7 +1,10 @@
 import { err, ok, type AnyRequest, type Result } from '@/types/messages';
 import { isEnvelope } from '@/security/validate';
 
-export type Handler = (request: AnyRequest, sender: chrome.runtime.MessageSender) => Promise<Result<unknown>>;
+export type Handler = (
+  request: AnyRequest,
+  sender: chrome.runtime.MessageSender,
+) => Promise<Result<unknown>>;
 
 const handlers = new Map<string, Handler>();
 

@@ -47,7 +47,8 @@ export function groupKindOf(field: CanonicalField): GroupKind {
  * Digits that are part of the field's identity rather than a repeat index.
  * `address_line_1` and `phone2` are not the second address or phone entry.
  */
-const NOT_AN_INDEX = /\b(?:line|address|phone|tel|zip|postal|street|apt|suite|floor|24|7|1099|401k?)\b/i;
+const NOT_AN_INDEX =
+  /\b(?:line|address|phone|tel|zip|postal|street|apt|suite|floor|24|7|1099|401k?)\b/i;
 
 /**
  * Reads a repeat index out of a field's name or id.

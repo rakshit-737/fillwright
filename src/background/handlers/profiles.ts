@@ -27,7 +27,10 @@ export function registerProfileHandlers(): void {
 
   handle('ui:create-profile', async (request) => {
     const { name, cloneFromId } = request as Extract<UiRequest, { type: 'ui:create-profile' }>;
-    const profile = await createProfile(sanitizeString(name, 80) || 'Untitled Profile', cloneFromId);
+    const profile = await createProfile(
+      sanitizeString(name, 80) || 'Untitled Profile',
+      cloneFromId,
+    );
     const settings = await getSettings();
     if (!settings.activeProfileId) await setSettings({ activeProfileId: profile.id });
     return ok(profile);

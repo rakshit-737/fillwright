@@ -51,7 +51,9 @@ describe('detecting an on-device model', () => {
   });
 
   it('finds the modern global', () => {
-    (globalThis as Record<string, unknown>).LanguageModel = { create: async () => ({ prompt: async () => '' }) };
+    (globalThis as Record<string, unknown>).LanguageModel = {
+      create: async () => ({ prompt: async () => '' }),
+    };
     expect(findLanguageModelApi()).not.toBeNull();
   });
 

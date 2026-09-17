@@ -45,7 +45,10 @@ describe('a field is classified from its own signals, not its neighbours', () =>
     document.body.innerHTML = flatForm;
     const { fields } = harvestFields(document);
     return new Map(
-      fields.map((field) => [field.signals.labelText.replace(/\s*\*$/, ''), classifyField(field.signals)]),
+      fields.map((field) => [
+        field.signals.labelText.replace(/\s*\*$/, ''),
+        classifyField(field.signals),
+      ]),
     );
   }
 

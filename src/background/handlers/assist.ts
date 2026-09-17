@@ -46,7 +46,8 @@ export function registerAssistHandlers(): void {
     const { profileId } = request as Extract<ContentRequest, { type: 'content:switch-profile' }>;
     const id = sanitizeString(profileId, 64);
     const profiles = await listProfiles();
-    if (!profiles.some((profile) => profile.id === id)) return err('Profile not found', 'ENOTFOUND');
+    if (!profiles.some((profile) => profile.id === id))
+      return err('Profile not found', 'ENOTFOUND');
     await setSettings({ activeProfileId: id });
     return ok({ switched: true });
   });
@@ -57,28 +58,41 @@ export function registerAssistHandlers(): void {
    */
   handle('content:draft-facts', async () => {
     const settings = await getSettings();
-    if (!settings.ai.enabled || !settings.ai.assistAnswerDrafting || settings.ai.provider === 'none') {
+    if (
+      !settings.ai.enabled ||
+      !settings.ai.assistAnswerDrafting ||
+      settings.ai.provider === 'none'
+    ) {
       return err('Answer drafting is switched off in Fillwright settings.', 'EAIOFF');
     }
     const availability = await getProvider(settings.ai.provider).availability();
     if (availability.state !== 'ready') {
       return err(availability.reason, 'EAIUNAVAILABLE');
     }
-    const profile = settings.activeProfileId ? await getProfile(settings.activeProfileId) : undefined;
+    const profile = settings.activeProfileId
+      ? await getProfile(settings.activeProfileId)
+      : undefined;
     if (!profile) return err('No active profile.', 'ENOPROFILE');
     return ok(draftFacts(profile));
   });
 
   handle('content:draft', async (request) => {
-    const { question, factIds, maxCharacters } = request as Extract<ContentRequest, { type: 'content:draft' }>;
+    const { question, factIds, maxCharacters } = request as Extract<
+      ContentRequest,
+      { type: 'content:draft' }
+    >;
     const settings = await getSettings();
     if (!settings.ai.enabled || !settings.ai.assistAnswerDrafting) {
       return err('Answer drafting is switched off in Fillwright settings.', 'EAIOFF');
     }
-    const profile = settings.activeProfileId ? await getProfile(settings.activeProfileId) : undefined;
+    const profile = settings.activeProfileId
+      ? await getProfile(settings.activeProfileId)
+      : undefined;
     if (!profile) return err('No active profile.', 'ENOPROFILE');
 
-    const chosen = new Set(Array.isArray(factIds) ? factIds.slice(0, 40).map((id) => sanitizeString(id, 32)) : []);
+    const chosen = new Set(
+      Array.isArray(factIds) ? factIds.slice(0, 40).map((id) => sanitizeString(id, 32)) : [],
+    );
     const context = draftFacts(profile)
       .filter((fact) => chosen.has(fact.id))
       .map((fact) => `${fact.label}: ${fact.value}`);
@@ -90,7 +104,9 @@ export function registerAssistHandlers(): void {
         ? { maxCharacters: Math.min(5_000, Math.trunc(maxCharacters)) }
         : {}),
     });
-    return result.ok ? ok({ text: result.text }) : err(result.error ?? 'No draft was produced.', 'EDRAFT');
+    return result.ok
+      ? ok({ text: result.text })
+      : err(result.error ?? 'No draft was produced.', 'EDRAFT');
   });
 }
 

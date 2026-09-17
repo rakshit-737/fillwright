@@ -2,15 +2,7 @@ import { handle, ok, err } from '../router';
 import { getSettings, setSettings } from '@/storage/settings';
 import { pruneOrphanResumes, rewriteAll } from '@/storage/profiles';
 import { deriveKey } from '@/security/crypto';
-import {
-  changePassphrase,
-  disable,
-  enable,
-  getMeta,
-  lock,
-  status,
-  unlock,
-} from '@/security/vault';
+import { changePassphrase, disable, enable, getMeta, lock, status, unlock } from '@/security/vault';
 import type { UiRequest } from '@/types/messages';
 
 /**
@@ -67,10 +59,7 @@ export function registerVaultHandlers(): void {
   });
 
   handle('ui:vault-change-passphrase', async (request) => {
-    const { current, next } = request as Extract<
-      UiRequest,
-      { type: 'ui:vault-change-passphrase' }
-    >;
+    const { current, next } = request as Extract<UiRequest, { type: 'ui:vault-change-passphrase' }>;
     const result = await changePassphrase(current, next, async (from, to) => {
       await rewriteAll(from, to);
     });

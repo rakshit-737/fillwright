@@ -38,7 +38,8 @@ export function Preferences({ settings }: { settings: Settings | null }) {
   if (editor.loading) {
     return (
       <div className="fw-pane" role="status">
-        <span className="fw-spinner" aria-hidden="true" /> <span className="fw-muted">Loading…</span>
+        <span className="fw-spinner" aria-hidden="true" />{' '}
+        <span className="fw-muted">Loading…</span>
       </div>
     );
   }
@@ -72,7 +73,11 @@ export function Preferences({ settings }: { settings: Settings | null }) {
       <header className="fw-pane__header">
         <div className="fw-pane__titlerow">
           <h1 className="fw-pane__title">Application preferences</h1>
-          <span className={`fw-savestate fw-savestate--${editor.saveState}`} role="status" aria-live="polite">
+          <span
+            className={`fw-savestate fw-savestate--${editor.saveState}`}
+            role="status"
+            aria-live="polite"
+          >
             {saveStateLabel(editor.saveState)}
           </span>
         </div>
@@ -153,8 +158,8 @@ export function Preferences({ settings }: { settings: Settings | null }) {
           <span className="fw-tag fw-tag--muted">Never guessed</span>
         </div>
         <p className="fw-section__lead">
-          Fillwright will never infer these from your resume, your name, your university or where you
-          live. It answers an authorisation question only if you have answered it here for that
+          Fillwright will never infer these from your resume, your name, your university or where
+          you live. It answers an authorisation question only if you have answered it here for that
           country, and leaves it blank otherwise.
         </p>
 
@@ -165,7 +170,9 @@ export function Preferences({ settings }: { settings: Settings | null }) {
                 <th scope="col">Country</th>
                 <th scope="col">Authorised to work there?</th>
                 <th scope="col">Will you need sponsorship?</th>
-                <th scope="col"><span className="fw-sr-only">Remove</span></th>
+                <th scope="col">
+                  <span className="fw-sr-only">Remove</span>
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -479,14 +486,15 @@ export function Preferences({ settings }: { settings: Settings | null }) {
           <button
             className="fw-btn fw-btn--sm"
             onClick={() =>
-              update((draft) =>
-                void draft.preferences.savedAnswers.push({
-                  id: newId('ans'),
-                  key: `answer-${draft.preferences.savedAnswers.length + 1}`,
-                  label: '',
-                  text: '',
-                  updatedAt: now(),
-                }),
+              update(
+                (draft) =>
+                  void draft.preferences.savedAnswers.push({
+                    id: newId('ans'),
+                    key: `answer-${draft.preferences.savedAnswers.length + 1}`,
+                    label: '',
+                    text: '',
+                    updatedAt: now(),
+                  }),
               )
             }
           >

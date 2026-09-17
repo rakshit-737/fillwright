@@ -183,9 +183,7 @@ export function parseLanguages(sections: ResumeSection[]): ParsedLanguage[] {
   }
 
   const names = dedupe(languages.map((language) => language.name));
-  return names
-    .map((name) => languages.find((language) => language.name === name)!)
-    .slice(0, 20);
+  return names.map((name) => languages.find((language) => language.name === name)!).slice(0, 20);
 }
 
 export function parseSummary(sections: ResumeSection[]): { text: string; confidence: number } {

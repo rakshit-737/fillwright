@@ -61,7 +61,8 @@
   border-radius: var(--fw-radius-lg);
   background: var(--fw-surface);
   text-align: center;
-  transition: border-color var(--fw-duration) var(--fw-ease),
+  transition:
+    border-color var(--fw-duration) var(--fw-ease),
     background var(--fw-duration) var(--fw-ease);
 }
 

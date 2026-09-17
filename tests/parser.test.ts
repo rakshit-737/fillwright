@@ -193,7 +193,9 @@ describe('merging into a profile', () => {
     existing.personal.email = tv('my.real.email@example.com', 'user', 1);
     const parsed = parseResume(STUDENT_RESUME);
 
-    const { profile, preserved } = mergeResumeIntoProfile(existing, parsed, { strategy: 'replace' });
+    const { profile, preserved } = mergeResumeIntoProfile(existing, parsed, {
+      strategy: 'replace',
+    });
     expect(profile.personal.email.value).toBe('my.real.email@example.com');
     expect(profile.personal.email.provenance.source).toBe('user');
     expect(preserved).toContain('Email');

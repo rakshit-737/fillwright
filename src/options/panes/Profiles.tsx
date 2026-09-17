@@ -76,7 +76,9 @@ export function Profiles({
     setBusy('');
     if (result.ok) {
       onSettingsChange(result.data);
-      setNotice(`Now using “${cards.find((card) => card.id === profileId)?.name ?? 'this profile'}”.`);
+      setNotice(
+        `Now using “${cards.find((card) => card.id === profileId)?.name ?? 'this profile'}”.`,
+      );
     }
   };
 
@@ -131,7 +133,8 @@ export function Profiles({
   if (loading) {
     return (
       <div className="fw-pane" role="status">
-        <span className="fw-spinner" aria-hidden="true" /> <span className="fw-muted">Loading profiles…</span>
+        <span className="fw-spinner" aria-hidden="true" />{' '}
+        <span className="fw-muted">Loading profiles…</span>
       </div>
     );
   }

@@ -230,7 +230,9 @@ function AutofillModeSection({
     chrome.commands
       ?.getAll()
       .then((commands) => {
-        setShortcut(commands.find((command) => command.name === 'fillwright-activate')?.shortcut ?? '');
+        setShortcut(
+          commands.find((command) => command.name === 'fillwright-activate')?.shortcut ?? '',
+        );
       })
       .catch(() => undefined);
   }, []);
@@ -241,7 +243,8 @@ function AutofillModeSection({
       let granted = false;
       try {
         granted =
-          (await chrome.permissions.contains(SITE_ACCESS)) || (await chrome.permissions.request(SITE_ACCESS));
+          (await chrome.permissions.contains(SITE_ACCESS)) ||
+          (await chrome.permissions.request(SITE_ACCESS));
       } catch {
         granted = false;
       }
@@ -253,15 +256,19 @@ function AutofillModeSection({
     const result = await send<Settings>({ type: 'ui:set-settings', patch: { autofill: { mode } } });
     if (result.ok) onChange(result.data);
     if (mode === 'manual' && (await chrome.permissions.contains(SITE_ACCESS).catch(() => false))) {
-      setNotice('Manual mode is on. Fillwright still holds site access — remove it below if you no longer need it.');
+      setNotice(
+        'Manual mode is on. Fillwright still holds site access — remove it below if you no longer need it.',
+      );
     }
   };
 
   const revoke = async () => {
     const removed = await chrome.permissions.remove(SITE_ACCESS).catch(() => false);
-    await send({ type: 'ui:set-settings', patch: { autofill: { mode: 'manual' } } }).then((result) => {
-      if (result.ok) onChange(result.data as Settings);
-    });
+    await send({ type: 'ui:set-settings', patch: { autofill: { mode: 'manual' } } }).then(
+      (result) => {
+        if (result.ok) onChange(result.data as Settings);
+      },
+    );
     setNotice(removed ? 'Site access removed.' : 'Chrome did not remove site access.');
   };
 
@@ -303,7 +310,9 @@ function AutofillModeSection({
           Remove site access
         </button>
       </p>
-      <p className="fw-field__hint">No mode fills a form without your approval, and none ever submits one.</p>
+      <p className="fw-field__hint">
+        No mode fills a form without your approval, and none ever submits one.
+      </p>
     </section>
   );
 }

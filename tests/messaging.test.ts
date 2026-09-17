@@ -70,7 +70,9 @@ describe('a request that never comes back', () => {
 
   it('retries once, because the first send wakes a sleeping worker', async () => {
     sendMessage
-      .mockRejectedValueOnce(new Error('Could not establish connection. Receiving end does not exist.'))
+      .mockRejectedValueOnce(
+        new Error('Could not establish connection. Receiving end does not exist.'),
+      )
       .mockResolvedValueOnce({ ok: true, data: 'second time lucky' });
 
     const result = await send({ type: 'ui:get-state' });

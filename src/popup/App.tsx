@@ -14,7 +14,12 @@ type Load =
   | { phase: 'loading' }
   | { phase: 'locked' }
   | { phase: 'error'; message: string }
-  | { phase: 'ready'; state: PopupState; profile: Profile | null; completeness: Completeness | null };
+  | {
+      phase: 'ready';
+      state: PopupState;
+      profile: Profile | null;
+      completeness: Completeness | null;
+    };
 
 export function App() {
   const [load, setLoad] = useState<Load>({ phase: 'loading' });
@@ -193,7 +198,9 @@ export function App() {
               <div className="fw-meter__fill" style={{ width: `${completeness?.percent ?? 0}%` }} />
             </div>
             {completeness && completeness.topGaps.length > 0 && (
-              <p className="fw-muted fw-card__hint">Still missing: {completeness.topGaps.slice(0, 3).join(', ')}</p>
+              <p className="fw-muted fw-card__hint">
+                Still missing: {completeness.topGaps.slice(0, 3).join(', ')}
+              </p>
             )}
           </section>
 
@@ -221,7 +228,9 @@ export function App() {
               className="fw-btn fw-btn--primary"
               onClick={scanPage}
               disabled={scanState === 'scanning' || !ready}
-              title={ready ? 'Scan this page for application fields' : 'Add more profile details first'}
+              title={
+                ready ? 'Scan this page for application fields' : 'Add more profile details first'
+              }
             >
               {scanState === 'scanning' ? 'Scanning…' : 'Fill this page'}
             </button>
@@ -238,7 +247,9 @@ export function App() {
       ) : (
         <main className="fw-popup__body fw-popup--centered">
           <h2 className="fw-popup__title">Let’s set you up</h2>
-          <p className="fw-muted">Import a resume and Fillwright will build your profile locally.</p>
+          <p className="fw-muted">
+            Import a resume and Fillwright will build your profile locally.
+          </p>
           <button className="fw-btn fw-btn--primary" onClick={() => openOptions('#/welcome')}>
             Get started
           </button>

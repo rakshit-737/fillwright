@@ -56,9 +56,7 @@ export interface VaultMeta {
 }
 
 export type VaultStatus =
-  | { state: 'off' }
-  | { state: 'locked' }
-  | { state: 'unlocked'; autoLockMinutes: number };
+  { state: 'off' } | { state: 'locked' } | { state: 'unlocked'; autoLockMinutes: number };
 
 export class VaultLockedError extends Error {
   readonly code = 'ELOCKED';

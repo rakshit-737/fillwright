@@ -39,7 +39,9 @@ export async function syncAutoDetect(): Promise<{ registered: boolean; reason: s
 
   if (!access) {
     if (existing.length > 0) {
-      await chrome.scripting.unregisterContentScripts({ ids: [AUTO_SCRIPT_ID] }).catch(() => undefined);
+      await chrome.scripting
+        .unregisterContentScripts({ ids: [AUTO_SCRIPT_ID] })
+        .catch(() => undefined);
     }
     return {
       registered: false,

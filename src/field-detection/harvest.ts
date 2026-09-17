@@ -106,7 +106,11 @@ function isFillable(element: HTMLElement): boolean {
   // Fillwright never touches anything that looks like a credential or a
   // one-time code, whatever its declared type.
   const identity = `${element.getAttribute('name') ?? ''} ${element.id} ${element.getAttribute('autocomplete') ?? ''}`;
-  if (/\b(?:password|passwd|pwd|otp|one[-_]?time|cvv|card[-_]?number|ssn|social[-_]?security)\b/i.test(identity)) {
+  if (
+    /\b(?:password|passwd|pwd|otp|one[-_]?time|cvv|card[-_]?number|ssn|social[-_]?security)\b/i.test(
+      identity,
+    )
+  ) {
     return false;
   }
   if (element.closest('[data-fillwright-ui]')) return false;
@@ -254,7 +258,11 @@ function controlKind(element: HTMLElement): ControlKind {
   return 'unsupported';
 }
 
-function readSignals(element: HTMLElement, kind: ControlKind, options: FieldOption[]): FieldSignals {
+function readSignals(
+  element: HTMLElement,
+  kind: ControlKind,
+  options: FieldOption[],
+): FieldSignals {
   const input = element as HTMLInputElement;
   return {
     labelText: truncate(labelForControl(element)),
@@ -339,8 +347,11 @@ function groupLabel(element: HTMLElement): string {
   // Fall back to the nearest preceding block of text above the group.
   let node: HTMLElement | null = element.parentElement;
   for (let hop = 0; node && hop < MAX_ANCESTOR_HOPS; hop++, node = node.parentElement) {
-    const heading = node.querySelector('legend, .question-title, [class*="label"], [class*="question"]');
-    if (heading?.textContent?.trim() && !heading.contains(element)) return clean(heading.textContent);
+    const heading = node.querySelector(
+      'legend, .question-title, [class*="label"], [class*="question"]',
+    );
+    if (heading?.textContent?.trim() && !heading.contains(element))
+      return clean(heading.textContent);
   }
   return '';
 }
@@ -517,7 +528,9 @@ function isReadOnly(element: HTMLElement): boolean {
 /* ------------------------------------------------------------------ radios */
 
 function radioGroupKey(element: HTMLInputElement): string {
-  const form = element.form ? (element.form.getAttribute('name') ?? element.form.id ?? 'form') : 'noform';
+  const form = element.form
+    ? (element.form.getAttribute('name') ?? element.form.id ?? 'form')
+    : 'noform';
   return `${form}::${element.name || element.id}`;
 }
 

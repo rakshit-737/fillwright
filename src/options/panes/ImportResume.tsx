@@ -40,7 +40,7 @@ export function ImportResume({ settings }: { settings: Settings | null }) {
   const [pasted, setPasted] = useState('');
   const [strategy, setStrategy] = useState<'fill-gaps' | 'replace'>('fill-gaps');
   const [existingResume, setExistingResume] = useState<ResumeAttachment | null>(null);
-  const [attachmentWarning, setAttachmentWarning] = useState("");
+  const [attachmentWarning, setAttachmentWarning] = useState('');
   const fileInput = useRef<HTMLInputElement>(null);
 
   const profileId = settings?.activeProfileId ?? null;
@@ -174,8 +174,8 @@ export function ImportResume({ settings }: { settings: Settings | null }) {
       <header className="fw-pane__header">
         <h1 className="fw-pane__title">Resume</h1>
         <p className="fw-pane__subtitle">
-          Fillwright reads your resume on this device and turns it into a profile you can edit.
-          The file is not uploaded anywhere.
+          Fillwright reads your resume on this device and turns it into a profile you can edit. The
+          file is not uploaded anywhere.
         </p>
       </header>
 
@@ -208,7 +208,13 @@ export function ImportResume({ settings }: { settings: Settings | null }) {
             onDragLeave={() => setDragging(false)}
             onDrop={onDrop}
           >
-            <svg viewBox="0 0 24 24" width="28" height="28" aria-hidden="true" className="fw-drop__icon">
+            <svg
+              viewBox="0 0 24 24"
+              width="28"
+              height="28"
+              aria-hidden="true"
+              className="fw-drop__icon"
+            >
               <path
                 fill="none"
                 stroke="currentColor"
@@ -286,7 +292,10 @@ export function ImportResume({ settings }: { settings: Settings | null }) {
           nothing is used to fill a form until you say so.
           {attachmentWarning && <p className="fw-field__hint">{attachmentWarning}</p>}
           <div className="fw-actions">
-            <button className="fw-btn fw-btn--primary" onClick={() => (location.hash = '#/profile')}>
+            <button
+              className="fw-btn fw-btn--primary"
+              onClick={() => (location.hash = '#/profile')}
+            >
               Review my profile
             </button>
             <button className="fw-btn" onClick={() => setStage({ name: 'idle' })}>
@@ -383,13 +392,44 @@ function ReviewParsed({
       </table>
 
       <ul className="fw-countlist">
-        <CountRow label="Education" count={parsed.education.length} sample={parsed.education[0]?.institution} />
-        <CountRow label="Experience" count={parsed.experience.length} sample={parsed.experience[0]?.company} />
-        <CountRow label="Projects" count={parsed.projects.length} sample={parsed.projects[0]?.name} />
-        <CountRow label="Skills" count={parsed.skills.length} sample={parsed.skills.slice(0, 4).map((s) => s.name).join(', ')} />
-        <CountRow label="Certifications" count={parsed.certifications.length} sample={parsed.certifications[0]?.name} />
-        <CountRow label="Achievements" count={parsed.achievements.length} sample={parsed.achievements[0]?.title} />
-        <CountRow label="Languages" count={parsed.languages.length} sample={parsed.languages.map((l) => l.name).join(', ')} />
+        <CountRow
+          label="Education"
+          count={parsed.education.length}
+          sample={parsed.education[0]?.institution}
+        />
+        <CountRow
+          label="Experience"
+          count={parsed.experience.length}
+          sample={parsed.experience[0]?.company}
+        />
+        <CountRow
+          label="Projects"
+          count={parsed.projects.length}
+          sample={parsed.projects[0]?.name}
+        />
+        <CountRow
+          label="Skills"
+          count={parsed.skills.length}
+          sample={parsed.skills
+            .slice(0, 4)
+            .map((s) => s.name)
+            .join(', ')}
+        />
+        <CountRow
+          label="Certifications"
+          count={parsed.certifications.length}
+          sample={parsed.certifications[0]?.name}
+        />
+        <CountRow
+          label="Achievements"
+          count={parsed.achievements.length}
+          sample={parsed.achievements[0]?.title}
+        />
+        <CountRow
+          label="Languages"
+          count={parsed.languages.length}
+          sample={parsed.languages.map((l) => l.name).join(', ')}
+        />
       </ul>
 
       <div className="fw-notice fw-notice--quiet">
@@ -420,9 +460,7 @@ function ReviewParsed({
             <span>Replace with the resume version</span>
           </label>
         </div>
-        <span className="fw-field__hint">
-          Either way, anything you typed by hand is kept.
-        </span>
+        <span className="fw-field__hint">Either way, anything you typed by hand is kept.</span>
       </fieldset>
 
       <div className="fw-actions">

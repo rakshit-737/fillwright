@@ -89,8 +89,8 @@ export function History({
 
       {!enabled && entries.length === 0 && (
         <p className="fw-empty">
-          History is off, so nothing is being recorded. Turn it on above if you would like Fillwright
-          to keep track of where you have applied.
+          History is off, so nothing is being recorded. Turn it on above if you would like
+          Fillwright to keep track of where you have applied.
         </p>
       )}
 
@@ -132,8 +132,12 @@ export function History({
                   {items.map((entry) => (
                     <li className="fw-history" key={entry.id}>
                       <div className="fw-history__main">
-                        <span className="fw-history__company">{entry.company || 'Unnamed company'}</span>
-                        <span className="fw-history__role">{entry.role || 'Role not recorded'}</span>
+                        <span className="fw-history__company">
+                          {entry.company || 'Unnamed company'}
+                        </span>
+                        <span className="fw-history__role">
+                          {entry.role || 'Role not recorded'}
+                        </span>
                       </div>
                       <div className="fw-history__meta">
                         <span className="fw-history__site">{hostOf(entry.origin)}</span>
@@ -157,14 +161,18 @@ export function History({
 
 type SortOrder = 'newest' | 'oldest' | 'company';
 
-function sortEntries(entries: ApplicationHistoryEntry[], order: SortOrder): ApplicationHistoryEntry[] {
+function sortEntries(
+  entries: ApplicationHistoryEntry[],
+  order: SortOrder,
+): ApplicationHistoryEntry[] {
   const copy = [...entries];
   switch (order) {
     case 'oldest':
       return copy.sort((a, b) => a.appliedAt.localeCompare(b.appliedAt));
     case 'company':
       return copy.sort(
-        (a, b) => a.company.localeCompare(b.company, undefined, { sensitivity: 'base' }) ||
+        (a, b) =>
+          a.company.localeCompare(b.company, undefined, { sensitivity: 'base' }) ||
           b.appliedAt.localeCompare(a.appliedAt),
       );
     default:
@@ -172,7 +180,9 @@ function sortEntries(entries: ApplicationHistoryEntry[], order: SortOrder): Appl
   }
 }
 
-function groupByDay(entries: ApplicationHistoryEntry[]): Array<[string, ApplicationHistoryEntry[]]> {
+function groupByDay(
+  entries: ApplicationHistoryEntry[],
+): Array<[string, ApplicationHistoryEntry[]]> {
   const buckets = new Map<string, ApplicationHistoryEntry[]>();
   for (const entry of entries) {
     const day = dayLabel(entry.appliedAt);

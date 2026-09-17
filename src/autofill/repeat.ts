@@ -26,7 +26,8 @@ export interface AddControl {
 const EDUCATION = /\b(?:education|school|degree|qualification|university|college|academic)\b/;
 const EXPERIENCE = /\b(?:experience|employment|work|job|position|employer|role|internship)\b/;
 const ADD = /^\s*(?:\+\s*)?(?:add|new)\b(?:\s+(?:another|more|an?|one more))?\b/;
-const FORBIDDEN = /\b(?:submit|apply|send|delete|remove|save and|finish|review|next|continue|sign|log ?in)\b/;
+const FORBIDDEN =
+  /\b(?:submit|apply|send|delete|remove|save and|finish|review|next|continue|sign|log ?in)\b/;
 
 export function classifyAddLabel(label: string): RepeatKind | null {
   const text = label.replace(/\s+/g, ' ').trim().toLowerCase();
@@ -79,5 +80,10 @@ export async function addEntries(kind: RepeatKind, times: number, settleMs = 450
 }
 
 function accessibleText(element: HTMLElement): string {
-  return (element.getAttribute('aria-label') || element.textContent || element.getAttribute('title') || '').trim();
+  return (
+    element.getAttribute('aria-label') ||
+    element.textContent ||
+    element.getAttribute('title') ||
+    ''
+  ).trim();
 }

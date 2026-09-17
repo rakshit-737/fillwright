@@ -162,8 +162,7 @@ export function verify(elements: HTMLElement[], intended: string): Verdict {
 
   if (first instanceof HTMLInputElement && first.type === 'radio') {
     const checked = elements.find((element) => (element as HTMLInputElement).checked) as
-      | HTMLInputElement
-      | undefined;
+      HTMLInputElement | undefined;
     if (!checked) return { ok: false, reason: 'The page did not accept the selection.' };
     return matches(checked.value, intended) || matches(labelTextOf(checked), intended)
       ? { ok: true, reason: '' }
@@ -239,7 +238,11 @@ function snapshot(fieldId: string, elements: HTMLElement[]): UndoRecord {
 function currentValue(element: HTMLElement): string {
   if (element instanceof HTMLSelectElement) return element.value;
   if (element instanceof HTMLInputElement) {
-    return element.type === 'checkbox' ? (element.checked ? element.value || 'on' : '') : element.value;
+    return element.type === 'checkbox'
+      ? element.checked
+        ? element.value || 'on'
+        : ''
+      : element.value;
   }
   if (element instanceof HTMLTextAreaElement) return element.value;
   if (element.isContentEditable) return element.textContent ?? '';
@@ -289,8 +292,14 @@ async function writeValue(elements: HTMLElement[], value: string): Promise<boole
  * prototype's setter directly updates the DOM underneath React, and the `input`
  * event that follows is what makes React adopt it.
  */
-export function setNativeValue(element: HTMLInputElement | HTMLTextAreaElement, value: string): void {
-  const prototype = element instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+export function setNativeValue(
+  element: HTMLInputElement | HTMLTextAreaElement,
+  value: string,
+): void {
+  const prototype =
+    element instanceof HTMLTextAreaElement
+      ? HTMLTextAreaElement.prototype
+      : HTMLInputElement.prototype;
   const descriptor = Object.getOwnPropertyDescriptor(prototype, 'value');
 
   element.focus({ preventScroll: true });
@@ -320,7 +329,8 @@ function setSelect(element: HTMLSelectElement, value: string): boolean {
 
 function setRadioGroup(members: HTMLInputElement[], value: string): boolean {
   const target = members.find(
-    (member) => member.value === value || (member.labels?.[0]?.textContent ?? '').trim() === value.trim(),
+    (member) =>
+      member.value === value || (member.labels?.[0]?.textContent ?? '').trim() === value.trim(),
   );
   if (!target) return false;
   if (target.checked) return true;

@@ -26,10 +26,7 @@ export interface SendOptions {
   retry?: boolean;
 }
 
-export async function send<T>(
-  request: AnyRequest,
-  options: SendOptions = {},
-): Promise<Result<T>> {
+export async function send<T>(request: AnyRequest, options: SendOptions = {}): Promise<Result<T>> {
   const { timeoutMs = DEFAULT_TIMEOUT_MS, retry = true } = options;
 
   const attempt = async (): Promise<Result<T>> => {

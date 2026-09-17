@@ -11,7 +11,13 @@ function merge<T>(base: T, patch: DeepPartial<T> | undefined): T {
     const value = patch[key as keyof DeepPartial<T>];
     if (value === undefined) continue;
     const current = base[key];
-    if (current && typeof current === 'object' && !Array.isArray(current) && typeof value === 'object' && !Array.isArray(value)) {
+    if (
+      current &&
+      typeof current === 'object' &&
+      !Array.isArray(current) &&
+      typeof value === 'object' &&
+      !Array.isArray(value)
+    ) {
       out[key] = merge(current, value as DeepPartial<typeof current>);
     } else {
       out[key] = value as T[keyof T];

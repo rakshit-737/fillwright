@@ -70,10 +70,18 @@ const TYPE_PRIORS: Array<{ type: string; field: CanonicalField; confidence: numb
 /** Section headings that make a whole family of fields more likely. */
 const SECTION_CONTEXT: Array<{ re: RegExp; prefix: string; boost: number }> = [
   { re: /\b(?:education|academic|school|university|degree)\b/i, prefix: 'education.', boost: 0.06 },
-  { re: /\b(?:experience|employment|work history|professional)\b/i, prefix: 'experience.', boost: 0.06 },
+  {
+    re: /\b(?:experience|employment|work history|professional)\b/i,
+    prefix: 'experience.',
+    boost: 0.06,
+  },
   { re: /\b(?:contact|personal|about you|your details)\b/i, prefix: 'personal.', boost: 0.04 },
   { re: /\b(?:address|location|where)\b/i, prefix: 'address.', boost: 0.04 },
-  { re: /\b(?:voluntary|demographic|equal opportunity|eeo|self identification)\b/i, prefix: 'sensitive.', boost: 0.05 },
+  {
+    re: /\b(?:voluntary|demographic|equal opportunity|eeo|self identification)\b/i,
+    prefix: 'sensitive.',
+    boost: 0.05,
+  },
   { re: /\b(?:links|profiles|social|online presence)\b/i, prefix: 'links.', boost: 0.05 },
 ];
 
@@ -123,7 +131,11 @@ export function classifyField(signals: FieldSignals): Classification {
     if (rule.autocomplete && normalized.autocomplete) {
       for (const token of rule.autocomplete) {
         if (normalized.autocomplete === token || normalized.autocomplete.endsWith(` ${token}`)) {
-          evidence.push({ signal: 'autocomplete', phrase: token, score: SIGNAL_WEIGHTS.autocomplete });
+          evidence.push({
+            signal: 'autocomplete',
+            phrase: token,
+            score: SIGNAL_WEIGHTS.autocomplete,
+          });
           break;
         }
       }
@@ -147,7 +159,10 @@ export function classifyField(signals: FieldSignals): Classification {
     // Independent agreement is meaningful: a label and a name attribute both
     // pointing at the same field is much stronger than either alone.
     if (evidence.length > 1) {
-      score = Math.min(1, score + Math.min(0.08, 0.03 * (evidence.length - 1) + evidence[1]!.score * 0.04));
+      score = Math.min(
+        1,
+        score + Math.min(0.08, 0.03 * (evidence.length - 1) + evidence[1]!.score * 0.04),
+      );
     }
 
     // The input type either corroborates the rule or contradicts it.
@@ -318,7 +333,9 @@ function applyTypePriors(
       candidates.set(prior.field, {
         field: prior.field,
         score: prior.confidence,
-        evidence: [{ signal: 'labelText', phrase: `type="${prior.type}"`, score: prior.confidence }],
+        evidence: [
+          { signal: 'labelText', phrase: `type="${prior.type}"`, score: prior.confidence },
+        ],
       });
     }
   }
@@ -387,10 +404,18 @@ export function describeField(field: CanonicalField): string {
     'profile.summary': 'your summary',
     'profile.skills': 'your skills',
   };
-  return LABELS[field] ?? field.replace(/^[a-z]+\./, '').replace(/([A-Z])/g, ' $1').toLowerCase();
+  return (
+    LABELS[field] ??
+    field
+      .replace(/^[a-z]+\./, '')
+      .replace(/([A-Z])/g, ' $1')
+      .toLowerCase()
+  );
 }
 
 /** True when a classified field concerns somebody other than the candidate. */
 export function isThirdPartyField(signals: FieldSignals): boolean {
-  return THIRD_PARTY_RE.test(normalizeLabel(`${signals.labelText} ${signals.name} ${signals.precedingText}`));
+  return THIRD_PARTY_RE.test(
+    normalizeLabel(`${signals.labelText} ${signals.name} ${signals.precedingText}`),
+  );
 }

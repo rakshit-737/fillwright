@@ -92,7 +92,13 @@ export class FillwrightWidget {
 
   state: WidgetState = 'idle';
   private plan: FillPlan | null = null;
-  private meta: PageMeta = { title: '', profileName: '', progress: null, jobMatch: null, addOffers: [] };
+  private meta: PageMeta = {
+    title: '',
+    profileName: '',
+    progress: null,
+    jobMatch: null,
+    addOffers: [],
+  };
   private selection = new Set<string>();
   private canUndo = false;
   private stale = false;
@@ -115,7 +121,10 @@ export class FillwrightWidget {
   private diagnostics = false;
   private signals = new Map<string, FieldSignals>();
 
-  constructor(private callbacks: WidgetCallbacks, reducedMotion: boolean) {
+  constructor(
+    private callbacks: WidgetCallbacks,
+    reducedMotion: boolean,
+  ) {
     this.host = document.createElement('div');
     // data-fillwright-ui marks the subtree so the harvester skips its own
     // controls; data-fillwright-widget identifies THIS element specifically.
@@ -197,7 +206,9 @@ export class FillwrightWidget {
     const keepReview = this.state === 'review';
     this.plan = plan;
     this.stale = false;
-    this.selection = new Set(plan.entries.filter((entry) => entry.selected).map((entry) => entry.fieldId));
+    this.selection = new Set(
+      plan.entries.filter((entry) => entry.selected).map((entry) => entry.fieldId),
+    );
     // Drafts and pickers refer to fields of the previous scan.
     const ids = new Set(plan.entries.map((entry) => entry.fieldId));
     for (const id of [...this.drafts.keys()]) if (!ids.has(id)) this.drafts.delete(id);
@@ -238,7 +249,9 @@ export class FillwrightWidget {
     const text: Partial<Record<WidgetState, string>> = {
       detected: 'Fillwright found an application form.',
       analyzing: 'Fillwright is reading this form.',
-      ready: plan ? `${plan.entries.length} application fields found. ${plan.readyCount} ready.` : '',
+      ready: plan
+        ? `${plan.entries.length} application fields found. ${plan.readyCount} ready.`
+        : '',
       filling: 'Filling fields.',
       success: summary ? `Application form filled. ${summary.filled} fields updated.` : '',
       partial: summary ? `${summary.filled} fields updated. Some need your attention.` : '',
@@ -272,7 +285,10 @@ export class FillwrightWidget {
         this.drawBusy('Reading this form…', 'Matching fields to your profile, on this device.');
         break;
       case 'filling':
-        this.drawBusy('Filling the form…', 'Nothing is submitted. You stay in control of the final click.');
+        this.drawBusy(
+          'Filling the form…',
+          'Nothing is submitted. You stay in control of the final click.',
+        );
         break;
       case 'ready':
       case 'review':
@@ -333,7 +349,9 @@ export class FillwrightWidget {
     );
     const actions = el('div', 'fw-actions');
     actions.appendChild(this.button('Not now', 'ghost', () => this.callbacks.onClose()));
-    actions.appendChild(this.button('Review with Fillwright', 'primary', () => this.callbacks.onRescan()));
+    actions.appendChild(
+      this.button('Review with Fillwright', 'primary', () => this.callbacks.onRescan()),
+    );
     body.appendChild(actions);
   }
 
@@ -351,7 +369,11 @@ export class FillwrightWidget {
     const body = this.body(card);
     body.appendChild(el('p', 'fw-error', this.lastError || 'Fillwright could not finish.'));
     body.appendChild(
-      el('p', 'fw-note', 'Nothing on the form was changed. You can try again, or fill it in yourself.'),
+      el(
+        'p',
+        'fw-note',
+        'Nothing on the form was changed. You can try again, or fill it in yourself.',
+      ),
     );
     const actions = el('div', 'fw-actions');
     actions.appendChild(this.button('Close', 'ghost', () => this.callbacks.onClose()));
@@ -371,7 +393,9 @@ export class FillwrightWidget {
     );
     const actions = el('div', 'fw-actions');
     actions.appendChild(this.button('Not now', 'ghost', () => this.callbacks.onClose()));
-    actions.appendChild(this.button('Unlock Fillwright', 'primary', () => this.callbacks.onUnlock()));
+    actions.appendChild(
+      this.button('Unlock Fillwright', 'primary', () => this.callbacks.onUnlock()),
+    );
     body.appendChild(actions);
   }
 
@@ -395,7 +419,11 @@ export class FillwrightWidget {
     if (plan.entries.length === 0) {
       body.appendChild(el('p', 'fw-muted', 'No application fields on this part of the page.'));
       body.appendChild(
-        el('p', 'fw-note', 'If the form appears later — on the next step, or after a click — Fillwright will notice.'),
+        el(
+          'p',
+          'fw-note',
+          'If the form appears later — on the next step, or after a click — Fillwright will notice.',
+        ),
       );
       const actions = el('div', 'fw-actions');
       actions.appendChild(this.button('Close', 'ghost', () => this.callbacks.onClose()));
@@ -405,14 +433,21 @@ export class FillwrightWidget {
     }
 
     const counts = countsFor(plan);
-    const headline = el('p', 'fw-lead', `${plan.entries.length} application field${plan.entries.length === 1 ? '' : 's'} found`);
+    const headline = el(
+      'p',
+      'fw-lead',
+      `${plan.entries.length} application field${plan.entries.length === 1 ? '' : 's'} found`,
+    );
     body.appendChild(headline);
 
     const summary = el('div', 'fw-tally');
     summary.appendChild(this.tally('✓', `${counts.ready} ready`, 'ok'));
-    if (counts.review > 0) summary.appendChild(this.tally('!', `${counts.review} to review`, 'caution'));
-    if (counts.needsYou > 0) summary.appendChild(this.tally('•', `${counts.needsYou} need you`, 'caution'));
-    if (counts.filled > 0) summary.appendChild(this.tally('–', `${counts.filled} already filled`, 'muted'));
+    if (counts.review > 0)
+      summary.appendChild(this.tally('!', `${counts.review} to review`, 'caution'));
+    if (counts.needsYou > 0)
+      summary.appendChild(this.tally('•', `${counts.needsYou} need you`, 'caution'));
+    if (counts.filled > 0)
+      summary.appendChild(this.tally('–', `${counts.filled} already filled`, 'muted'));
     body.appendChild(summary);
 
     if (this.meta.progress && this.meta.progress.filled > 0) {
@@ -437,7 +472,9 @@ export class FillwrightWidget {
         ),
       );
       notice.appendChild(
-        this.link(`Add ${offer.missing === 1 ? 'it' : 'them'}`, () => this.callbacks.onAddEntries(offer)),
+        this.link(`Add ${offer.missing === 1 ? 'it' : 'them'}`, () =>
+          this.callbacks.onAddEntries(offer),
+        ),
       );
       body.appendChild(notice);
     }
@@ -480,7 +517,11 @@ export class FillwrightWidget {
 
     const count = this.selection.size;
     const fill = this.button(
-      count === 0 ? 'Nothing selected' : reviewing ? `Fill ${count} field${count === 1 ? '' : 's'}` : `Fill ${count} ready`,
+      count === 0
+        ? 'Nothing selected'
+        : reviewing
+          ? `Fill ${count} field${count === 1 ? '' : 's'}`
+          : `Fill ${count} ready`,
       'primary',
       () => {
         const entries = plan.entries.map((entry) => ({
@@ -494,7 +535,9 @@ export class FillwrightWidget {
     actions.appendChild(fill);
     body.appendChild(actions);
 
-    body.appendChild(el('p', 'fw-note', 'Fillwright never submits an application. That is always your click.'));
+    body.appendChild(
+      el('p', 'fw-note', 'Fillwright never submits an application. That is always your click.'),
+    );
   }
 
   private drawFilled(): void {
@@ -521,7 +564,8 @@ export class FillwrightWidget {
     }
     const review = summary.remaining - summary.manual;
     if (review > 0) tally.appendChild(this.tally('•', `${review} left for review`, 'caution'));
-    if (summary.manual > 0) tally.appendChild(this.tally('✎', `${summary.manual} need your input`, 'muted'));
+    if (summary.manual > 0)
+      tally.appendChild(this.tally('✎', `${summary.manual} need your input`, 'muted'));
     if (tally.childElementCount > 0) body.appendChild(tally);
 
     if (summary.failures.length > 0) {
@@ -541,7 +585,11 @@ export class FillwrightWidget {
     }
 
     body.appendChild(
-      el('p', 'fw-note', 'Check the form, then submit it yourself. Fillwright never submits an application.'),
+      el(
+        'p',
+        'fw-note',
+        'Check the form, then submit it yourself. Fillwright never submits an application.',
+      ),
     );
 
     const actions = el('div', 'fw-actions');
@@ -553,7 +601,8 @@ export class FillwrightWidget {
         }),
       );
     }
-    if (this.canUndo) actions.appendChild(this.button('Undo', 'ghost', () => this.callbacks.onUndo()));
+    if (this.canUndo)
+      actions.appendChild(this.button('Undo', 'ghost', () => this.callbacks.onUndo()));
     if (!complete && this.plan) {
       actions.appendChild(this.button('Review the rest', 'ghost', () => this.callbacks.onRescan()));
     }
@@ -566,7 +615,11 @@ export class FillwrightWidget {
     const body = this.body(card);
     const restored = this.lastSummary?.filled ?? 0;
     body.appendChild(
-      el('p', 'fw-lead', `Restored ${restored} field${restored === 1 ? '' : 's'} to how they were.`),
+      el(
+        'p',
+        'fw-lead',
+        `Restored ${restored} field${restored === 1 ? '' : 's'} to how they were.`,
+      ),
     );
     const actions = el('div', 'fw-actions');
     actions.appendChild(this.button('Close', 'ghost', () => this.callbacks.onClose()));
@@ -641,7 +694,13 @@ export class FillwrightWidget {
       section.appendChild(chips(match.missing, 'muted'));
     }
     if (match.yearsRequired) {
-      section.appendChild(el('p', 'fw-note', `The posting asks for about ${match.yearsRequired}+ years of experience.`));
+      section.appendChild(
+        el(
+          'p',
+          'fw-note',
+          `The posting asks for about ${match.yearsRequired}+ years of experience.`,
+        ),
+      );
     }
     section.appendChild(
       el(
@@ -744,9 +803,16 @@ export class FillwrightWidget {
   }
 
   private restorePosition(): void {
-    const saved = (globalThis as unknown as Record<string, { left: string; top: string } | undefined>)[POSITION_KEY];
+    const saved = (
+      globalThis as unknown as Record<string, { left: string; top: string } | undefined>
+    )[POSITION_KEY];
     if (!saved?.left || !saved.top) return;
-    Object.assign(this.panel.style, { left: saved.left, top: saved.top, right: 'auto', bottom: 'auto' });
+    Object.assign(this.panel.style, {
+      left: saved.left,
+      top: saved.top,
+      right: 'auto',
+      bottom: 'auto',
+    });
   }
 
   /* --------------------------------------------------------------- pieces */
@@ -811,7 +877,11 @@ export class FillwrightWidget {
     return item;
   }
 
-  private button(label: string, variant: 'primary' | 'ghost', onClick: () => void): HTMLButtonElement {
+  private button(
+    label: string,
+    variant: 'primary' | 'ghost',
+    onClick: () => void,
+  ): HTMLButtonElement {
     const button = document.createElement('button');
     button.type = 'button';
     button.className = `fw-btn fw-btn--${variant}`;
@@ -831,7 +901,12 @@ export class FillwrightWidget {
 }
 
 /** Groups plan entries into the four numbers the panel leads with. */
-export function countsFor(plan: FillPlan): { ready: number; review: number; needsYou: number; filled: number } {
+export function countsFor(plan: FillPlan): {
+  ready: number;
+  review: number;
+  needsYou: number;
+  filled: number;
+} {
   let ready = 0;
   let review = 0;
   let needsYou = 0;

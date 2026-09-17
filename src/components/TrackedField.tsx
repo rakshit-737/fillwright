@@ -53,7 +53,13 @@ export function TrackedField({
             </span>
           )}
         </label>
-        {!empty && fromResume && <ConfidenceBadge confidence={value.provenance.confidence} provenance={value.provenance} compact />}
+        {!empty && fromResume && (
+          <ConfidenceBadge
+            confidence={value.provenance.confidence}
+            provenance={value.provenance}
+            compact
+          />
+        )}
       </div>
 
       {multiline ? (
@@ -226,7 +232,11 @@ export function CheckField({
 }) {
   return (
     <label className="fw-field fw-field--toggle">
-      <input type="checkbox" checked={checked} onChange={(event) => onChange(event.target.checked)} />
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(event) => onChange(event.target.checked)}
+      />
       <span>
         <span className="fw-field__label">{label}</span>
         {hint && <span className="fw-field__hint">{hint}</span>}

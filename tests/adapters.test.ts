@@ -142,7 +142,9 @@ describe('scans arriving from a page are untrusted input', () => {
 
   it('caps oversized strings instead of storing them', () => {
     const result = validateScan({
-      fields: [{ ...validField, signals: { ...validField.signals, labelText: 'x'.repeat(100_000) } }],
+      fields: [
+        { ...validField, signals: { ...validField.signals, labelText: 'x'.repeat(100_000) } },
+      ],
     });
     expect(result.ok).toBe(true);
     if (result.ok) {

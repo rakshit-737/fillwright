@@ -126,7 +126,9 @@ function consumeActivation(): boolean {
 /* ---------------------------------------------------------- passive mode */
 
 async function passiveBoot(): Promise<void> {
-  const response = await send<{ mode: AutofillMode; enabled: boolean }>({ type: 'content:get-mode' });
+  const response = await send<{ mode: AutofillMode; enabled: boolean }>({
+    type: 'content:get-mode',
+  });
   if (!response?.enabled) return;
   mode = response.mode;
   if (mode === 'manual') return;
@@ -269,7 +271,9 @@ async function loadExtras(): Promise<void> {
     loadJobMatch(),
   ]);
   widget?.setMeta({
-    progress: progress ? { steps: Object.keys(progress.steps).length, filled: progress.filled } : null,
+    progress: progress
+      ? { steps: Object.keys(progress.steps).length, filled: progress.filled }
+      : null,
     jobMatch: match,
   });
 }
@@ -297,7 +301,8 @@ function createWidget(): FillwrightWidget {
       onRescan: () => void open(),
       onClose: () => teardown(),
       onTeach: (entry, field, remember) => void teachMapping(entry, field, remember),
-      onListProfiles: async () => (await send<ProfileChoice[]>({ type: 'content:list-profiles' })) ?? [],
+      onListProfiles: async () =>
+        (await send<ProfileChoice[]>({ type: 'content:list-profiles' })) ?? [],
       onSwitchProfile: (profileId) => {
         void send({ type: 'content:switch-profile', profileId }).then(() => open());
       },
@@ -355,7 +360,9 @@ async function applyFill(entries: FillPlanEntry[]): Promise<FillSummary & { ok: 
       };
     });
 
-  const filledIds = new Set(outcomes.filter((outcome) => outcome.ok).map((outcome) => outcome.fieldId));
+  const filledIds = new Set(
+    outcomes.filter((outcome) => outcome.ok).map((outcome) => outcome.fieldId),
+  );
   const left = (session.plan?.entries ?? []).filter(
     (entry) =>
       !filledIds.has(entry.fieldId) &&
@@ -385,7 +392,11 @@ async function applyFill(entries: FillPlanEntry[]): Promise<FillSummary & { ok: 
  * A remembered mapping is stored against this origin on this device; an
  * unremembered one lives only in this page's memory until it is closed.
  */
-async function teachMapping(entry: FillPlanEntry, field: CanonicalField, remember: boolean): Promise<void> {
+async function teachMapping(
+  entry: FillPlanEntry,
+  field: CanonicalField,
+  remember: boolean,
+): Promise<void> {
   if (!entry.fingerprint) return;
   if (remember) {
     overrides.delete(entry.fingerprint);
@@ -439,7 +450,9 @@ async function startDraft(entry: FillPlanEntry): Promise<void> {
   if (!widget) return;
   widget.drafts.set(entry.fieldId, { phase: 'loading' });
   widget.refresh();
-  const response = await chrome.runtime.sendMessage({ type: 'content:draft-facts' }).catch(() => null);
+  const response = await chrome.runtime
+    .sendMessage({ type: 'content:draft-facts' })
+    .catch(() => null);
   if (!response?.ok) {
     if (response?.code === 'EAIOFF') draftAvailable = false;
     widget.drafts.set(entry.fieldId, {
@@ -449,7 +462,11 @@ async function startDraft(entry: FillPlanEntry): Promise<void> {
   } else {
     draftAvailable = true;
     const facts = response.data as DraftFact[];
-    widget.drafts.set(entry.fieldId, { phase: 'facts', facts, chosen: new Set(facts.map((fact) => fact.id)) });
+    widget.drafts.set(entry.fieldId, {
+      phase: 'facts',
+      facts,
+      chosen: new Set(facts.map((fact) => fact.id)),
+    });
   }
   widget.refresh();
 }
@@ -501,8 +518,12 @@ function watchForNewFields(): void {
     const changed = records.some((record) =>
       [...Array.from(record.addedNodes), ...Array.from(record.removedNodes)].some((node) => {
         if (!(node instanceof HTMLElement)) return false;
-        if (node.closest?.('[data-fillwright-ui]') || node.hasAttribute('data-fillwright-ui')) return false;
-        return node.matches?.('input, select, textarea') || node.querySelector?.('input, select, textarea');
+        if (node.closest?.('[data-fillwright-ui]') || node.hasAttribute('data-fillwright-ui'))
+          return false;
+        return (
+          node.matches?.('input, select, textarea') ||
+          node.querySelector?.('input, select, textarea')
+        );
       }),
     );
     if (changed) scheduleChange();
@@ -571,24 +592,26 @@ function userIsTyping(): boolean {
   return (
     active instanceof HTMLElement &&
     !active.closest('[data-fillwright-ui]') &&
-    (active.isContentEditable || active.matches('input:not([type="checkbox"]):not([type="radio"]), textarea')) &&
+    (active.isContentEditable ||
+      active.matches('input:not([type="checkbox"]):not([type="radio"]), textarea')) &&
     Date.now() - lastInputAt < TYPING_GRACE_MS * 4
   );
 }
 
 function whenIdle(): Promise<void> {
   return new Promise((resolve) => {
-    const idle = (window as Window & { requestIdleCallback?: (cb: () => void, opts?: object) => number })
-      .requestIdleCallback;
+    const idle = (
+      window as Window & { requestIdleCallback?: (cb: () => void, opts?: object) => number }
+    ).requestIdleCallback;
     if (idle) idle(() => resolve(), { timeout: 2_000 });
     else window.setTimeout(resolve, 300);
   });
 }
 
 function isOwnUi(event: Event): boolean {
-  return event.composedPath().some(
-    (node) => node instanceof HTMLElement && node.hasAttribute('data-fillwright-ui'),
-  );
+  return event
+    .composedPath()
+    .some((node) => node instanceof HTMLElement && node.hasAttribute('data-fillwright-ui'));
 }
 
 /* --------------------------------------------------------------- helpers */
@@ -640,11 +663,17 @@ function friendlyError(code: string | undefined, fallback: string | undefined): 
     case 'ENOSENDER':
       return 'Fillwright only works on regular web pages.';
     default:
-      return fallback ?? 'Fillwright could not reach its background service. Reload the page and try again.';
+      return (
+        fallback ??
+        'Fillwright could not reach its background service. Reload the page and try again.'
+      );
   }
 }
 
-async function send<T = unknown>(message: { type: string; [key: string]: unknown }): Promise<T | null> {
+async function send<T = unknown>(message: {
+  type: string;
+  [key: string]: unknown;
+}): Promise<T | null> {
   const response = await chrome.runtime.sendMessage(message).catch(() => null);
   return response?.ok ? (response.data as T) : null;
 }

@@ -14,12 +14,7 @@ export class ExtractionError extends Error {
   constructor(
     message: string,
     readonly code:
-      | 'EUNSUPPORTED'
-      | 'EEMPTY'
-      | 'ECORRUPT'
-      | 'EENCRYPTED'
-      | 'ETOOLARGE'
-      | 'EIMAGEONLY',
+      'EUNSUPPORTED' | 'EEMPTY' | 'ECORRUPT' | 'EENCRYPTED' | 'ETOOLARGE' | 'EIMAGEONLY',
   ) {
     super(message);
     this.name = 'ExtractionError';

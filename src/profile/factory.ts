@@ -24,7 +24,9 @@ export function provenance(
   confidence: Confidence = 0,
   note?: string,
 ): Provenance {
-  return note ? { source, confidence, updatedAt: now(), note } : { source, confidence, updatedAt: now() };
+  return note
+    ? { source, confidence, updatedAt: now(), note }
+    : { source, confidence, updatedAt: now() };
 }
 
 /** Build a TrackedValue. Defaults to an empty, zero-confidence placeholder. */

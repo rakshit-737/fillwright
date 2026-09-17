@@ -89,9 +89,7 @@ export function App() {
           ))}
         </nav>
 
-        <p className="fw-sidebar__foot">
-          Everything here is stored on this device only.
-        </p>
+        <p className="fw-sidebar__foot">Everything here is stored on this device only.</p>
       </aside>
 
       <main className="fw-main" id="fw-main" tabIndex={-1}>
@@ -101,19 +99,14 @@ export function App() {
         {route === 'import' && <ImportResume settings={settings} />}
         {route === 'profile' && <ProfileEditor settings={settings} />}
         {route === 'preferences' && <Preferences settings={settings} />}
-        {route === 'profiles' && (
-          <Profiles settings={settings} onSettingsChange={setSettings} />
-        )}
+        {route === 'profiles' && <Profiles settings={settings} onSettingsChange={setSettings} />}
         {route === 'history' && <History settings={settings} onSettingsChange={setSettings} />}
         {route === 'learned' && <SavedMappings />}
         {route === 'assistance' && (
           <Assistance settings={settings} onSettingsChange={setSettings} />
         )}
-        {route === 'security' && (
-          <Security settings={settings} onSettingsChange={setSettings} />
-        )}
+        {route === 'security' && <Security settings={settings} onSettingsChange={setSettings} />}
       </main>
     </div>
   );
 }
-

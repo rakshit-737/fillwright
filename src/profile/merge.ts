@@ -95,27 +95,97 @@ export function mergeResumeIntoProfile(
 
   /* --- personal --------------------------------------------------------- */
   const { contact } = parsed;
-  profile.personal.firstName = apply('personal.firstName', 'First name', profile.personal.firstName, contact.firstName);
-  profile.personal.middleName = apply('personal.middleName', 'Middle name', profile.personal.middleName, contact.middleName);
-  profile.personal.lastName = apply('personal.lastName', 'Last name', profile.personal.lastName, contact.lastName);
-  profile.personal.fullName = apply('personal.fullName', 'Full name', profile.personal.fullName, contact.fullName);
+  profile.personal.firstName = apply(
+    'personal.firstName',
+    'First name',
+    profile.personal.firstName,
+    contact.firstName,
+  );
+  profile.personal.middleName = apply(
+    'personal.middleName',
+    'Middle name',
+    profile.personal.middleName,
+    contact.middleName,
+  );
+  profile.personal.lastName = apply(
+    'personal.lastName',
+    'Last name',
+    profile.personal.lastName,
+    contact.lastName,
+  );
+  profile.personal.fullName = apply(
+    'personal.fullName',
+    'Full name',
+    profile.personal.fullName,
+    contact.fullName,
+  );
   profile.personal.email = apply('personal.email', 'Email', profile.personal.email, contact.email);
   profile.personal.phone = apply('personal.phone', 'Phone', profile.personal.phone, contact.phone);
 
   /* --- address ---------------------------------------------------------- */
-  profile.address.formatted = apply('address.formatted', 'Location', profile.address.formatted, contact.location);
+  profile.address.formatted = apply(
+    'address.formatted',
+    'Location',
+    profile.address.formatted,
+    contact.location,
+  );
   profile.address.city = apply('address.city', 'City', profile.address.city, contact.city);
-  profile.address.state = apply('address.state', 'State or region', profile.address.state, contact.state);
-  profile.address.country = apply('address.country', 'Country', profile.address.country, contact.country);
-  profile.address.postalCode = apply('address.postalCode', 'Postal code', profile.address.postalCode, contact.postalCode);
+  profile.address.state = apply(
+    'address.state',
+    'State or region',
+    profile.address.state,
+    contact.state,
+  );
+  profile.address.country = apply(
+    'address.country',
+    'Country',
+    profile.address.country,
+    contact.country,
+  );
+  profile.address.postalCode = apply(
+    'address.postalCode',
+    'Postal code',
+    profile.address.postalCode,
+    contact.postalCode,
+  );
 
   /* --- links ------------------------------------------------------------ */
-  profile.links.linkedin = apply('links.linkedin', 'LinkedIn', profile.links.linkedin, contact.links.linkedin);
-  profile.links.github = apply('links.github', 'GitHub', profile.links.github, contact.links.github);
-  profile.links.portfolio = apply('links.portfolio', 'Portfolio', profile.links.portfolio, contact.links.portfolio);
-  profile.links.website = apply('links.website', 'Website', profile.links.website, contact.links.website);
-  profile.links.twitter = apply('links.twitter', 'Twitter / X', profile.links.twitter, contact.links.twitter);
-  profile.links.stackoverflow = apply('links.stackoverflow', 'Stack Overflow', profile.links.stackoverflow, contact.links.stackoverflow);
+  profile.links.linkedin = apply(
+    'links.linkedin',
+    'LinkedIn',
+    profile.links.linkedin,
+    contact.links.linkedin,
+  );
+  profile.links.github = apply(
+    'links.github',
+    'GitHub',
+    profile.links.github,
+    contact.links.github,
+  );
+  profile.links.portfolio = apply(
+    'links.portfolio',
+    'Portfolio',
+    profile.links.portfolio,
+    contact.links.portfolio,
+  );
+  profile.links.website = apply(
+    'links.website',
+    'Website',
+    profile.links.website,
+    contact.links.website,
+  );
+  profile.links.twitter = apply(
+    'links.twitter',
+    'Twitter / X',
+    profile.links.twitter,
+    contact.links.twitter,
+  );
+  profile.links.stackoverflow = apply(
+    'links.stackoverflow',
+    'Stack Overflow',
+    profile.links.stackoverflow,
+    contact.links.stackoverflow,
+  );
 
   if (contact.links.other.length > 0 && profile.links.other.value.length === 0) {
     profile.links.other = tv(contact.links.other, 'resume', 0.5, 'other links found in the resume');

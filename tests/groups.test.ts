@@ -51,7 +51,10 @@ function profileWithHistory(): Profile {
     education('Vellore Institute of Technology', 'B.Tech', '2026-05'),
     education('Delhi Public School', 'High School Diploma', '2022-05'),
   ];
-  profile.experience = [role('Zeta Payments', 'Software Engineering Intern', true), role('Acme Labs', 'Research Intern')];
+  profile.experience = [
+    role('Zeta Payments', 'Software Engineering Intern', true),
+    role('Acme Labs', 'Research Intern'),
+  ];
   return profile;
 }
 

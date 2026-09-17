@@ -48,9 +48,39 @@ const found = (value: string, confidence: number, note: string): Candidate => ({
 const NOT_A_NAME_RE =
   /\b(?:resume|curriculum\s+vitae|cv|profile|summary|objective|contact|phone|email|address|linkedin|github|portfolio|engineer|developer|student|intern|manager|analyst|designer|scientist|university|college|institute)\b/i;
 
-const NAME_PARTICLES = new Set(['van', 'von', 'de', 'del', 'della', 'da', 'di', 'du', 'la', 'le', 'bin', 'binti', 'al', 'ibn', 'mac', 'mc', "o'"]);
+const NAME_PARTICLES = new Set([
+  'van',
+  'von',
+  'de',
+  'del',
+  'della',
+  'da',
+  'di',
+  'du',
+  'la',
+  'le',
+  'bin',
+  'binti',
+  'al',
+  'ibn',
+  'mac',
+  'mc',
+  "o'",
+]);
 
-const SUFFIXES = new Set(['jr', 'jr.', 'sr', 'sr.', 'ii', 'iii', 'iv', 'phd', 'ph.d.', 'md', 'mba']);
+const SUFFIXES = new Set([
+  'jr',
+  'jr.',
+  'sr',
+  'sr.',
+  'ii',
+  'iii',
+  'iv',
+  'phd',
+  'ph.d.',
+  'md',
+  'mba',
+]);
 const TITLES = new Set(['mr', 'mr.', 'ms', 'ms.', 'mrs', 'mrs.', 'dr', 'dr.', 'prof', 'prof.']);
 
 /**
@@ -176,7 +206,11 @@ function findLinks(fullText: string): ParsedContact['links'] {
 function isLikelyPersonalSite(url: string): boolean {
   const host = hostOf(url);
   if (!host) return false;
-  if (/(?:^|\.)(?:google|drive|docs|dropbox|youtube|youtu\.be|medium|notion|vercel\.app|netlify\.app|herokuapp)\.com$/.test(host)) {
+  if (
+    /(?:^|\.)(?:google|drive|docs|dropbox|youtube|youtu\.be|medium|notion|vercel\.app|netlify\.app|herokuapp)\.com$/.test(
+      host,
+    )
+  ) {
     return false;
   }
   if (/\.(?:dev|me|io|xyz|page|site|tech|portfolio)$/.test(host)) return true;
@@ -257,7 +291,11 @@ function isNameShaped(line: string): boolean {
 }
 
 function emailAgreesWithName(email: string, name: string): boolean {
-  const local = email.split('@')[0]?.toLowerCase().replace(/[^a-z]/g, '') ?? '';
+  const local =
+    email
+      .split('@')[0]
+      ?.toLowerCase()
+      .replace(/[^a-z]/g, '') ?? '';
   if (local.length < 4) return false;
   return name
     .toLowerCase()
@@ -279,7 +317,9 @@ export function splitName(raw: string, confidence: number, note: string): NamePa
 
   let words = value.split(/\s+/).filter(Boolean);
   words = words.filter((word) => !TITLES.has(word.replace(/[.,]/g, '').toLowerCase()));
-  const suffixIndex = words.findIndex((word) => SUFFIXES.has(word.replace(/[.,]/g, '').toLowerCase()));
+  const suffixIndex = words.findIndex((word) =>
+    SUFFIXES.has(word.replace(/[.,]/g, '').toLowerCase()),
+  );
   if (suffixIndex > 1) words = words.slice(0, suffixIndex);
 
   if (words.length === 0) {
@@ -310,7 +350,11 @@ export function splitName(raw: string, confidence: number, note: string): NamePa
   return {
     firstName: found(toDisplayCase(first), confidence, note),
     middleName: middle ? found(toDisplayCase(middle), confidence - 0.1, note) : none(),
-    lastName: found(toDisplayCase(last), confidence, surnameFirst ? `${note} (written surname first)` : note),
+    lastName: found(
+      toDisplayCase(last),
+      confidence,
+      surnameFirst ? `${note} (written surname first)` : note,
+    ),
     fullName: found(display, confidence, note),
   };
 }
@@ -323,7 +367,10 @@ function toDisplayCase(value: string): string {
     .split(/\s+/)
     .map((word) => {
       if (NAME_PARTICLES.has(word)) return word;
-      return word.replace(/(^|[-'’])([a-z])/g, (_, prefix: string, letter: string) => prefix + letter.toUpperCase());
+      return word.replace(
+        /(^|[-'’])([a-z])/g,
+        (_, prefix: string, letter: string) => prefix + letter.toUpperCase(),
+      );
     })
     .join(' ');
 }
@@ -333,9 +380,57 @@ function toDisplayCase(value: string): string {
 type LocationParts = Pick<ParsedContact, 'location' | 'city' | 'state' | 'country' | 'postalCode'>;
 
 const US_STATES = new Set([
-  'AL','AK','AZ','AR','CA','CO','CT','DE','FL','GA','HI','ID','IL','IN','IA','KS','KY','LA','ME','MD',
-  'MA','MI','MN','MS','MO','MT','NE','NV','NH','NJ','NM','NY','NC','ND','OH','OK','OR','PA','RI','SC',
-  'SD','TN','TX','UT','VT','VA','WA','WV','WI','WY','DC',
+  'AL',
+  'AK',
+  'AZ',
+  'AR',
+  'CA',
+  'CO',
+  'CT',
+  'DE',
+  'FL',
+  'GA',
+  'HI',
+  'ID',
+  'IL',
+  'IN',
+  'IA',
+  'KS',
+  'KY',
+  'LA',
+  'ME',
+  'MD',
+  'MA',
+  'MI',
+  'MN',
+  'MS',
+  'MO',
+  'MT',
+  'NE',
+  'NV',
+  'NH',
+  'NJ',
+  'NM',
+  'NY',
+  'NC',
+  'ND',
+  'OH',
+  'OK',
+  'OR',
+  'PA',
+  'RI',
+  'SC',
+  'SD',
+  'TN',
+  'TX',
+  'UT',
+  'VT',
+  'VA',
+  'WA',
+  'WV',
+  'WI',
+  'WY',
+  'DC',
 ]);
 
 const COUNTRY_RE =
@@ -361,7 +456,10 @@ function findLocation(headerLines: string[]): LocationParts {
       const digits = line.replace(/\D/g, '').length;
       if (digits > 7) continue;
 
-      const parts = line.split(',').map((part) => part.trim()).filter(Boolean);
+      const parts = line
+        .split(',')
+        .map((part) => part.trim())
+        .filter(Boolean);
       if (parts.length === 0 || parts.length > 4) continue;
       if (!parts.every((part) => /^[A-Za-z][A-Za-z .'’-]*(?:\s+\d{4,6})?$/.test(part))) continue;
 
@@ -386,7 +484,9 @@ function interpretLocation(parts: string[], line: string): LocationParts {
 
   // "Austin, TX 78701" — the postal code rides along with the state. Remove it
   // before the parts are interpreted, or the state comes out as "TX 78701".
-  parts = parts.map((part) => part.replace(/\s*\b\d{5}(?:-\d{4})?\b|\s*\b\d{6}\b/g, '').trim()).filter(Boolean);
+  parts = parts
+    .map((part) => part.replace(/\s*\b\d{5}(?:-\d{4})?\b|\s*\b\d{6}\b/g, '').trim())
+    .filter(Boolean);
 
   const tail = parts[parts.length - 1] ?? '';
   const countryMatch = tail.match(COUNTRY_RE);

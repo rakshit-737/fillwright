@@ -159,13 +159,35 @@ export function PrivacyCenter() {
 
         <ol className="fw-flow" aria-label="How your data moves through Fillwright">
           <FlowStep step="1" title="Your resume" detail="A file you choose, read by this page" />
-          <FlowStep step="2" title="Local parser" detail="Text extraction and matching, in this browser" />
-          <FlowStep step="3" title="Your profile" detail="Stored in this browser’s local database" />
-          <FlowStep step="4" title="Field matcher" detail="Compares the form’s labels to a built-in vocabulary" />
+          <FlowStep
+            step="2"
+            title="Local parser"
+            detail="Text extraction and matching, in this browser"
+          />
+          <FlowStep
+            step="3"
+            title="Your profile"
+            detail="Stored in this browser’s local database"
+          />
+          <FlowStep
+            step="4"
+            title="Field matcher"
+            detail="Compares the form’s labels to a built-in vocabulary"
+          />
           <FlowStep step="5" title="Fill plan" detail="What Fillwright proposes to write" />
-          <FlowStep step="6" title="You approve" detail="Nothing is written until you say so" highlight />
+          <FlowStep
+            step="6"
+            title="You approve"
+            detail="Nothing is written until you say so"
+            highlight
+          />
           <FlowStep step="7" title="The form" detail="Values are typed into the page you are on" />
-          <FlowStep step="8" title="You submit" detail="Always your click — Fillwright never submits" highlight />
+          <FlowStep
+            step="8"
+            title="You submit"
+            detail="Always your click — Fillwright never submits"
+            highlight
+          />
         </ol>
 
         <p className="fw-flow__note">
@@ -202,9 +224,9 @@ export function PrivacyCenter() {
       <section className="fw-section">
         <h2 className="fw-section__title">Your data, your call</h2>
         <p className="fw-section__lead">
-          An export is a JSON file saved to your computer. It holds your profiles, what Fillwright has
-          learned and your settings — resume files are left out. It is not encrypted, so treat it like
-          the resume itself.
+          An export is a JSON file saved to your computer. It holds your profiles, what Fillwright
+          has learned and your settings — resume files are left out. It is not encrypted, so treat
+          it like the resume itself.
         </p>
         <label className="fw-field fw-field--toggle">
           <input
@@ -214,7 +236,9 @@ export function PrivacyCenter() {
           />
           <span>
             <span className="fw-field__label">Include application history</span>
-            <span className="fw-field__hint">Off by default. Company, role, site and date only.</span>
+            <span className="fw-field__hint">
+              Off by default. Company, role, site and date only.
+            </span>
           </span>
         </label>
         <div className="fw-actions">

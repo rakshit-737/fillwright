@@ -38,7 +38,10 @@ writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
 // only the test build — reopens it.
 const contentPath = resolve(target, 'content.js');
 const content = readFileSync(contentPath, 'utf8');
-const reopened = content.replace(/attachShadow\(\{(\s*)mode:(\s*)(["'])closed\3/, 'attachShadow({$1mode:$2$3open$3');
+const reopened = content.replace(
+  /attachShadow\(\{(\s*)mode:(\s*)(["'])closed\3/,
+  'attachShadow({$1mode:$2$3open$3',
+);
 if (reopened === content) {
   console.error('[fillwright] could not find the closed shadow root in content.js');
   process.exit(1);

@@ -85,7 +85,9 @@ export function parseImport(input: unknown, existingNames: string[] = []): Impor
     throw new Error('This file is not a Fillwright export.');
   }
   if (typeof input.version === 'number' && input.version > EXPORT_VERSION) {
-    throw new Error('This export was made by a newer version of Fillwright. Update Fillwright and try again.');
+    throw new Error(
+      'This export was made by a newer version of Fillwright. Update Fillwright and try again.',
+    );
   }
   if (!Array.isArray(input.profiles)) throw new Error('This export contains no profiles.');
 
@@ -93,7 +95,8 @@ export function parseImport(input: unknown, existingNames: string[] = []): Impor
   const names = new Set(existingNames.map((name) => name.toLowerCase()));
 
   const rawProfiles = input.profiles.slice(0, MAX_PROFILES);
-  if (input.profiles.length > MAX_PROFILES) warnings.push(`Only the first ${MAX_PROFILES} profiles were imported.`);
+  if (input.profiles.length > MAX_PROFILES)
+    warnings.push(`Only the first ${MAX_PROFILES} profiles were imported.`);
 
   const profiles: Profile[] = [];
   for (const raw of rawProfiles) {
@@ -258,10 +261,14 @@ function conform(value: unknown, template: unknown, path: string, depth: number)
 function conformSettings(raw: Record<string, unknown>): DeepPartial<Settings> {
   const base = portableSettings(DEFAULT_SETTINGS);
   const shaped = conform(raw, base, 'settings', 0) as PortableSettings;
-  shaped.autofill.confidenceThreshold = Math.max(0.5, Math.min(0.99, shaped.autofill.confidenceThreshold));
+  shaped.autofill.confidenceThreshold = Math.max(
+    0.5,
+    Math.min(0.99, shaped.autofill.confidenceThreshold),
+  );
   if (!AUTOFILL_MODES.includes(shaped.autofill.mode)) shaped.autofill.mode = 'manual';
   if (!['none', 'chrome-builtin'].includes(shaped.ai.provider)) shaped.ai.provider = 'none';
   if (!['system', 'light', 'dark'].includes(shaped.ui.theme)) shaped.ui.theme = 'system';
-  if (![0, 5, 15, 30, 60].includes(shaped.privacy.autoLockMinutes)) shaped.privacy.autoLockMinutes = 30;
+  if (![0, 5, 15, 30, 60].includes(shaped.privacy.autoLockMinutes))
+    shaped.privacy.autoLockMinutes = 30;
   return shaped;
 }

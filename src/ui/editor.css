@@ -346,7 +346,8 @@
   color: var(--fw-ink-muted);
   cursor: pointer;
   white-space: nowrap;
-  transition: background var(--fw-duration-fast) var(--fw-ease),
+  transition:
+    background var(--fw-duration-fast) var(--fw-ease),
     color var(--fw-duration-fast) var(--fw-ease);
 }
 
@@ -453,7 +454,9 @@
   height: 7px;
   border-radius: 50%;
   background: var(--fw-line-strong);
-  transition: background var(--fw-duration) var(--fw-ease), width var(--fw-duration) var(--fw-ease);
+  transition:
+    background var(--fw-duration) var(--fw-ease),
+    width var(--fw-duration) var(--fw-ease);
 }
 
 .fw-steps__dot--done {
@@ -514,7 +517,8 @@
   border: 1px solid var(--fw-line);
   border-radius: var(--fw-radius-lg);
   background: var(--fw-surface);
-  transition: border-color var(--fw-duration-fast) var(--fw-ease),
+  transition:
+    border-color var(--fw-duration-fast) var(--fw-ease),
     box-shadow var(--fw-duration-fast) var(--fw-ease);
 }
 
@@ -958,10 +962,18 @@
   transition: background var(--fw-duration) var(--fw-ease);
 }
 
-.fw-strength__bar--on-1 { background: var(--fw-danger); }
-.fw-strength__bar--on-2 { background: var(--fw-caution); }
-.fw-strength__bar--on-3 { background: var(--fw-accent); }
-.fw-strength__bar--on-4 { background: var(--fw-ok); }
+.fw-strength__bar--on-1 {
+  background: var(--fw-danger);
+}
+.fw-strength__bar--on-2 {
+  background: var(--fw-caution);
+}
+.fw-strength__bar--on-3 {
+  background: var(--fw-accent);
+}
+.fw-strength__bar--on-4 {
+  background: var(--fw-ok);
+}
 
 .fw-strength__label {
   font-size: var(--fw-text-xs);

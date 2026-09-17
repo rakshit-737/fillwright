@@ -106,7 +106,11 @@ export async function encryptBytes(key: CryptoKey, bytes: ArrayBuffer): Promise<
 }
 
 export async function decryptBytes(key: CryptoKey, blob: EncryptedBlob): Promise<ArrayBuffer> {
-  return crypto.subtle.decrypt({ name: 'AES-GCM', iv: fromBase64(blob.iv) }, key, fromBase64(blob.ct));
+  return crypto.subtle.decrypt(
+    { name: 'AES-GCM', iv: fromBase64(blob.iv) },
+    key,
+    fromBase64(blob.ct),
+  );
 }
 
 export function isEncryptedBlob(value: unknown): value is EncryptedBlob {
@@ -171,7 +175,9 @@ export function passphraseStrength(passphrase: string): {
   hint: string;
 } {
   const length = passphrase.length;
-  const classes = [/[a-z]/, /[A-Z]/, /\d/, /[^\w\s]/, /\s/].filter((re) => re.test(passphrase)).length;
+  const classes = [/[a-z]/, /[A-Z]/, /\d/, /[^\w\s]/, /\s/].filter((re) =>
+    re.test(passphrase),
+  ).length;
 
   if (length < 8) {
     return { score: 0, label: 'Too short', hint: 'Use at least 12 characters.' };

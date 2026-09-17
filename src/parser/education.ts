@@ -251,7 +251,10 @@ function stripDateRe(): RegExp {
 }
 
 function splitCells(line: string): string[] {
-  return line.split(/\t+|\s*[|•·]\s*|\s{3,}/).map(normalizeWhitespace).filter(Boolean);
+  return line
+    .split(/\t+|\s*[|•·]\s*|\s{3,}/)
+    .map(normalizeWhitespace)
+    .filter(Boolean);
 }
 
 function tidy(value: string): string {

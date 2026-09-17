@@ -29,7 +29,8 @@ const COMBOBOX_SELECTOR =
 const OPTION_SELECTOR =
   '[role="option"], li[id*="option"], .select__option, .react-select__option, [data-radix-collection-item]';
 
-const LISTBOX_SELECTOR = '[role="listbox"], .select__menu, .react-select__menu, [data-radix-popper-content-wrapper]';
+const LISTBOX_SELECTOR =
+  '[role="listbox"], .select__menu, .react-select__menu, [data-radix-popper-content-wrapper]';
 
 /** How long to wait for an options list to appear after opening. */
 const OPEN_TIMEOUT_MS = 700;

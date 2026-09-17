@@ -28,7 +28,9 @@ describe('label discovery', () => {
   });
 
   it('resolves aria-labelledby across several elements', () => {
-    render('<span id="x">Expected</span><span id="y">Graduation Date</span><input aria-labelledby="x y">');
+    render(
+      '<span id="x">Expected</span><span id="y">Graduation Date</span><input aria-labelledby="x y">',
+    );
     expect(labelForControl(document.querySelector('input')!)).toBe('Expected Graduation Date');
   });
 
@@ -113,7 +115,9 @@ describe('control collection', () => {
   });
 
   it('ignores its own injected UI', () => {
-    render('<div data-fillwright-ui><input id="ours"></div><label for="a">City</label><input id="a">');
+    render(
+      '<div data-fillwright-ui><input id="ours"></div><label for="a">City</label><input id="a">',
+    );
     const { fields } = harvestFields(document);
     expect(fields).toHaveLength(1);
     expect(fields[0]?.signals.labelText).toBe('City');

@@ -1,6 +1,12 @@
 import { useProfile, saveStateLabel } from '../useProfile';
 import { EntryList, moveItem } from '@/components/EntryList';
-import { CheckField, PlainField, SelectField, TagsField, TrackedField } from '@/components/TrackedField';
+import {
+  CheckField,
+  PlainField,
+  SelectField,
+  TagsField,
+  TrackedField,
+} from '@/components/TrackedField';
 import { Readiness } from '@/components/Readiness';
 import { newId, provenance } from '@/profile/factory';
 import {
@@ -41,7 +47,8 @@ export function ProfileEditor({ settings }: { settings: Settings | null }) {
   if (editor.loading) {
     return (
       <div className="fw-pane" role="status" aria-live="polite">
-        <span className="fw-spinner" aria-hidden="true" /> <span className="fw-muted">Loading your profile…</span>
+        <span className="fw-spinner" aria-hidden="true" />{' '}
+        <span className="fw-muted">Loading your profile…</span>
       </div>
     );
   }
@@ -64,7 +71,11 @@ export function ProfileEditor({ settings }: { settings: Settings | null }) {
       <header className="fw-pane__header">
         <div className="fw-pane__titlerow">
           <h1 className="fw-pane__title">{profile.name}</h1>
-          <span className={`fw-savestate fw-savestate--${editor.saveState}`} role="status" aria-live="polite">
+          <span
+            className={`fw-savestate fw-savestate--${editor.saveState}`}
+            role="status"
+            aria-live="polite"
+          >
             {status}
           </span>
         </div>
@@ -369,7 +380,9 @@ export function ProfileEditor({ settings }: { settings: Settings | null }) {
             entry.title && entry.company ? entry.company : '',
             entry.current
               ? `${formatDate(entry.startDate)} – Present`
-              : [formatDate(entry.startDate), formatDate(entry.endDate)].filter(Boolean).join(' – '),
+              : [formatDate(entry.startDate), formatDate(entry.endDate)]
+                  .filter(Boolean)
+                  .join(' – '),
           ]
             .filter(Boolean)
             .join(' · '),
@@ -416,7 +429,10 @@ export function ProfileEditor({ settings }: { settings: Settings | null }) {
                 ['other', 'Other'],
               ]}
               onChange={(value) =>
-                set((draft) => void (draft.employmentType = value as ExperienceEntry['employmentType']))
+                set(
+                  (draft) =>
+                    void (draft.employmentType = value as ExperienceEntry['employmentType']),
+                )
               }
             />
             <SelectField
@@ -615,7 +631,8 @@ export function ProfileEditor({ settings }: { settings: Settings | null }) {
                   onChange={(event) =>
                     update((draft) => {
                       const target = draft.skills[index];
-                      if (target) target.proficiency = event.target.value as SkillEntry['proficiency'];
+                      if (target)
+                        target.proficiency = event.target.value as SkillEntry['proficiency'];
                     })
                   }
                 >
@@ -654,7 +671,8 @@ export function ProfileEditor({ settings }: { settings: Settings | null }) {
         onRemove={(index) => update((draft) => void draft.certifications.splice(index, 1))}
         onMove={(index, direction) =>
           update(
-            (draft) => void (draft.certifications = moveItem(draft.certifications, index, direction)),
+            (draft) =>
+              void (draft.certifications = moveItem(draft.certifications, index, direction)),
           )
         }
         onUpdate={(index, mutate) =>
@@ -668,12 +686,38 @@ export function ProfileEditor({ settings }: { settings: Settings | null }) {
         }
         renderEditor={(entry, set) => (
           <div className="fw-grid2">
-            <PlainField label="Name" value={entry.name} onChange={(v) => set((d) => void (d.name = v))} />
-            <PlainField label="Issuer" value={entry.issuer} onChange={(v) => set((d) => void (d.issuer = v))} />
-            <PlainField label="Issued" value={entry.issueDate} placeholder="2025-03" onChange={(v) => set((d) => void (d.issueDate = v))} />
-            <PlainField label="Expires" value={entry.expiryDate} onChange={(v) => set((d) => void (d.expiryDate = v))} />
-            <PlainField label="Credential ID" value={entry.credentialId} onChange={(v) => set((d) => void (d.credentialId = v))} />
-            <PlainField label="Credential URL" type="url" value={entry.credentialUrl} onChange={(v) => set((d) => void (d.credentialUrl = v))} />
+            <PlainField
+              label="Name"
+              value={entry.name}
+              onChange={(v) => set((d) => void (d.name = v))}
+            />
+            <PlainField
+              label="Issuer"
+              value={entry.issuer}
+              onChange={(v) => set((d) => void (d.issuer = v))}
+            />
+            <PlainField
+              label="Issued"
+              value={entry.issueDate}
+              placeholder="2025-03"
+              onChange={(v) => set((d) => void (d.issueDate = v))}
+            />
+            <PlainField
+              label="Expires"
+              value={entry.expiryDate}
+              onChange={(v) => set((d) => void (d.expiryDate = v))}
+            />
+            <PlainField
+              label="Credential ID"
+              value={entry.credentialId}
+              onChange={(v) => set((d) => void (d.credentialId = v))}
+            />
+            <PlainField
+              label="Credential URL"
+              type="url"
+              value={entry.credentialUrl}
+              onChange={(v) => set((d) => void (d.credentialUrl = v))}
+            />
           </div>
         )}
       />
@@ -693,7 +737,9 @@ export function ProfileEditor({ settings }: { settings: Settings | null }) {
         onAdd={() => update((draft) => void draft.achievements.unshift(emptyAchievement()))}
         onRemove={(index) => update((draft) => void draft.achievements.splice(index, 1))}
         onMove={(index, direction) =>
-          update((draft) => void (draft.achievements = moveItem(draft.achievements, index, direction)))
+          update(
+            (draft) => void (draft.achievements = moveItem(draft.achievements, index, direction)),
+          )
         }
         onUpdate={(index, mutate) =>
           update((draft) => {
@@ -706,9 +752,21 @@ export function ProfileEditor({ settings }: { settings: Settings | null }) {
         }
         renderEditor={(entry, set) => (
           <div className="fw-grid2">
-            <PlainField label="Title" value={entry.title} onChange={(v) => set((d) => void (d.title = v))} />
-            <PlainField label="Date" value={entry.date} onChange={(v) => set((d) => void (d.date = v))} />
-            <PlainField label="Awarded by" value={entry.issuer} onChange={(v) => set((d) => void (d.issuer = v))} />
+            <PlainField
+              label="Title"
+              value={entry.title}
+              onChange={(v) => set((d) => void (d.title = v))}
+            />
+            <PlainField
+              label="Date"
+              value={entry.date}
+              onChange={(v) => set((d) => void (d.date = v))}
+            />
+            <PlainField
+              label="Awarded by"
+              value={entry.issuer}
+              onChange={(v) => set((d) => void (d.issuer = v))}
+            />
             <div className="fw-grid2__full">
               <PlainField
                 label="Details"
@@ -749,7 +807,11 @@ export function ProfileEditor({ settings }: { settings: Settings | null }) {
         }
         renderEditor={(entry, set) => (
           <div className="fw-grid2">
-            <PlainField label="Language" value={entry.name} onChange={(v) => set((d) => void (d.name = v))} />
+            <PlainField
+              label="Language"
+              value={entry.name}
+              onChange={(v) => set((d) => void (d.name = v))}
+            />
             <SelectField
               label="Proficiency"
               value={entry.proficiency}
@@ -774,21 +836,22 @@ export function ProfileEditor({ settings }: { settings: Settings | null }) {
             <h2 className="fw-section__title">Other information</h2>
             <p className="fw-field__hint">
               Anything a form asks for that does not fit above — a candidate ID, a referral code, a
-              student number. You can map a site&rsquo;s field to one of these when Fillwright cannot
-              identify it.
+              student number. You can map a site&rsquo;s field to one of these when Fillwright
+              cannot identify it.
             </p>
           </div>
           <button
             className="fw-btn fw-btn--sm"
             onClick={() =>
-              update((draft) =>
-                void draft.custom.push({
-                  id: newId('cf'),
-                  key: `custom${draft.custom.length + 1}`,
-                  label: '',
-                  value: '',
-                  provenance: userProv(),
-                }),
+              update(
+                (draft) =>
+                  void draft.custom.push({
+                    id: newId('cf'),
+                    key: `custom${draft.custom.length + 1}`,
+                    label: '',
+                    value: '',
+                    provenance: userProv(),
+                  }),
               )
             }
           >
@@ -844,4 +907,3 @@ export function ProfileEditor({ settings }: { settings: Settings | null }) {
     </div>
   );
 }
-

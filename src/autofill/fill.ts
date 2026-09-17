@@ -48,8 +48,16 @@ export async function fillFields(
     if (!entry.selected) continue;
 
     const elements = context.elements.get(entry.fieldId);
-    if (!elements?.length) {
-      outcomes.push({ fieldId: entry.fieldId, ok: false, previousValue: '', error: 'Field is no longer on the page' });
+    // A detached element means the form moved on (a new step, a re-render).
+    // Writing into it would do nothing visible — or, worse, fill a step the
+    // user has already left — so it is reported instead.
+    if (!elements?.length || elements.every((element) => !element.isConnected)) {
+      outcomes.push({
+        fieldId: entry.fieldId,
+        ok: false,
+        previousValue: '',
+        error: 'This field is no longer on the page. Scan again to pick up the current step.',
+      });
       continue;
     }
 

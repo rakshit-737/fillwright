@@ -27,6 +27,7 @@ const chromeMock = {
     },
   },
   runtime: {
+    id: 'fillwright-test',
     sendMessage: vi.fn(async () => ({ ok: true, data: null })),
     getURL: (path: string) => `chrome-extension://fillwright-test/${path}`,
     onMessage: { addListener: vi.fn() },
@@ -34,7 +35,12 @@ const chromeMock = {
     lastError: undefined as { message: string } | undefined,
   },
   tabs: { create: vi.fn(async () => ({})), query: vi.fn(async () => []) },
-  scripting: { executeScript: vi.fn(async () => []) },
+  scripting: {
+    executeScript: vi.fn(async () => []),
+    registerContentScripts: vi.fn(async () => undefined),
+    unregisterContentScripts: vi.fn(async () => undefined),
+    getRegisteredContentScripts: vi.fn(async (): Promise<unknown[]> => []),
+  },
   action: { openPopup: vi.fn(async () => undefined) },
   commands: { onCommand: { addListener: vi.fn() } },
   permissions: { contains: vi.fn(async () => true), request: vi.fn(async () => true) },

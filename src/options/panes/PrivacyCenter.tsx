@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { send } from '@/utils/messaging';
 import type { ApplicationHistoryEntry } from '@/types/messages';
 import type { SavedMapping } from '@/types/fields';
@@ -15,6 +15,8 @@ export function PrivacyCenter() {
   const [mappings, setMappings] = useState<SavedMapping[]>([]);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState('');
+  const [includeHistory, setIncludeHistory] = useState(false);
+  const fileInput = useRef<HTMLInputElement>(null);
 
   const refresh = useCallback(async () => {
     const [p, h, m] = await Promise.all([
@@ -47,7 +49,14 @@ export function PrivacyCenter() {
   };
 
   const exportData = async () => {
-    const result = await send<unknown>({ type: 'ui:export-data' });
+    const confirmed = window.confirm(
+      'This file contains sensitive personal information — your profile, including any ' +
+        'work-authorization and demographic answers you saved.\n\n' +
+        'It is not encrypted. Store it somewhere only you can reach, and delete it when you no ' +
+        'longer need it.\n\nSave the export?',
+    );
+    if (!confirmed) return;
+    const result = await send<unknown>({ type: 'ui:export-data', includeHistory });
     if (!result.ok) {
       setNotice(result.error);
       return;
@@ -60,7 +69,52 @@ export function PrivacyCenter() {
     anchor.download = `fillwright-export-${new Date().toISOString().slice(0, 10)}.json`;
     anchor.click();
     URL.revokeObjectURL(url);
-    setNotice('Export downloaded to this device.');
+    setNotice('Export saved to this device. It is not encrypted — keep it somewhere private.');
+  };
+
+  /**
+   * Import reads the file in this page and hands the parsed JSON to the
+   * worker, which rebuilds every record against the schema before storing it.
+   * Existing profiles are never replaced; imported ones are added alongside.
+   */
+  const importData = async (file: File) => {
+    if (file.size > 20 * 1024 * 1024) {
+      setNotice('That file is too large to be a Fillwright export.');
+      return;
+    }
+    let payload: unknown;
+    try {
+      payload = JSON.parse(await file.text());
+    } catch {
+      setNotice('That file is not valid JSON, so nothing was imported.');
+      return;
+    }
+    setBusy(true);
+    const result = await send<{
+      profiles: number;
+      mappings: number;
+      settings: boolean;
+      history: number;
+      warnings: string[];
+    }>({ type: 'ui:import-data', payload }, { timeoutMs: 60_000 });
+    setBusy(false);
+    if (!result.ok) {
+      setNotice(
+        result.code === 'ELOCKED'
+          ? 'Fillwright is locked. Unlock it under Security, then import again.'
+          : result.error,
+      );
+      return;
+    }
+    const { profiles: added, mappings: learned, settings, history: logged, warnings } = result.data;
+    const parts = [
+      `${added} profile${added === 1 ? '' : 's'}`,
+      `${learned} learned field${learned === 1 ? '' : 's'}`,
+      settings ? 'your settings' : '',
+      logged ? `${logged} history entries` : '',
+    ].filter(Boolean);
+    setNotice(`Imported ${parts.join(', ')}. ${warnings.join(' ')}`.trim());
+    await refresh();
   };
 
   return (
@@ -147,10 +201,40 @@ export function PrivacyCenter() {
 
       <section className="fw-section">
         <h2 className="fw-section__title">Your data, your call</h2>
+        <p className="fw-section__lead">
+          An export is a JSON file saved to your computer. It holds your profiles, what Fillwright has
+          learned and your settings — resume files are left out. It is not encrypted, so treat it like
+          the resume itself.
+        </p>
+        <label className="fw-field fw-field--toggle">
+          <input
+            type="checkbox"
+            checked={includeHistory}
+            onChange={(event) => setIncludeHistory(event.target.checked)}
+          />
+          <span>
+            <span className="fw-field__label">Include application history</span>
+            <span className="fw-field__hint">Off by default. Company, role, site and date only.</span>
+          </span>
+        </label>
         <div className="fw-actions">
           <button className="fw-btn" onClick={exportData} disabled={busy}>
             Export a local copy
           </button>
+          <button className="fw-btn" onClick={() => fileInput.current?.click()} disabled={busy}>
+            Import from a file
+          </button>
+          <input
+            ref={fileInput}
+            type="file"
+            accept="application/json,.json"
+            hidden
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              event.target.value = '';
+              if (file) void importData(file);
+            }}
+          />
           <button
             className="fw-btn"
             onClick={async () => {

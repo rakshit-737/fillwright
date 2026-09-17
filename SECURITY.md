@@ -54,9 +54,13 @@ Fillwright requests three permissions, and notably does **not** request
 
 Optional, requested at runtime and only if you enable the feature:
 
-- **Host access to specific sites** — for automatic detection on application
-  pages, so the panel can appear without a click. Revoking it in Chrome stops
-  access immediately.
+- **`https://*/*` host access** — only for the Assist and Smart modes, where
+  Fillwright offers help on application pages without a click. It is requested
+  from Settings, in response to your click, through Chrome's own prompt. With it
+  granted and a proactive mode chosen, the content script is registered
+  dynamically; switching back to Manual, or revoking access in Chrome,
+  unregisters it immediately (`src/background/auto-detect.ts`). Manual mode —
+  the default — needs no host access at all.
 - **`tabs`** — only to read a page title when logging an application to local
   history, which is off by default.
 
@@ -99,9 +103,37 @@ controlled by someone else.
   option counts, and rebuilds every field from scratch rather than passing the
   page's object through. Unexpected properties are dropped, not forwarded.
 
-- **Restyling or hiding the UI.** The panel renders inside a shadow root with
-  self-contained styles, so page CSS cannot reach in and disguise or obscure the
-  controls you are relying on.
+- **Restyling, hiding or reading the UI.** The panel renders inside a
+  **closed** shadow root with self-contained styles. Page CSS cannot disguise the
+  controls, and page scripts cannot read the preview — which shows proposed
+  values, sensitive answers included, before you approve them. The release
+  verifier fails if the shipped bundle attaches an open root; only the
+  never-shipped end-to-end build reopens it for the test harness.
+
+- **A subverted content script.** Message types are split by trust. `ui:*`
+  messages can read and write the whole profile, so the router accepts them only
+  from Fillwright's own extension pages (`senderMayCall` in
+  `src/background/router.ts`). A content script gets the narrow `content:*`
+  surface: a plan for the fields it reported, profile *names* for the switcher,
+  skill names already present in the posting, and — only when answer drafting is
+  on — career facts the user explicitly ticks.
+
+- **Passive detection.** In Assist/Smart mode the decision "is this an
+  application?" is made locally from cheap signals
+  (`src/field-detection/context.ts`). Nothing is sent to the worker for a page
+  judged not to be one. SPA navigation is noticed by polling `location.href`; the
+  page's history functions are never wrapped.
+
+- **"Add another" buttons.** The only control Fillwright will press is an
+  unambiguous add-entry button, when you ask, at most five times, and only when
+  exactly one such control exists for that entry type. It must also pass the
+  adapter guard (no submit, apply, delete, links) — `src/autofill/repeat.ts`.
+
+- **Imported files.** An export file may have been edited or crafted.
+  `src/profile/portable.ts` rebuilds every record against the current schema:
+  unknown keys dropped, strings capped, lists bounded, enums checked, ids
+  regenerated. Imports add alongside existing data and never replace it. Vault
+  state and the active profile are never imported.
 
 ### 3.2 A malicious resume file
 

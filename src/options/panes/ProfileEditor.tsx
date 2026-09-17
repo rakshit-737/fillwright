@@ -3,6 +3,15 @@ import { EntryList, moveItem } from '@/components/EntryList';
 import { CheckField, PlainField, SelectField, TagsField, TrackedField } from '@/components/TrackedField';
 import { Readiness } from '@/components/Readiness';
 import { newId, provenance } from '@/profile/factory';
+import {
+  emptyAchievement,
+  emptyCertification,
+  emptyEducation,
+  emptyExperience,
+  emptyLanguage,
+  emptyProject,
+  emptySkill,
+} from '@/profile/entries';
 import { formatDate } from '@/parser/dates';
 import type { Settings } from '@/types/settings';
 import type {
@@ -836,97 +845,3 @@ export function ProfileEditor({ settings }: { settings: Settings | null }) {
   );
 }
 
-/* ------------------------------------------------------------- factories */
-
-function emptyEducation(): EducationEntry {
-  return {
-    id: newId('edu'),
-    institution: '',
-    degree: '',
-    major: '',
-    minor: '',
-    location: '',
-    startDate: '',
-    endDate: '',
-    graduationDate: '',
-    gpa: '',
-    gpaScale: '',
-    honors: '',
-    coursework: [],
-    current: false,
-    provenance: userProv(),
-  };
-}
-
-function emptyExperience(): ExperienceEntry {
-  return {
-    id: newId('exp'),
-    company: '',
-    title: '',
-    employmentType: '',
-    location: '',
-    locationType: '',
-    startDate: '',
-    endDate: '',
-    current: false,
-    description: '',
-    highlights: [],
-    technologies: [],
-    provenance: userProv(),
-  };
-}
-
-function emptyProject(): ProjectEntry {
-  return {
-    id: newId('prj'),
-    name: '',
-    role: '',
-    description: '',
-    highlights: [],
-    technologies: [],
-    url: '',
-    repositoryUrl: '',
-    startDate: '',
-    endDate: '',
-    provenance: userProv(),
-  };
-}
-
-function emptySkill(): SkillEntry {
-  return {
-    id: newId('skl'),
-    name: '',
-    category: '',
-    proficiency: '',
-    yearsOfExperience: '',
-    provenance: userProv(),
-  };
-}
-
-function emptyCertification(): CertificationEntry {
-  return {
-    id: newId('cert'),
-    name: '',
-    issuer: '',
-    issueDate: '',
-    expiryDate: '',
-    credentialId: '',
-    credentialUrl: '',
-    provenance: userProv(),
-  };
-}
-
-function emptyAchievement(): AchievementEntry {
-  return {
-    id: newId('ach'),
-    title: '',
-    description: '',
-    date: '',
-    issuer: '',
-    provenance: userProv(),
-  };
-}
-
-function emptyLanguage(): LanguageEntry {
-  return { id: newId('lang'), name: '', proficiency: '', provenance: userProv() };
-}

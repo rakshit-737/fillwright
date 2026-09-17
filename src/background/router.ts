@@ -22,6 +22,10 @@ export function installRouter(): void {
       sendResponse(err('Malformed message', 'EBADMSG'));
       return false;
     }
+    if (!senderMayCall(message.type, sender)) {
+      sendResponse(err('Not permitted from this context', 'EFORBIDDEN'));
+      return false;
+    }
     const handler = handlers.get(message.type);
     if (!handler) {
       sendResponse(err(`Unsupported message: ${message.type}`, 'ENOHANDLER'));
@@ -45,6 +49,22 @@ export function installRouter(): void {
     );
     return true;
   });
+}
+
+/**
+ * `ui:*` messages read and write the whole profile, so only Fillwright's own
+ * pages may send them. A content script lives inside a page Fillwright does
+ * not control; it gets the narrow `content:*` surface and nothing more, so even
+ * a content script subverted by its page cannot export the profile.
+ */
+const CONTENT_MAY_SEND_UI: ReadonlySet<string> = new Set(['ui:open-security']);
+
+export function senderMayCall(type: string, sender: chrome.runtime.MessageSender): boolean {
+  if (!type.startsWith('ui:')) return true;
+  if (CONTENT_MAY_SEND_UI.has(type)) return true;
+  if (sender.id !== undefined && sender.id !== chrome.runtime.id) return false;
+  const extensionRoot = chrome.runtime.getURL('');
+  return typeof sender.url === 'string' && sender.url.startsWith(extensionRoot);
 }
 
 export { ok, err };

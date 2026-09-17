@@ -259,6 +259,11 @@ async function scanPage(worker, tabUrl) {
        const tabs = await chrome.tabs.query({ url: ${JSON.stringify(tabUrl)} });
        const tab = tabs[0];
        if (!tab) return { ok: false, error: 'tab not found' };
+       // Same two steps as scanActiveTab: mark the injection as explicit, then load.
+       await chrome.scripting.executeScript({
+         target: { tabId: tab.id },
+         func: () => { globalThis.__fillwrightActivation = Date.now(); },
+       });
        await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['content.js'] });
        return { ok: true };
      })()`,
@@ -403,9 +408,9 @@ async function main() {
 
     await test('the panel appears on an application form', async () => {
       await scanPage(worker, `${server.origin}/greenhouse.html`);
-      const widget = await waitForWidget(greenhouse, (state) => state.text.includes('detected'));
+      const widget = await waitForWidget(greenhouse, (state) => state.text.includes('application field'));
       assert(widget.text.includes('Fillwright'), 'the panel did not render its heading');
-      assert(/\d+\s*detected/.test(widget.text), `no field count shown: ${widget.text}`);
+      assert(/\d+ application fields? found/.test(widget.text), `no field count shown: ${widget.text}`);
     });
 
     await test('it renders inside a shadow root, isolated from the page', async () => {
@@ -453,7 +458,7 @@ async function main() {
 
     await test('filling writes real values into the form', async () => {
       assert(await clickWidgetButton(greenhouse, 'Fill'), 'the Fill button was not found');
-      await waitForWidget(greenhouse, (state) => state.text.includes('Filled'));
+      await waitForWidget(greenhouse, (state) => state.text.includes('updated'));
 
       const values = await readInputs(greenhouse, [
         'first_name',
@@ -495,9 +500,9 @@ async function main() {
 
     await test('controlled inputs accept the value and update component state', async () => {
       await scanPage(worker, `${server.origin}/react-form.html`);
-      await waitForWidget(react, (state) => state.text.includes('detected'));
+      await waitForWidget(react, (state) => state.text.includes('application field'));
       assert(await clickWidgetButton(react, 'Fill'), 'the Fill button was not found');
-      await waitForWidget(react, (state) => state.text.includes('Filled'));
+      await waitForWidget(react, (state) => state.text.includes('updated'));
 
       // The fixture reverts any value written without a real input event, so a
       // stale value here means the native-setter path is broken.
@@ -519,7 +524,7 @@ async function main() {
 
     await test('credential fields are never listed', async () => {
       await scanPage(worker, `${server.origin}/edge-cases.html`);
-      const widget = await waitForWidget(edge, (state) => state.text.includes('detected'));
+      const widget = await waitForWidget(edge, (state) => state.text.includes('application field'));
       await clickWidgetButton(edge, 'Review');
       const listed = await waitForWidget(edge, (state) => state.items.length > 0);
       const labels = listed.items.map((item) => item.label.toLowerCase()).join(' | ');
@@ -562,7 +567,7 @@ async function main() {
 
     await test('prefilled values survive a fill', async () => {
       assert(await clickWidgetButton(edge, 'Fill'), 'the Fill button was not found');
-      await waitForWidget(edge, (state) => state.text.includes('Filled'));
+      await waitForWidget(edge, (state) => state.text.includes('updated'));
       const values = await readInputs(edge, ['e1', 'e2']);
       assertEqual(values.e1, 'Alexandra', 'a prefilled value was overwritten');
       assertEqual(values.e2, 'alex@existing.example', 'a prefilled value was overwritten');
@@ -577,8 +582,8 @@ async function main() {
 
     await test('hard mode: the page is scanned in full', async () => {
       await scanPage(worker, `${server.origin}/hard-mode.html`);
-      const widget = await waitForWidget(hard, (state) => state.text.includes('detected'));
-      const count = Number(widget.text.match(/(\d+)\s*detected/)?.[1] ?? 0);
+      const widget = await waitForWidget(hard, (state) => state.text.includes('application field'));
+      const count = Number(widget.text.match(/(\d+) application fields? found/)?.[1] ?? 0);
       assert(count >= 40, `expected a large form to be detected, saw ${count}`);
     });
 
@@ -632,7 +637,7 @@ async function main() {
 
     await test('hard mode: filling drives the custom dropdown', async () => {
       assert(await clickWidgetButton(hard, 'Fill'), 'the Fill button was not found');
-      await waitForWidget(hard, (state) => state.text.includes('Filled'), 30_000);
+      await waitForWidget(hard, (state) => state.text.includes('updated'), 30_000);
 
       const shown = await hard.evaluate(() => {
         const node = document.querySelector('[data-combo="degree"] .combo__value');
@@ -700,7 +705,7 @@ async function main() {
 
     await test('review rows explain themselves on request', async () => {
       await scanPage(worker, `${server.origin}/hard-mode.html`);
-      await waitForWidget(teach, (state) => state.text.includes('detected'));
+      await waitForWidget(teach, (state) => state.text.includes('application field'));
       await clickWidgetButton(teach, 'Review');
       await waitForWidget(teach, (state) => state.items.length > 0);
 
@@ -768,7 +773,7 @@ async function main() {
       const second = await browser.newPage();
       await second.goto(`${server.origin}/hard-mode.html`, { waitUntil: 'domcontentloaded' });
       await scanPage(worker, `${server.origin}/hard-mode.html`);
-      await waitForWidget(second, (state) => state.text.includes('detected'));
+      await waitForWidget(second, (state) => state.text.includes('application field'));
       await clickWidgetButton(second, 'Review');
       const widget = await waitForWidget(second, (state) => state.items.length > 0);
 
@@ -958,9 +963,9 @@ async function main() {
       const page = await browser.newPage();
       await page.goto(`${server.origin}/greenhouse.html`, { waitUntil: 'domcontentloaded' });
       await scanPage(worker, `${server.origin}/greenhouse.html`);
-      await waitForWidget(page, (state) => state.text.includes('detected'));
+      await waitForWidget(page, (state) => state.text.includes('application field'));
       assert(await clickWidgetButton(page, 'Fill'), 'the Fill button was not found');
-      await waitForWidget(page, (state) => state.text.includes('Filled'));
+      await waitForWidget(page, (state) => state.text.includes('updated'));
 
       const values = await readInputs(page, ['first_name', 'email']);
       assertEqual(values.first_name, TEST_PROFILE.firstName, 'filling should work when unlocked');

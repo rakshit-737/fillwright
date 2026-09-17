@@ -14,9 +14,31 @@ import { STATUS_LABELS } from '@/autofill/plan';
  * from the page.
  */
 
+export interface DraftFact {
+  id: string;
+  label: string;
+  value: string;
+}
+
+/**
+ * A drafting panel for one written question. Owned by the widget; rendered
+ * here so it sits directly under the question it answers.
+ */
+export type DraftView =
+  | { phase: 'loading' }
+  | { phase: 'facts' | 'generating'; facts: DraftFact[]; chosen: Set<string> }
+  | { phase: 'result'; text: string; facts: DraftFact[]; chosen: Set<string> }
+  | { phase: 'error'; message: string };
+
 export interface ReviewCallbacks {
   /** Raw signals per field, when diagnostics are on. Null otherwise. */
   diagnostics?: Map<string, FieldSignals> | null;
+  drafts?: Map<string, DraftView>;
+  canDraft?: (entry: FillPlanEntry) => boolean;
+  onDraftStart?: (entry: FillPlanEntry) => void;
+  onDraftGenerate?: (entry: FillPlanEntry, factIds: string[]) => void;
+  onDraftUse?: (entry: FillPlanEntry, text: string) => void;
+  onDraftCancel?: (entry: FillPlanEntry) => void;
   onToggle: (fieldId: string, selected: boolean) => void;
   /** The user told Fillwright what an unrecognised field means. */
   onTeach: (entry: FillPlanEntry, field: CanonicalField, remember: boolean) => void;
@@ -78,6 +100,11 @@ function renderRow(
   labelRow.appendChild(label);
   if (entry.remembered) {
     labelRow.appendChild(el('span', 'fw-chip', 'remembered'));
+  } else if (entry.corrected) {
+    labelRow.appendChild(el('span', 'fw-chip', 'your choice'));
+  }
+  if (entry.required && entry.status !== 'ready' && entry.status !== 'skipped-existing') {
+    labelRow.appendChild(el('span', 'fw-chip fw-chip--required', 'required'));
   }
   text.appendChild(labelRow);
 
@@ -128,27 +155,33 @@ function renderRow(
     tools.appendChild(why);
   }
 
-  // Anything Fillwright could not place, or placed doubtfully, can be corrected
-  // by the user — and the correction is what makes the next visit better.
-  const teachable = entry.status === 'unmapped' || entry.status === 'review' || entry.remembered;
-  if (teachable && entry.fingerprint) {
-    tools.appendChild(
-      button(
-        teaching.has(entry.fieldId) ? 'Cancel' : 'Set what this is',
-        'fw-link',
-        () => {
-          if (teaching.has(entry.fieldId)) teaching.delete(entry.fieldId);
-          else teaching.add(entry.fieldId);
-          callbacks.onExplainToggle();
-        },
-      ),
-    );
+  // Any mapping can be corrected - a confident match can still be wrong for
+  // this particular form - and the correction is what makes the next visit
+  // better. Unrecognised fields are phrased as a question instead.
+  if (entry.fingerprint) {
+    const opening = teaching.has(entry.fieldId);
+    const label = opening ? 'Cancel' : entry.canonical === 'unknown' ? 'Set what this is' : 'Change';
+    const change = button(label, 'fw-link', () => {
+      if (teaching.has(entry.fieldId)) teaching.delete(entry.fieldId);
+      else teaching.add(entry.fieldId);
+      callbacks.onExplainToggle();
+    });
+    change.setAttribute('aria-expanded', String(opening));
+    tools.appendChild(change);
+  }
+
+  if (
+    entry.status === 'manual-required' &&
+    callbacks.canDraft?.(entry) &&
+    !callbacks.drafts?.has(entry.fieldId)
+  ) {
+    tools.appendChild(button('Draft with on-device AI', 'fw-link', () => callbacks.onDraftStart?.(entry)));
   }
 
   if (tools.childElementCount > 0) item.appendChild(tools);
 
   if (expanded.has(entry.fieldId)) {
-    item.appendChild(el('p', 'fw-why', entry.rationale));
+    item.appendChild(renderWhy(entry));
 
     const signals = callbacks.diagnostics?.get(entry.fieldId);
     if (signals) item.appendChild(renderDiagnostics(entry, signals));
@@ -157,6 +190,9 @@ function renderRow(
   if (teaching.has(entry.fieldId)) {
     item.appendChild(renderTeachPicker(entry, callbacks));
   }
+
+  const draft = callbacks.drafts?.get(entry.fieldId);
+  if (draft) item.appendChild(renderDraft(entry, draft, callbacks));
 
   return item;
 }
@@ -205,6 +241,7 @@ function renderTeachPicker(entry: FillPlanEntry, callbacks: ReviewCallbacks): HT
   remember.className = 'fw-check';
   remember.checked = true;
   rememberRow.appendChild(remember);
+  // Unticked, the choice applies to this form only and is then forgotten.
   rememberRow.appendChild(el('span', '', 'Remember this for this website'));
   panel.appendChild(rememberRow);
 
@@ -225,6 +262,131 @@ function renderTeachPicker(entry: FillPlanEntry, callbacks: ReviewCallbacks): HT
     ),
   );
 
+  return panel;
+}
+
+/**
+ * "Why?" — the explanation, in the user's language.
+ *
+ * Leads with what Fillwright thinks the field is, then the evidence, then how
+ * sure it is and what that means for what happens next.
+ */
+function renderWhy(entry: FillPlanEntry): HTMLElement {
+  const panel = el('div', 'fw-why');
+  const meaning = FIELD_CATALOG.find((item) => item.field === entry.canonical)?.label;
+  if (meaning) {
+    const lead = el('p', 'fw-why__lead');
+    lead.appendChild(el('span', '', 'Fillwright reads this as '));
+    lead.appendChild(el('strong', '', meaning.toLowerCase()));
+    panel.appendChild(lead);
+  }
+  panel.appendChild(el('p', 'fw-why__text', entry.rationale));
+  if (entry.status === 'ready' || entry.status === 'review') {
+    const percent = Math.round(entry.confidence * 100);
+    panel.appendChild(
+      el(
+        'p',
+        'fw-why__text',
+        entry.status === 'ready'
+          ? `${percent}% sure — high enough to fill when you press Fill.`
+          : `${percent}% sure — not enough to fill on its own, so it is left unticked for you to check.`,
+      ),
+    );
+  }
+  return panel;
+}
+
+/**
+ * Drafting a written answer.
+ *
+ * Three deliberate steps: see exactly which facts would be given to the
+ * on-device model and untick any; generate; then read, edit and choose to use
+ * it. Nothing reaches the form until "Use this answer" is pressed.
+ */
+function renderDraft(entry: FillPlanEntry, draft: DraftView, callbacks: ReviewCallbacks): HTMLElement {
+  const panel = el('div', 'fw-teach fw-draft');
+  panel.setAttribute('aria-busy', String(draft.phase === 'loading' || draft.phase === 'generating'));
+
+  const actions = el('div', 'fw-teach__actions');
+  const cancel = button('Cancel', 'fw-btn fw-btn--ghost fw-btn--sm', () => callbacks.onDraftCancel?.(entry));
+
+  if (draft.phase === 'loading') {
+    panel.appendChild(el('p', 'fw-note', 'Checking the on-device model…'));
+    return panel;
+  }
+
+  if (draft.phase === 'error') {
+    panel.appendChild(el('p', 'fw-error', draft.message));
+    cancel.textContent = 'Close';
+    actions.appendChild(cancel);
+    panel.appendChild(actions);
+    return panel;
+  }
+
+  if (draft.phase === 'facts' || draft.phase === 'generating') {
+    const busy = draft.phase === 'generating';
+    panel.appendChild(el('p', 'fw-teach__lead', 'Which facts may the draft use?'));
+    panel.appendChild(
+      el(
+        'p',
+        'fw-note',
+        'Only ticked items are given to Chrome’s on-device model. Nothing is sent over the network. Contact details and sensitive answers are never included.',
+      ),
+    );
+    const list = el('div', 'fw-facts');
+    for (const fact of draft.facts) {
+      const row = el('label', 'fw-teach__remember');
+      const box = document.createElement('input');
+      box.type = 'checkbox';
+      box.className = 'fw-check';
+      box.checked = draft.chosen.has(fact.id);
+      box.disabled = busy;
+      box.addEventListener('change', () => {
+        if (box.checked) draft.chosen.add(fact.id);
+        else draft.chosen.delete(fact.id);
+      });
+      row.appendChild(box);
+      row.appendChild(el('span', '', `${fact.label}: ${truncate(fact.value, 90)}`));
+      list.appendChild(row);
+    }
+    panel.appendChild(list);
+
+    actions.appendChild(cancel);
+    const generate = button(busy ? 'Writing…' : 'Write a draft', 'fw-btn fw-btn--primary fw-btn--sm', () =>
+      callbacks.onDraftGenerate?.(entry, [...draft.chosen]),
+    );
+    generate.disabled = busy;
+    actions.appendChild(generate);
+    panel.appendChild(actions);
+    return panel;
+  }
+
+  if (draft.phase !== 'result') return panel;
+
+  panel.appendChild(el('p', 'fw-teach__lead', 'Draft — edit it before you use it'));
+  const area = document.createElement('textarea');
+  area.className = 'fw-draft__text';
+  area.value = draft.text;
+  area.rows = 6;
+  area.setAttribute('aria-label', `Draft answer for ${entry.label}`);
+  area.addEventListener('input', () => {
+    draft.text = area.value;
+  });
+  panel.appendChild(area);
+  panel.appendChild(el('p', 'fw-note', 'Check every claim. A model can state things that are not true about you.'));
+
+  actions.appendChild(cancel);
+  actions.appendChild(
+    button('Regenerate', 'fw-btn fw-btn--ghost fw-btn--sm', () =>
+      callbacks.onDraftGenerate?.(entry, [...draft.chosen]),
+    ),
+  );
+  actions.appendChild(
+    button('Use this answer', 'fw-btn fw-btn--primary fw-btn--sm', () => {
+      if (area.value.trim()) callbacks.onDraftUse?.(entry, area.value.trim());
+    }),
+  );
+  panel.appendChild(actions);
   return panel;
 }
 

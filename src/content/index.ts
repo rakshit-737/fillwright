@@ -1,6 +1,5 @@
 import { harvestFields } from '@/field-detection/harvest';
-import { classifyField } from '@/field-detection/classify';
-import { collectContextInput, scoreApplicationContext } from '@/field-detection/context';
+import { collectPageSignals, guessPosting } from './page-signals';
 import { fillFields, undoFill, type UndoRecord } from '@/autofill/fill';
 import { collectPostingText, type JobMatch } from '@/autofill/job-match';
 import { addEntries, findAddControls } from '@/autofill/repeat';
@@ -9,6 +8,9 @@ import type { DraftFact } from './review';
 import { applyAdapter, detectAdapter } from '@/adapters';
 import type { CanonicalField, DetectedField, FillPlan, FillPlanEntry } from '@/types/fields';
 import type { AutofillMode } from '@/types/settings';
+import { describeError } from '@/utils/errors';
+import { request, notify } from './transport';
+import { controlSignature, createThrottle, mutationsMayAffectForm } from './observe';
 
 /**
  * Fillwright content script.
@@ -60,6 +62,17 @@ let pendingChange: number | undefined;
 let passiveChecks = 0;
 let draftAvailable: boolean | null = null;
 
+let lastSignature = '';
+
+/**
+ * Passive evaluation (Assist/Smart) runs at most once every 1.5 s, and not
+ * while the page is being scrolled.
+ */
+const passiveThrottle = createThrottle(() => evaluatePassive(), {
+  intervalMs: 1_500,
+  scrollQuietMs: 400,
+});
+
 /** Corrections for this page only, never saved. Keyed by field fingerprint. */
 const overrides = new Map<string, CanonicalField>();
 
@@ -73,30 +86,9 @@ function boot(): void {
   }
   scope[MARKER] = true;
 
-  chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-    if (!message || typeof message.type !== 'string') return false;
-
-    switch (message.type) {
-      case 'bg:scan':
-        void open();
-        sendResponse({ ok: true });
-        return false;
-      case 'bg:fill':
-        // Filling is asynchronous now that custom dropdowns are driven through
-        // their real open/select interaction, so the channel is held open.
-        void applyFill(message.entries ?? []).then(sendResponse);
-        return true;
-      case 'bg:undo':
-        void applyUndo().then(sendResponse);
-        return true;
-      case 'bg:teardown':
-        teardown();
-        sendResponse({ ok: true });
-        return false;
-      default:
-        return false;
-    }
-  });
+  // No message listener: the worker never sends commands to this script.
+  // Everything starts from the user's click (a fresh injection) or from the
+  // page itself, so there is no inbound channel to guard.
 
   // Typing is tracked only as a timestamp, so a rescan never steals focus or
   // re-renders under someone mid-word. The keys themselves are never read.
@@ -108,10 +100,13 @@ function boot(): void {
 
   watchNavigation();
   watchForNewFields();
-
-  chrome.runtime.sendMessage({ type: 'content:ready', url: location.href }).catch(() => {
-    /* The worker may be asleep; the next request wakes it. */
+  // Passive checks wait for scrolling to stop.
+  window.addEventListener('scroll', () => passiveThrottle.noteScroll(), {
+    passive: true,
+    capture: true,
   });
+
+  notify({ type: 'content:ready', url: location.href });
 
   if (activated) void open();
   else void passiveBoot();
@@ -126,12 +121,15 @@ function consumeActivation(): boolean {
 /* ---------------------------------------------------------- passive mode */
 
 async function passiveBoot(): Promise<void> {
-  const response = await send<{ mode: AutofillMode; enabled: boolean }>({ type: 'content:get-mode' });
+  const response = await send<{ mode: AutofillMode; enabled: boolean }>({
+    type: 'content:get-mode',
+  });
   if (!response?.enabled) return;
   mode = response.mode;
   if (mode === 'manual') return;
   await whenIdle();
-  await evaluatePassive();
+  lastSignature = `${location.href}#${controlSignature(document)}`;
+  passiveThrottle.schedule();
 }
 
 /**
@@ -148,8 +146,14 @@ async function evaluatePassive(): Promise<void> {
   const visible = fields.filter((field) => field.visible && !field.disabled);
   if (visible.length < 2) return;
 
-  const kinds = visible.map((field) => classifyField(field.signals).field);
-  const verdict = scoreApplicationContext(collectContextInput(document, kinds));
+  // Scored in the worker, which holds the classifier; the reply is a level.
+  const reply = await request<{ level: 'none' | 'possible' | 'likely' }>({
+    type: 'content:assess-page',
+    fields: visible,
+    page: collectPageSignals(document),
+  });
+  if (!reply.ok) return;
+  const verdict = reply.data;
 
   const worthy = verdict.level === 'likely' || (mode === 'smart' && verdict.level === 'possible');
   if (!worthy) return;
@@ -202,37 +206,55 @@ async function runScan(quiet: boolean): Promise<void> {
   if (adapter) await applyAdapter(adapter);
 
   const { fields, elements, truncated } = harvestFields(document);
+  lastSignature = `${location.href}#${controlSignature(document)}`;
   const visible = fields.filter((field) => field.visible && !field.disabled);
   const fieldMap = new Map(visible.map((field) => [field.id, field]));
 
-  const response = await chrome.runtime
-    .sendMessage({
-      type: 'content:request-mappings',
-      scan: {
-        url: location.href,
-        pageKey: location.href,
-        adapterId: adapter?.id ?? null,
-        scannedAt: new Date().toISOString(),
-        fields: visible,
-        mappings: [],
-      },
-      overrides: [...overrides].map(([fingerprint, canonical]) => ({ fingerprint, canonical })),
-    })
-    .catch(() => null);
+  // Nothing here, but the form is in a same-origin frame that has its own
+  // copy of this script (explicit activation injects into every frame): stay
+  // out of the way so the user sees one panel, where the fields are.
+  if (visible.length === 0 && window === window.top && hasReachableFormFrame()) {
+    teardown();
+    return;
+  }
 
-  if (!response?.ok) {
-    if (response?.code === 'ELOCKED') {
+  // Nothing to read here, but a cross-origin frame fills the page: the form
+  // is almost certainly inside it, where this script cannot go.
+  if (visible.length === 0 && hasUnreachableFormFrame()) {
+    if (!quiet) widget.renderError(describeError('EFRAME', undefined, true));
+    return;
+  }
+
+  const response = await request<{
+    plan: FillPlan;
+    profileName?: string;
+    settings?: { highlightFilledFields?: boolean; diagnostics?: boolean };
+  }>({
+    type: 'content:request-mappings',
+    scan: {
+      url: location.href,
+      pageKey: location.href,
+      adapterId: adapter?.id ?? null,
+      scannedAt: new Date().toISOString(),
+      fields: visible,
+      mappings: [],
+    },
+    overrides: [...overrides].map(([fingerprint, canonical]) => ({ fingerprint, canonical })),
+  });
+
+  if (!response.ok) {
+    if (response.code === 'ELOCKED') {
       widget.renderLocked();
       // Uninvited, a locked vault is shown as the small pill, not a dialog.
       if (quiet && !engaged) widget.minimize();
       return;
     }
     if (quiet) return;
-    widget.renderError(friendlyError(response?.code, response?.error));
+    widget.renderError(describeError(response.code, response.error, true));
     return;
   }
 
-  const plan = response.data.plan as FillPlan;
+  const plan = response.data.plan;
   session = {
     elements,
     fields: fieldMap,
@@ -269,7 +291,9 @@ async function loadExtras(): Promise<void> {
     loadJobMatch(),
   ]);
   widget?.setMeta({
-    progress: progress ? { steps: Object.keys(progress.steps).length, filled: progress.filled } : null,
+    progress: progress
+      ? { steps: Object.keys(progress.steps).length, filled: progress.filled }
+      : null,
     jobMatch: match,
   });
 }
@@ -297,15 +321,18 @@ function createWidget(): FillwrightWidget {
       onRescan: () => void open(),
       onClose: () => teardown(),
       onTeach: (entry, field, remember) => void teachMapping(entry, field, remember),
-      onListProfiles: async () => (await send<ProfileChoice[]>({ type: 'content:list-profiles' })) ?? [],
+      onListProfiles: async () =>
+        (await send<ProfileChoice[]>({ type: 'content:list-profiles' })) ?? [],
       onSwitchProfile: (profileId) => {
-        void send({ type: 'content:switch-profile', profileId }).then(() => open());
+        void request({ type: 'content:switch-profile', profileId }).then((reply) => {
+          if (reply.ok) void open();
+          else widget?.renderError(describeError(reply.code, reply.error, true));
+        });
       },
       onAddEntries: (offer) => void addMissingEntries(offer),
-      onUnlock: () => {
-        // The content script cannot open an extension page itself; the worker does.
-        void chrome.runtime.sendMessage({ type: 'ui:open-security' }).catch(() => undefined);
-      },
+      onUnlock: () => openExtensionPage('security'),
+      onOpenPage: (route) => openExtensionPage(route),
+      onReload: () => location.reload(),
       canDraft: () => draftAvailable !== false,
       onDraftStart: (entry) => void startDraft(entry),
       onDraftGenerate: (entry, factIds) => void generateDraft(entry, factIds),
@@ -320,6 +347,14 @@ function createWidget(): FillwrightWidget {
 
 async function runFill(entries: FillPlanEntry[]): Promise<void> {
   if (!widget) return;
+  // The plan holds values read while the vault was open. If it has locked
+  // since, those values are not written: the user unlocks and scans again.
+  const gate = await request<{ locked: boolean }>({ type: 'content:vault-state' });
+  if (gate.ok && gate.data.locked) {
+    session = session ? { ...session, plan: null } : null;
+    widget.renderLocked();
+    return;
+  }
   widget.renderFilling();
   const summary = await applyFill(entries);
   widget.markFilled(summary);
@@ -355,7 +390,9 @@ async function applyFill(entries: FillPlanEntry[]): Promise<FillSummary & { ok: 
       };
     });
 
-  const filledIds = new Set(outcomes.filter((outcome) => outcome.ok).map((outcome) => outcome.fieldId));
+  const filledIds = new Set(
+    outcomes.filter((outcome) => outcome.ok).map((outcome) => outcome.fieldId),
+  );
   const left = (session.plan?.entries ?? []).filter(
     (entry) =>
       !filledIds.has(entry.fieldId) &&
@@ -366,14 +403,19 @@ async function applyFill(entries: FillPlanEntry[]): Promise<FillSummary & { ok: 
   const manual = left.filter((entry) => entry.status === 'manual-required').length;
 
   // Counts only — no field values ever leave this page.
-  chrome.runtime
-    .sendMessage({
-      type: 'content:fill-complete',
-      outcomes: outcomes.map(({ fieldId, ok }) => ({ fieldId, ok })),
-    })
-    .catch(() => undefined);
+  notify({
+    type: 'content:fill-complete',
+    outcomes: outcomes.map(({ fieldId, ok }) => ({ fieldId, ok })),
+  });
   if (filled > 0) {
     void send({ type: 'content:step-progress', filled, stepKey: stepKey() });
+    // Recorded only if the user switched history on; the worker checks.
+    notify({
+      type: 'content:log-application',
+      ...guessPosting(document),
+      origin: location.origin,
+      fieldsFilled: filled,
+    });
   }
 
   return { ok: true, filled, failures, remaining: left.length, manual };
@@ -385,14 +427,25 @@ async function applyFill(entries: FillPlanEntry[]): Promise<FillSummary & { ok: 
  * A remembered mapping is stored against this origin on this device; an
  * unremembered one lives only in this page's memory until it is closed.
  */
-async function teachMapping(entry: FillPlanEntry, field: CanonicalField, remember: boolean): Promise<void> {
+async function teachMapping(
+  entry: FillPlanEntry,
+  field: CanonicalField,
+  remember: boolean,
+): Promise<void> {
   if (!entry.fingerprint) return;
   if (remember) {
     overrides.delete(entry.fingerprint);
-    await send({
+    const saved = await request({
       type: 'content:save-mapping',
       mapping: { fingerprint: entry.fingerprint, label: entry.label, canonical: field },
     });
+    if (!saved.ok) {
+      // Still apply it for this form, and say it was not remembered.
+      overrides.set(entry.fingerprint, field);
+      widget?.setMeta({
+        notice: 'Applied to this form, but Fillwright could not remember it for next time.',
+      });
+    }
   } else {
     overrides.set(entry.fingerprint, field);
   }
@@ -403,9 +456,11 @@ async function addMissingEntries(offer: AddOffer): Promise<void> {
   widget?.renderAnalyzing();
   const pressed = await addEntries(offer.kind, offer.missing);
   if (pressed === 0) {
-    widget?.renderError(
-      `Fillwright could not find a single, clearly labelled “Add ${offer.kind}” button. Please add the entries yourself, then scan again.`,
-    );
+    widget?.renderError({
+      message: `Fillwright couldn’t find one clearly labelled “Add ${offer.kind}” button, so it didn’t press anything. Nothing on the form was changed. Add the entries yourself, then scan again.`,
+      action: 'retry',
+      actionLabel: 'Scan again',
+    });
     return;
   }
   await open();
@@ -439,17 +494,21 @@ async function startDraft(entry: FillPlanEntry): Promise<void> {
   if (!widget) return;
   widget.drafts.set(entry.fieldId, { phase: 'loading' });
   widget.refresh();
-  const response = await chrome.runtime.sendMessage({ type: 'content:draft-facts' }).catch(() => null);
-  if (!response?.ok) {
-    if (response?.code === 'EAIOFF') draftAvailable = false;
+  const response = await request<DraftFact[]>({ type: 'content:draft-facts' });
+  if (!response.ok) {
+    if (response.code === 'EAIOFF') draftAvailable = false;
     widget.drafts.set(entry.fieldId, {
       phase: 'error',
-      message: response?.error ?? 'The on-device model could not be reached.',
+      message: `${describeError(response.code, response.error).message} Nothing on the form was changed.`,
     });
   } else {
     draftAvailable = true;
-    const facts = response.data as DraftFact[];
-    widget.drafts.set(entry.fieldId, { phase: 'facts', facts, chosen: new Set(facts.map((fact) => fact.id)) });
+    const facts = response.data;
+    widget.drafts.set(entry.fieldId, {
+      phase: 'facts',
+      facts,
+      chosen: new Set(facts.map((fact) => fact.id)),
+    });
   }
   widget.refresh();
 }
@@ -463,20 +522,21 @@ async function generateDraft(entry: FillPlanEntry, factIds: string[]): Promise<v
 
   const field = session?.fields.get(entry.fieldId);
   const question = field?.signals.labelText || field?.signals.ariaLabel || entry.label;
-  const response = await chrome.runtime
-    .sendMessage({
-      type: 'content:draft',
-      question,
-      factIds,
-      ...(field?.signals.maxLength ? { maxCharacters: field.signals.maxLength } : {}),
-    })
-    .catch(() => null);
+  const response = await request<{ text: string }>({
+    type: 'content:draft',
+    question,
+    factIds,
+    ...(field?.signals.maxLength ? { maxCharacters: field.signals.maxLength } : {}),
+  });
 
   widget.drafts.set(
     entry.fieldId,
-    response?.ok
+    response.ok
       ? { phase: 'result', text: String(response.data.text ?? ''), facts, chosen }
-      : { phase: 'error', message: response?.error ?? 'No draft was produced.' },
+      : {
+          phase: 'error',
+          message: `${describeError(response.code, response.error).message} Nothing on the form was changed.`,
+        },
   );
   widget.refresh();
 }
@@ -497,15 +557,11 @@ async function applyDraft(entry: FillPlanEntry, text: string): Promise<void> {
 function watchForNewFields(): void {
   if (!('MutationObserver' in window)) return;
 
+  // The callback only looks at node types — no document queries — because in
+  // Assist/Smart mode it runs on every page's every render. Whether the form
+  // really changed is decided later, off the callback, in onFormChanged.
   const observer = new MutationObserver((records) => {
-    const changed = records.some((record) =>
-      [...Array.from(record.addedNodes), ...Array.from(record.removedNodes)].some((node) => {
-        if (!(node instanceof HTMLElement)) return false;
-        if (node.closest?.('[data-fillwright-ui]') || node.hasAttribute('data-fillwright-ui')) return false;
-        return node.matches?.('input, select, textarea') || node.querySelector?.('input, select, textarea');
-      }),
-    );
-    if (changed) scheduleChange();
+    if (mutationsMayAffectForm(records)) scheduleChange();
   });
 
   observer.observe(document.body ?? document.documentElement, { childList: true, subtree: true });
@@ -548,8 +604,13 @@ async function onFormChanged(): Promise<void> {
     return;
   }
 
+  // A render that did not add, remove or replace a control is not a change.
+  const signature = `${location.href}#${controlSignature(document)}`;
+  if (signature === lastSignature) return;
+  lastSignature = signature;
+
   if (!engaged) {
-    await evaluatePassive();
+    passiveThrottle.schedule();
     return;
   }
   if (!widget || scanning) return;
@@ -571,24 +632,26 @@ function userIsTyping(): boolean {
   return (
     active instanceof HTMLElement &&
     !active.closest('[data-fillwright-ui]') &&
-    (active.isContentEditable || active.matches('input:not([type="checkbox"]):not([type="radio"]), textarea')) &&
+    (active.isContentEditable ||
+      active.matches('input:not([type="checkbox"]):not([type="radio"]), textarea')) &&
     Date.now() - lastInputAt < TYPING_GRACE_MS * 4
   );
 }
 
 function whenIdle(): Promise<void> {
   return new Promise((resolve) => {
-    const idle = (window as Window & { requestIdleCallback?: (cb: () => void, opts?: object) => number })
-      .requestIdleCallback;
+    const idle = (
+      window as Window & { requestIdleCallback?: (cb: () => void, opts?: object) => number }
+    ).requestIdleCallback;
     if (idle) idle(() => resolve(), { timeout: 2_000 });
     else window.setTimeout(resolve, 300);
   });
 }
 
 function isOwnUi(event: Event): boolean {
-  return event.composedPath().some(
-    (node) => node instanceof HTMLElement && node.hasAttribute('data-fillwright-ui'),
-  );
+  return event
+    .composedPath()
+    .some((node) => node instanceof HTMLElement && node.hasAttribute('data-fillwright-ui'));
 }
 
 /* --------------------------------------------------------------- helpers */
@@ -630,23 +693,49 @@ function stepKey(): string {
   return `${location.pathname}#${marker.replace(/\s+/g, ' ').trim().slice(0, 60)}`;
 }
 
-function friendlyError(code: string | undefined, fallback: string | undefined): string {
-  switch (code) {
-    case 'ENOPROFILE':
-      return 'Fillwright has no profile yet. Import your resume in Fillwright’s settings, then try again.';
-    case 'EBADSCAN':
-      return 'This page’s form could not be read safely, so Fillwright left it alone.';
-    case 'EBADORIGIN':
-    case 'ENOSENDER':
-      return 'Fillwright only works on regular web pages.';
-    default:
-      return fallback ?? 'Fillwright could not reach its background service. Reload the page and try again.';
-  }
+async function send<T = unknown>(message: {
+  type: string;
+  [key: string]: unknown;
+}): Promise<T | null> {
+  const reply = await request<T>(message);
+  return reply.ok ? reply.data : null;
 }
 
-async function send<T = unknown>(message: { type: string; [key: string]: unknown }): Promise<T | null> {
-  const response = await chrome.runtime.sendMessage(message).catch(() => null);
-  return response?.ok ? (response.data as T) : null;
+/** Only these extension pages may be opened from a web page. */
+const OPENABLE = new Set(['security', 'import', 'privacy', 'assistance']);
+
+function openExtensionPage(route: string): void {
+  if (!OPENABLE.has(route)) return;
+  notify({ type: 'content:open-page', route });
+}
+
+/** True when a same-origin iframe on this page contains form controls. */
+function hasReachableFormFrame(): boolean {
+  return Array.from(document.querySelectorAll('iframe')).some((frame) => {
+    try {
+      return Boolean(frame.contentDocument?.querySelector('input, select, textarea'));
+    } catch {
+      return false;
+    }
+  });
+}
+
+/**
+ * True when a large, visible iframe from another origin is on the page —
+ * where an application form usually lives when the top page has none.
+ */
+function hasUnreachableFormFrame(): boolean {
+  return Array.from(document.querySelectorAll('iframe')).some((frame) => {
+    let crossOrigin: boolean;
+    try {
+      crossOrigin = frame.contentDocument === null;
+    } catch {
+      crossOrigin = true;
+    }
+    if (!crossOrigin) return false;
+    const box = frame.getBoundingClientRect();
+    return box.width >= 300 && box.height >= 300;
+  });
 }
 
 function teardown(): void {

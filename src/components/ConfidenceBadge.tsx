@@ -43,7 +43,10 @@ export function ConfidenceBadge({
     .join('\n');
 
   return (
-    <span className={`fw-conf fw-conf--${level}${compact ? ' fw-conf--compact' : ''}`} title={title}>
+    <span
+      className={`fw-conf fw-conf--${level}${compact ? ' fw-conf--compact' : ''}`}
+      title={title}
+    >
       <span className="fw-conf__dot" aria-hidden="true" />
       <span className="fw-conf__text">
         {compact ? `${percent}%` : `${LABELS[level]} · ${percent}%`}

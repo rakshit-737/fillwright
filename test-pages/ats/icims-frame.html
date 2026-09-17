@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>iCIMS application frame</title>
+    <link rel="stylesheet" href="../shared.css" />
+  </head>
+  <body class="iCIMS_MainWrapper">
+    <form id="iCIMS_Form" class="iCIMS_Forms" method="post" action="/submit">
+      <h2>Candidate Profile</h2>
+      <table class="iCIMS_Table">
+        <tr>
+          <td><label for="PersonProfileFields.FirstName">First Name</label></td>
+          <td><input id="PersonProfileFields.FirstName" name="PersonProfileFields.FirstName" type="text" /></td>
+        </tr>
+        <tr>
+          <td><label for="PersonProfileFields.LastName">Last Name</label></td>
+          <td><input id="PersonProfileFields.LastName" name="PersonProfileFields.LastName" type="text" /></td>
+        </tr>
+        <tr>
+          <td><label for="PersonProfileFields.Email">Email</label></td>
+          <td><input id="PersonProfileFields.Email" name="PersonProfileFields.Email" type="text" /></td>
+        </tr>
+        <tr>
+          <td><label for="PersonProfileFields.PhoneNumber">Phone Number</label></td>
+          <td><input id="PersonProfileFields.PhoneNumber" name="PersonProfileFields.PhoneNumber" type="text" /></td>
+        </tr>
+        <tr>
+          <td><label for="PersonProfileFields.Country">Country</label></td>
+          <td>
+            <select id="PersonProfileFields.Country" name="PersonProfileFields.Country">
+              <option value="">(Select)</option>
+              <option value="US">United States</option>
+              <option value="IN">India</option>
+              <option value="GB">United Kingdom</option>
+            </select>
+          </td>
+        </tr>
+      </table>
+      <input type="submit" value="Next" class="iCIMS_Button" />
+    </form>
+    <script src="../shared.js"></script>
+  </body>
+</html>

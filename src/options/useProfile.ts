@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { send } from '@/utils/messaging';
+import { registerLeaveGuard } from './leaveGuard';
 import type { Profile } from '@/types/profile';
 
 export type SaveState = 'idle' | 'dirty' | 'saving' | 'saved' | 'error';
@@ -8,6 +9,8 @@ export interface ProfileEditor {
   profile: Profile | null;
   loading: boolean;
   error: string;
+  /** Code of the last failure, e.g. ELOCKED, so panes can offer the right fix. */
+  errorCode: string;
   saveState: SaveState;
   /** Applies a mutation to a draft copy and schedules a save. */
   update: (mutate: (draft: Profile) => void) => void;
@@ -30,6 +33,7 @@ export function useProfile(profileId: string | null): ProfileEditor {
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [errorCode, setErrorCode] = useState('');
   const [saveState, setSaveState] = useState<SaveState>('idle');
 
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -43,12 +47,14 @@ export function useProfile(profileId: string | null): ProfileEditor {
       return;
     }
     setLoading(true);
-    send<Profile>({ type: 'ui:get-profile', profileId }).then((result) => {
+    void send<Profile>({ type: 'ui:get-profile', profileId }).then((result) => {
       if (result.ok) {
         setProfile(result.data);
         setError('');
+        setErrorCode('');
       } else {
         setError(result.error);
+        setErrorCode(result.code ?? '');
       }
       setLoading(false);
     });
@@ -56,9 +62,10 @@ export function useProfile(profileId: string | null): ProfileEditor {
 
   useEffect(load, [load]);
 
-  const persist = useCallback(async () => {
+  /** Saves pending edits. Resolves false when a save was attempted and failed. */
+  const persist = useCallback(async (): Promise<boolean> => {
     const draft = pending.current;
-    if (!draft) return;
+    if (!draft) return true;
     pending.current = null;
     setSaveState('saving');
     const result = await send<Profile>({ type: 'ui:save-profile', profile: draft });
@@ -68,9 +75,15 @@ export function useProfile(profileId: string | null): ProfileEditor {
       setSaveState('saved');
       if (savedTimer.current) clearTimeout(savedTimer.current);
       savedTimer.current = setTimeout(() => setSaveState('idle'), 1600);
+      return true;
     } else {
+      // Keep the edits: a later save (or the retry button) writes them, unless
+      // the user has typed something newer in the meantime.
+      pending.current ??= draft;
       setSaveState('error');
       setError(result.error);
+      setErrorCode(result.code ?? '');
+      return false;
     }
   }, []);
 
@@ -95,6 +108,36 @@ export function useProfile(profileId: string | null): ProfileEditor {
     await persist();
   }, [persist]);
 
+  const failed = useRef(false);
+  useEffect(() => {
+    failed.current = saveState === 'error';
+  }, [saveState]);
+
+  // Leaving the pane flushes pending edits first, and asks before discarding
+  // edits whose save failed.
+  useEffect(() => {
+    const release = registerLeaveGuard(async () => {
+      if (timer.current) clearTimeout(timer.current);
+      // The outcome of this flush decides, not the last rendered state, which
+      // may be mid-save.
+      const saved = pending.current ? await persist() : !failed.current;
+      if (saved) return true;
+      return window.confirm(
+        'Some changes to your profile have not been saved.\n\n' +
+          'Leave this page anyway? Those changes will be lost.',
+      );
+    });
+    // Closing the tab with a failed save: let the browser ask.
+    const onBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (failed.current) event.preventDefault();
+    };
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => {
+      release();
+      window.removeEventListener('beforeunload', onBeforeUnload);
+    };
+  }, [persist]);
+
   // Never lose an in-flight edit when the pane unmounts or the tab closes.
   useEffect(() => {
     const onHide = () => {
@@ -109,7 +152,7 @@ export function useProfile(profileId: string | null): ProfileEditor {
     };
   }, [persist]);
 
-  return { profile, loading, error, saveState, update, flush, reload: load };
+  return { profile, loading, error, errorCode, saveState, update, flush, reload: load };
 }
 
 export function saveStateLabel(state: SaveState): string {
@@ -121,7 +164,7 @@ export function saveStateLabel(state: SaveState): string {
     case 'saved':
       return 'Saved';
     case 'error':
-      return 'Could not save';
+      return 'Not saved yet — your changes are kept';
     default:
       return '';
   }

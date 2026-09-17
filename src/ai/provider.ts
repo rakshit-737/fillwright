@@ -116,7 +116,8 @@ export const chromeBuiltinProvider: AIProvider = {
     } catch (cause) {
       return {
         state: 'unavailable',
-        reason: cause instanceof Error ? cause.message : 'The on-device model could not be reached.',
+        reason:
+          cause instanceof Error ? cause.message : 'The on-device model could not be reached.',
       };
     }
   },

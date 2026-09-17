@@ -4,6 +4,7 @@ import { computeCompleteness } from '@/profile/completeness';
 import type { ProfileSummary } from '@/storage/profiles';
 import type { Profile } from '@/types/profile';
 import type { Settings } from '@/types/settings';
+import type { ApplicationHistoryEntry } from '@/types/messages';
 
 interface ProfileCard extends ProfileSummary {
   completion: number;
@@ -34,10 +35,30 @@ export function Profiles({
   const [draftName, setDraftName] = useState('');
 
   const activeId = settings?.activeProfileId ?? null;
+  const historyOn = settings?.privacy.keepApplicationHistory ?? false;
+  const [lastUsed, setLastUsed] = useState<Map<string, ApplicationHistoryEntry>>(new Map());
+
+  // "Last used" comes from the optional local history, and only while it is on.
+  // There are deliberately no per-entry usage counts.
+  useEffect(() => {
+    if (!historyOn) {
+      setLastUsed(new Map());
+      return;
+    }
+    void send<ApplicationHistoryEntry[]>({ type: 'ui:list-history' }).then((result) => {
+      if (!result.ok) return;
+      const latest = new Map<string, ApplicationHistoryEntry>();
+      for (const entry of result.data) {
+        if (entry.profileId && !latest.has(entry.profileId)) latest.set(entry.profileId, entry);
+      }
+      setLastUsed(latest);
+    });
+  }, [historyOn]);
 
   const refresh = useCallback(async () => {
     const result = await send<ProfileSummary[]>({ type: 'ui:list-profiles' });
     if (!result.ok) {
+      setNotice(`Your profiles couldn’t be loaded. ${result.error}`);
       setLoading(false);
       return;
     }
@@ -48,7 +69,17 @@ export function Profiles({
     const detailed: ProfileCard[] = [];
     for (const summary of result.data) {
       const full = await send<Profile>({ type: 'ui:get-profile', profileId: summary.id });
-      if (!full.ok) continue;
+      if (!full.ok) {
+        // Still list it — a profile that can't be opened right now (a locked
+        // vault, say) should not look as if it had vanished.
+        detailed.push({
+          ...summary,
+          completion: 0,
+          gaps: [full.error],
+          counts: { education: 0, experience: 0, skills: 0 },
+        });
+        continue;
+      }
       const completeness = computeCompleteness(full.data);
       detailed.push({
         ...summary,
@@ -76,7 +107,11 @@ export function Profiles({
     setBusy('');
     if (result.ok) {
       onSettingsChange(result.data);
-      setNotice(`Now using “${cards.find((card) => card.id === profileId)?.name ?? 'this profile'}”.`);
+      setNotice(
+        `Now using “${cards.find((card) => card.id === profileId)?.name ?? 'this profile'}”.`,
+      );
+    } else {
+      setNotice(`The active profile wasn’t changed. ${result.error}`);
     }
   };
 
@@ -90,7 +125,9 @@ export function Profiles({
       ...(cloneFromId ? { cloneFromId } : {}),
     });
     setBusy('');
-    if (result.ok) {
+    if (!result.ok) {
+      setNotice(`No profile was created. ${result.error}`);
+    } else {
       await refresh();
       setRenaming(result.data.id);
       setDraftName(name);
@@ -107,9 +144,11 @@ export function Profiles({
     setRenaming(null);
     if (!trimmed) return;
     const current = await send<Profile>({ type: 'ui:get-profile', profileId });
-    if (!current.ok) return;
-    await send({ type: 'ui:save-profile', profile: { ...current.data, name: trimmed } });
+    const saved = current.ok
+      ? await send({ type: 'ui:save-profile', profile: { ...current.data, name: trimmed } })
+      : current;
     await refresh();
+    if (!saved.ok) setNotice(`The profile wasn’t renamed. ${saved.error}`);
   };
 
   const remove = async (card: ProfileCard) => {
@@ -120,18 +159,23 @@ export function Profiles({
     );
     if (!confirmed) return;
     setBusy(card.id);
-    await send({ type: 'ui:delete-profile', profileId: card.id });
+    const deleted = await send({ type: 'ui:delete-profile', profileId: card.id });
     const state = await send<Settings>({ type: 'ui:get-settings' });
     if (state.ok) onSettingsChange(state.data);
     setBusy('');
     await refresh();
-    setNotice(`“${card.name}” was deleted.`);
+    setNotice(
+      deleted.ok
+        ? `“${card.name}” was deleted.`
+        : `“${card.name}” wasn’t deleted. ${deleted.error}`,
+    );
   };
 
   if (loading) {
     return (
       <div className="fw-pane" role="status">
-        <span className="fw-spinner" aria-hidden="true" /> <span className="fw-muted">Loading profiles…</span>
+        <span className="fw-spinner" aria-hidden="true" />{' '}
+        <span className="fw-muted">Loading profiles…</span>
       </div>
     );
   }
@@ -197,6 +241,13 @@ export function Profiles({
               </p>
               <p className="fw-profile__facts fw-profile__facts--subtle">
                 Updated {formatWhen(card.updatedAt)}
+                {lastUsed.get(card.id) && (
+                  <>
+                    {' '}
+                    · last used {formatWhen(lastUsed.get(card.id)!.appliedAt)} on{' '}
+                    {hostOf(lastUsed.get(card.id)!.origin)}
+                  </>
+                )}
                 {card.gaps.length > 0 && <> · missing {card.gaps.slice(0, 2).join(', ')}</>}
               </p>
 
@@ -259,4 +310,12 @@ function formatWhen(iso: string): string {
   if (days === 1) return 'yesterday';
   if (days < 7) return `${days} days ago`;
   return when.toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+}
+
+function hostOf(origin: string): string {
+  try {
+    return new URL(origin).hostname.replace(/^www\./, '');
+  } catch {
+    return 'a website';
+  }
 }

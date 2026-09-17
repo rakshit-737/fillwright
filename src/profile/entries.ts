@@ -12,7 +12,11 @@ import type {
   SkillEntry,
 } from '@/types/profile';
 
-/** Blank list entries, created by the editor and used to repair imported data. */
+/**
+ * Blank list entries, created by the editor and used to repair imported data.
+ *
+ * Trust boundary: pure factories; no input.
+ */
 
 const userProv = () => provenance('user', 1, 'entered by you');
 

@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>(3) Backend Engineer | Acme | LinkedIn</title>
+    <link rel="stylesheet" href="../shared.css" />
+    <style>
+      .artdeco-modal { position: fixed; inset: 10% 20%; background: #fff; border: 1px solid #ccc; padding: 20px; overflow: auto; z-index: 10; }
+      .artdeco-modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 9; }
+    </style>
+  </head>
+  <body>
+    <h1 class="t-24">Backend Engineer</h1>
+    <p class="lead">
+      Expected (LinkedIn Easy Apply): a modal, multi-step form. Fillwright fills the fields on the
+      current step. It never presses "Next", "Review" or "Submit application" — the test presses
+      "Next" as the user would, and Fillwright reads the new step. A skill-specific "years of
+      experience with Python" question is not answered from total experience.
+    </p>
+    <div class="artdeco-modal-overlay"></div>
+    <div class="artdeco-modal jobs-easy-apply-modal" role="dialog" aria-labelledby="modal-title">
+      <h2 id="modal-title">Apply to Acme</h2>
+      <div class="artdeco-completeness-meter-linear" role="progressbar" aria-valuenow="0" id="meter"></div>
+      <form id="easy-apply"></form>
+      <footer>
+        <button type="button" id="next" aria-label="Continue to next step">Next</button>
+      </footer>
+    </div>
+    <script>
+      window.__presses = { next: 0, review: 0, submit: 0 };
+      const form = document.getElementById('easy-apply');
+      const footer = document.querySelector('footer');
+      let step = 1;
+      let uid = 0;
+
+      function textEntity(label, attrs = {}) {
+        const id = `single-line-text-form-component-${uid++}`;
+        const wrap = document.createElement('div');
+        wrap.className = 'fb-dash-form-element';
+        const lab = document.createElement('label');
+        lab.htmlFor = id;
+        lab.className = 'artdeco-text-input--label';
+        lab.textContent = label;
+        const input = document.createElement('input');
+        input.id = id;
+        input.className = 'artdeco-text-input--input';
+        input.type = attrs.type ?? 'text';
+        if (attrs.required) input.required = true;
+        wrap.append(lab, input);
+        return wrap;
+      }
+
+      function renderStep() {
+        form.replaceChildren();
+        const h = document.createElement('h3');
+        h.className = 't-16 t-bold';
+        if (step === 1) {
+          h.textContent = 'Contact info';
+          form.append(
+            h,
+            textEntity('First name', { required: true }),
+            textEntity('Last name', { required: true }),
+            textEntity('Mobile phone number', { type: 'text', required: true }),
+            textEntity('Email address', { type: 'email', required: true }),
+          );
+        } else {
+          h.textContent = 'Additional Questions';
+          form.append(
+            h,
+            textEntity('How many years of work experience do you have with Python?', { required: true }),
+            textEntity('LinkedIn Profile'),
+          );
+        }
+        footer.replaceChildren();
+        const next = document.createElement('button');
+        next.type = 'button';
+        if (step === 1) {
+          next.id = 'next';
+          next.textContent = 'Next';
+          next.setAttribute('aria-label', 'Continue to next step');
+          next.addEventListener('click', () => {
+            window.__presses.next += 1;
+            step = 2;
+            renderStep();
+          });
+        } else {
+          next.id = 'review';
+          next.textContent = 'Review';
+          next.setAttribute('aria-label', 'Review your application');
+          next.addEventListener('click', () => (window.__presses.review += 1));
+          const submit = document.createElement('button');
+          submit.type = 'button';
+          submit.textContent = 'Submit application';
+          submit.addEventListener('click', () => (window.__presses.submit += 1));
+          footer.appendChild(submit);
+        }
+        footer.prepend(next);
+        window.__step = step;
+      }
+      renderStep();
+    </script>
+  </body>
+</html>

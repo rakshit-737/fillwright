@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { send } from '@/utils/messaging';
+import { LoadError } from '@/components/LoadError';
 import { passphraseStrength } from '@/security/crypto';
 import type { Settings } from '@/types/settings';
 
@@ -44,9 +45,16 @@ export function Security({
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
 
+  const [loadError, setLoadError] = useState('');
+
   const refresh = useCallback(async () => {
     const result = await send<VaultState>({ type: 'ui:vault-status' });
-    if (result.ok) setVault(result.data);
+    if (result.ok) {
+      setVault(result.data);
+      setLoadError('');
+    } else {
+      setLoadError(result.error);
+    }
   }, []);
 
   useEffect(() => {
@@ -101,9 +109,10 @@ export function Security({
   };
 
   const lockNow = async () => {
-    await send({ type: 'ui:vault-lock' });
+    const result = await send({ type: 'ui:vault-lock' });
     await refresh();
-    setNotice('Locked. Your passphrase is needed to use Fillwright again.');
+    if (result.ok) setNotice('Locked. Your passphrase is needed to use Fillwright again.');
+    else setError(result.error);
   };
 
   const change = async () => {
@@ -157,13 +166,20 @@ export function Security({
     if (result.ok) {
       onSettingsChange(result.data);
       await refresh();
+    } else {
+      setError(`The auto-lock time wasn’t changed. ${result.error}`);
     }
   };
+
+  if (!vault && loadError) {
+    return <LoadError message={loadError} onRetry={() => void refresh()} />;
+  }
 
   if (!vault) {
     return (
       <div className="fw-pane" role="status">
-        <span className="fw-spinner" aria-hidden="true" /> <span className="fw-muted">Loading…</span>
+        <span className="fw-spinner" aria-hidden="true" />{' '}
+        <span className="fw-muted">Loading…</span>
       </div>
     );
   }
@@ -217,8 +233,8 @@ export function Security({
               </Check>
               <Check ok>
                 Derive the key from your passphrase with PBKDF2-SHA256
-                {vault.iterations ? ` (${vault.iterations.toLocaleString()} iterations)` : ''}, which
-                makes guessing it slow
+                {vault.iterations ? ` (${vault.iterations.toLocaleString()} iterations)` : ''},
+                which makes guessing it slow
               </Check>
               <Check ok>Require the passphrase again after the browser closes</Check>
             </ul>
@@ -266,10 +282,22 @@ export function Security({
             autoFocus
           />
           <StrengthMeter strength={strength} show={passphrase.length > 0} />
-          <PassphraseField label="Confirm passphrase" value={confirmation} onChange={setConfirmation} />
-          {error && <p className="fw-formerror" role="alert">{error}</p>}
+          <PassphraseField
+            label="Confirm passphrase"
+            value={confirmation}
+            onChange={setConfirmation}
+          />
+          {error && (
+            <p className="fw-formerror" role="alert">
+              {error}
+            </p>
+          )}
           <div className="fw-actions">
-            <button className="fw-btn fw-btn--primary" disabled={busy} onClick={() => void enable()}>
+            <button
+              className="fw-btn fw-btn--primary"
+              disabled={busy}
+              onClick={() => void enable()}
+            >
               {busy ? 'Encrypting…' : 'Turn on encryption'}
             </button>
             <button className="fw-btn" disabled={busy} onClick={reset}>
@@ -282,10 +310,23 @@ export function Security({
       {vault.state === 'locked' && (
         <section className="fw-section">
           <h2 className="fw-section__title">Unlock</h2>
-          <PassphraseField label="Passphrase" value={passphrase} onChange={setPassphrase} autoFocus />
-          {error && <p className="fw-formerror" role="alert">{error}</p>}
+          <PassphraseField
+            label="Passphrase"
+            value={passphrase}
+            onChange={setPassphrase}
+            autoFocus
+          />
+          {error && (
+            <p className="fw-formerror" role="alert">
+              {error}
+            </p>
+          )}
           <div className="fw-actions">
-            <button className="fw-btn fw-btn--primary" disabled={busy} onClick={() => void unlock()}>
+            <button
+              className="fw-btn fw-btn--primary"
+              disabled={busy}
+              onClick={() => void unlock()}
+            >
               {busy ? 'Unlocking…' : 'Unlock'}
             </button>
           </div>
@@ -334,9 +375,17 @@ export function Security({
                 value={confirmation}
                 onChange={setConfirmation}
               />
-              {error && <p className="fw-formerror" role="alert">{error}</p>}
+              {error && (
+                <p className="fw-formerror" role="alert">
+                  {error}
+                </p>
+              )}
               <div className="fw-actions">
-                <button className="fw-btn fw-btn--primary" disabled={busy} onClick={() => void change()}>
+                <button
+                  className="fw-btn fw-btn--primary"
+                  disabled={busy}
+                  onClick={() => void change()}
+                >
                   {busy ? 'Re-encrypting…' : 'Change passphrase'}
                 </button>
                 <button className="fw-btn" disabled={busy} onClick={reset}>
@@ -350,10 +399,23 @@ export function Security({
               <p className="fw-field__hint">
                 Confirm with your passphrase. Your data will be rewritten unencrypted.
               </p>
-              <PassphraseField label="Passphrase" value={passphrase} onChange={setPassphrase} autoFocus />
-              {error && <p className="fw-formerror" role="alert">{error}</p>}
+              <PassphraseField
+                label="Passphrase"
+                value={passphrase}
+                onChange={setPassphrase}
+                autoFocus
+              />
+              {error && (
+                <p className="fw-formerror" role="alert">
+                  {error}
+                </p>
+              )}
               <div className="fw-actions">
-                <button className="fw-btn fw-btn--danger" disabled={busy} onClick={() => void disable()}>
+                <button
+                  className="fw-btn fw-btn--danger"
+                  disabled={busy}
+                  onClick={() => void disable()}
+                >
                   {busy ? 'Decrypting…' : 'Turn off encryption'}
                 </button>
                 <button className="fw-btn" disabled={busy} onClick={reset}>
@@ -448,7 +510,10 @@ function StrengthMeter({
 function Check({ children, ok }: { children: React.ReactNode; ok: boolean }) {
   return (
     <li className="fw-check">
-      <span className={`fw-check__mark${ok ? ' fw-check__mark--ok' : ' fw-check__mark--no'}`} aria-hidden="true">
+      <span
+        className={`fw-check__mark${ok ? ' fw-check__mark--ok' : ' fw-check__mark--no'}`}
+        aria-hidden="true"
+      >
         {ok ? '✓' : '✗'}
       </span>
       <span>{children}</span>

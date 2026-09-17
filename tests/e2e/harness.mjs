@@ -4,7 +4,7 @@ import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
-export const DIST = resolve(root, 'dist-e2e');
+export const DIST = process.env.FW_DIST ? resolve(process.env.FW_DIST) : resolve(root, 'dist-e2e');
 
 /**
  * Resolves the browser to drive.
@@ -14,11 +14,12 @@ export const DIST = resolve(root, 'dist-e2e');
  * simply will not load there, which makes stable Chrome unusable for this
  * harness. CHROME_PATH overrides it for anyone on a build that still allows it.
  */
-export function findChrome() {
+export async function findChrome() {
   if (process.env.CHROME_PATH && existsSync(process.env.CHROME_PATH)) {
     return process.env.CHROME_PATH;
   }
-  return puppeteer.executablePath();
+  // Puppeteer 25 resolves the downloaded browser asynchronously.
+  return await puppeteer.executablePath();
 }
 
 /**
@@ -34,9 +35,9 @@ export async function launch({ headless = true } = {}) {
   }
 
   const browser = await puppeteer.launch({
-    executablePath: findChrome(),
-    // Extensions require the new headless mode; the old one cannot load them.
-    headless: headless ? 'new' : false,
+    executablePath: await findChrome(),
+    // The current headless mode loads extensions; the old one could not.
+    headless,
     args: [
       `--disable-extensions-except=${DIST}`,
       `--load-extension=${DIST}`,

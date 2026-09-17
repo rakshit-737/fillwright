@@ -72,10 +72,84 @@ export function harvestFields(root: Document | ShadowRoot = document): HarvestRe
     elements.set(id, [element]);
   }
 
+  // Radio groups built from buttons (role="radio" inside role="radiogroup"),
+  // as Ashby and many design systems render them. Native radios are handled
+  // above; these have no <input> at all.
+  for (const group of deepQuery(root, '[role="radiogroup"]')) {
+    if (fields.length >= MAX_FIELDS) {
+      truncated = true;
+      break;
+    }
+    if (group.closest('[data-fillwright-ui]')) continue;
+    const members = Array.from(group.querySelectorAll<HTMLElement>('[role="radio"]')).filter(
+      (member) => !(member instanceof HTMLInputElement),
+    );
+    if (members.length === 0) continue;
+    const id = `fw-${counter++}`;
+    fields.push(describeAriaRadioGroup(id, group, members, fields.length));
+    elements.set(id, members);
+  }
+
   return { fields, elements, truncated };
 }
 
 /* ------------------------------------------------------------- collection */
+
+function deepQuery(root: Document | ShadowRoot | Element, selector: string): HTMLElement[] {
+  const found: HTMLElement[] = [];
+  const visit = (node: Document | ShadowRoot | Element) => {
+    found.push(...Array.from(node.querySelectorAll<HTMLElement>(selector)));
+    for (const element of node.querySelectorAll<HTMLElement>('*')) {
+      if (element.shadowRoot) visit(element.shadowRoot);
+    }
+  };
+  visit(root);
+  return found;
+}
+
+/** The value an ARIA radio option stands for. */
+export function ariaOptionValue(option: HTMLElement): string {
+  return clean(
+    option.getAttribute('data-value') ??
+      option.getAttribute('aria-label') ??
+      option.textContent ??
+      '',
+  );
+}
+
+function describeAriaRadioGroup(
+  id: string,
+  group: HTMLElement,
+  members: HTMLElement[],
+  order: number,
+): DetectedField {
+  const first = members[0]!;
+  const options: FieldOption[] = members.map((member) => ({
+    value: ariaOptionValue(member),
+    label: truncate(clean(member.getAttribute('aria-label') ?? member.textContent ?? '')),
+  }));
+  const checked = members.find((member) => member.getAttribute('aria-checked') === 'true');
+  const signals = readSignals(first, 'radio-group', options);
+  signals.labelText = truncate(groupLabel(first) || signals.labelText);
+  // An option button's own text is not the question.
+  if (signals.ariaLabel && options.some((option) => option.label === signals.ariaLabel)) {
+    signals.ariaLabel = '';
+  }
+  return {
+    id,
+    kind: 'radio-group',
+    signals,
+    options,
+    currentValue: checked ? ariaOptionValue(checked) : '',
+    hasExistingValue: Boolean(checked),
+    visible: isVisible(group) || members.some(isVisible),
+    disabled: group.getAttribute('aria-disabled') === 'true' || members.every(isDisabled),
+    readOnly: group.getAttribute('aria-readonly') === 'true',
+    order,
+    selectorHint: selectorFor(first),
+    ...repeatPositionOf(group),
+  };
+}
 
 const CONTROL_SELECTOR =
   'input, select, textarea, [contenteditable="true"], [contenteditable=""], [role="combobox"], [role="textbox"]';
@@ -106,7 +180,11 @@ function isFillable(element: HTMLElement): boolean {
   // Fillwright never touches anything that looks like a credential or a
   // one-time code, whatever its declared type.
   const identity = `${element.getAttribute('name') ?? ''} ${element.id} ${element.getAttribute('autocomplete') ?? ''}`;
-  if (/\b(?:password|passwd|pwd|otp|one[-_]?time|cvv|card[-_]?number|ssn|social[-_]?security)\b/i.test(identity)) {
+  if (
+    /\b(?:password|passwd|pwd|otp|one[-_]?time|cvv|card[-_]?number|ssn|social[-_]?security)\b/i.test(
+      identity,
+    )
+  ) {
     return false;
   }
   if (element.closest('[data-fillwright-ui]')) return false;
@@ -254,7 +332,11 @@ function controlKind(element: HTMLElement): ControlKind {
   return 'unsupported';
 }
 
-function readSignals(element: HTMLElement, kind: ControlKind, options: FieldOption[]): FieldSignals {
+function readSignals(
+  element: HTMLElement,
+  kind: ControlKind,
+  options: FieldOption[],
+): FieldSignals {
   const input = element as HTMLInputElement;
   return {
     labelText: truncate(labelForControl(element)),
@@ -314,6 +396,22 @@ export function labelForControl(element: HTMLElement): string {
     return clean(previous.textContent);
   }
 
+  // 5. Lever-style: the control sits alone in a wrapper, and the wrapper's
+  // previous sibling is a label-classed block of text. Only a wrapper holding
+  // exactly one control qualifies, so a label is never shared by two fields.
+  const wrapper = element.parentElement;
+  const beside = wrapper?.previousElementSibling;
+  if (
+    wrapper &&
+    beside &&
+    wrapper.querySelectorAll('input, select, textarea').length === 1 &&
+    /label|question|title/i.test(beside.getAttribute('class') ?? '') &&
+    !beside.querySelector('input, select, textarea')
+  ) {
+    const text = clean(beside.textContent ?? '');
+    if (text && text.length <= 120) return text;
+  }
+
   return '';
 }
 
@@ -339,8 +437,11 @@ function groupLabel(element: HTMLElement): string {
   // Fall back to the nearest preceding block of text above the group.
   let node: HTMLElement | null = element.parentElement;
   for (let hop = 0; node && hop < MAX_ANCESTOR_HOPS; hop++, node = node.parentElement) {
-    const heading = node.querySelector('legend, .question-title, [class*="label"], [class*="question"]');
-    if (heading?.textContent?.trim() && !heading.contains(element)) return clean(heading.textContent);
+    const heading = node.querySelector(
+      'legend, .question-title, [class*="label"], [class*="question"]',
+    );
+    if (heading?.textContent?.trim() && !heading.contains(element))
+      return clean(heading.textContent);
   }
   return '';
 }
@@ -517,7 +618,9 @@ function isReadOnly(element: HTMLElement): boolean {
 /* ------------------------------------------------------------------ radios */
 
 function radioGroupKey(element: HTMLInputElement): string {
-  const form = element.form ? (element.form.getAttribute('name') ?? element.form.id ?? 'form') : 'noform';
+  const form = element.form
+    ? (element.form.getAttribute('name') ?? element.form.id ?? 'form')
+    : 'noform';
   return `${form}::${element.name || element.id}`;
 }
 

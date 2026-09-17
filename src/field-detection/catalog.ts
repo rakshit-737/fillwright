@@ -74,7 +74,11 @@ export const FIELD_CATALOG: CatalogEntry[] = [
   { field: 'preferences.noticePeriod', label: 'Notice period', group: 'Preferences' },
   { field: 'preferences.workMode', label: 'Work mode preference', group: 'Preferences' },
   { field: 'preferences.referredBy', label: 'Referred by', group: 'Preferences' },
-  { field: 'preferences.howDidYouHear', label: 'How you heard about the role', group: 'Preferences' },
+  {
+    field: 'preferences.howDidYouHear',
+    label: 'How you heard about the role',
+    group: 'Preferences',
+  },
 
   /* ----------------------------------------------------------- sensitive */
   {

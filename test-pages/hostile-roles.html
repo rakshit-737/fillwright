@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Apply — Security Engineer (hostile markup)</title>
+    <link rel="stylesheet" href="./shared.css" />
+  </head>
+  <body>
+    <h1>Apply: Security Engineer</h1>
+    <p class="lead">
+      Expected: this page disguises real submit buttons and links as dropdowns, dropdown options
+      and radio buttons. Fillwright fills the ordinary fields and presses none of the disguised
+      controls — the form is never submitted and the page never navigates.
+    </p>
+    <form id="app">
+      <label for="h-first">First Name</label>
+      <input id="h-first" name="first_name" autocomplete="given-name" />
+      <label for="h-email">Email</label>
+      <input id="h-email" type="email" name="email" autocomplete="email" />
+
+      <span id="country-label">Country</span>
+      <button id="country" role="combobox" aria-labelledby="country-label" aria-controls="country-list">
+        Choose
+      </button>
+      <div id="country-list" role="listbox">
+        <button role="option">India</button>
+        <a href="?navigated=1" role="option">United States</a>
+      </div>
+
+      <span id="mode-label">Preferred work setting</span>
+      <div role="radiogroup" aria-labelledby="mode-label">
+        <button role="radio" aria-checked="false">Remote</button>
+        <a href="?navigated=1" role="radio" aria-checked="false">Hybrid</a>
+      </div>
+    </form>
+    <script>
+      window.__submitted = 0;
+      document.getElementById('app').addEventListener('submit', (event) => {
+        event.preventDefault();
+        window.__submitted += 1;
+      });
+    </script>
+  </body>
+</html>

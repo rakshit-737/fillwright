@@ -1,8 +1,12 @@
 import type { CanonicalField } from '@/types/fields';
 import { normalizeLabel } from './normalize';
+import { collectPageSignals } from '@/content/page-signals';
 
 /**
  * Is this page actually a job application?
+ *
+ * Trust boundary: pure scoring, run in the worker over signals a content
+ * script collected from an untrusted page (validated before use).
  *
  * Asked only when Fillwright was NOT explicitly invoked — in Assist or Smart
  * mode, where it runs on a page by itself and has to decide whether offering
@@ -42,9 +46,11 @@ const APPLICATION_WORDS =
 const ATS_HOSTS =
   /(?:greenhouse\.io|lever\.co|ashbyhq\.com|myworkdayjobs\.com|workday\.com|smartrecruiters\.com|icims\.com|taleo\.net|workable\.com|jobvite\.com|bamboohr\.com|recruitee\.com|breezy\.hr|jazzhr\.com|teamtailor\.com|personio\.)/;
 
-const URL_WORDS = /\/(?:apply|application|careers?|jobs?|positions?|openings?|vacancies|candidate)(?:\/|$|[-_])/;
+const URL_WORDS =
+  /\/(?:apply|application|careers?|jobs?|positions?|openings?|vacancies|candidate)(?:\/|$|[-_])/;
 
-const APPLY_BUTTON = /\b(?:submit application|apply|send application|next step|continue application)\b/;
+const APPLY_BUTTON =
+  /\b(?:submit application|apply|send application|next step|continue application)\b/;
 
 const CAREER_FIELDS: ReadonlySet<string> = new Set([
   'education.institution',
@@ -81,7 +87,9 @@ export function scoreApplicationContext(input: ContextInput): ContextVerdict {
 
   if (careerCount > 0) {
     score += Math.min(0.45, 0.15 * careerCount);
-    reasons.push(`${careerCount} career field${careerCount === 1 ? '' : 's'} such as education or employer`);
+    reasons.push(
+      `${careerCount} career field${careerCount === 1 ? '' : 's'} such as education or employer`,
+    );
   }
   if (identityCount >= 2) {
     score += 0.15;
@@ -128,18 +136,6 @@ export function scoreApplicationContext(input: ContextInput): ContextVerdict {
 
 /** Collects the context inputs from a live document. Reads text only. */
 export function collectContextInput(doc: Document, fieldKinds: CanonicalField[]): ContextInput {
-  const headings = [doc.title, ...Array.from(doc.querySelectorAll('h1, h2')).map((node) => node.textContent ?? '')]
-    .map((text) => text.trim().slice(0, 160))
-    .filter(Boolean)
-    .slice(0, 12);
-
-  const buttonLabels = Array.from(
-    doc.querySelectorAll<HTMLElement>('button, input[type="submit"], [role="button"]'),
-  )
-    .slice(0, 60)
-    .map((node) => (node instanceof HTMLInputElement ? node.value : node.textContent ?? '').trim().slice(0, 60))
-    .filter(Boolean);
-
   let url = '';
   try {
     const parsed = new URL(doc.location?.href ?? '');
@@ -147,13 +143,5 @@ export function collectContextInput(doc: Document, fieldKinds: CanonicalField[])
   } catch {
     url = '';
   }
-
-  return {
-    headings,
-    url,
-    fieldKinds,
-    hasFileInput: doc.querySelector('input[type="file"]') !== null,
-    passwordFields: doc.querySelectorAll('input[type="password"]').length,
-    buttonLabels,
-  };
+  return { ...collectPageSignals(doc), url, fieldKinds };
 }

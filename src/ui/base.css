@@ -69,3 +69,37 @@ textarea {
   min-height: 440px;
   background: var(--fw-paper);
 }
+
+/* Busy indicator. Under reduced motion it is a static partial ring. */
+.fw-spinner {
+  display: inline-block;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  border: 2px solid var(--fw-line-strong);
+  border-top-color: var(--fw-accent);
+  vertical-align: middle;
+  animation: fw-spin 700ms linear infinite;
+}
+
+@keyframes fw-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fw-spinner {
+    animation: none;
+  }
+}
+
+:root[data-reduced-motion='true'] .fw-spinner {
+  animation: none;
+}
+
+/* Visible focus everywhere, including on custom controls. */
+:focus-visible {
+  outline: 2px solid var(--fw-accent);
+  outline-offset: 2px;
+}

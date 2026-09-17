@@ -54,7 +54,8 @@ describe('a request that never comes back', () => {
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.code).toBe('ETIMEOUT');
-      expect(result.error).toMatch(/timed out/i);
+      // The code stays specific; the text is the one the user can act on.
+      expect(result.error).toMatch(/did not answer/i);
     }
   });
 
@@ -70,7 +71,9 @@ describe('a request that never comes back', () => {
 
   it('retries once, because the first send wakes a sleeping worker', async () => {
     sendMessage
-      .mockRejectedValueOnce(new Error('Could not establish connection. Receiving end does not exist.'))
+      .mockRejectedValueOnce(
+        new Error('Could not establish connection. Receiving end does not exist.'),
+      )
       .mockResolvedValueOnce({ ok: true, data: 'second time lucky' });
 
     const result = await send({ type: 'ui:get-state' });

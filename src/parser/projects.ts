@@ -97,7 +97,9 @@ function interpretBlock(block: string[]): ParsedProject {
 
   // A second header cell is usually the stack ("React, Node") or a role.
   if (cells[1]) {
-    if (/\b(?:lead|owner|author|developer|engineer|designer|contributor|maintainer)\b/i.test(cells[1])) {
+    if (
+      /\b(?:lead|owner|author|developer|engineer|designer|contributor|maintainer)\b/i.test(cells[1])
+    ) {
       project.role = cells[1];
     } else {
       project.technologies.push(...splitList(cells[1]));

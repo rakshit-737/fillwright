@@ -14,11 +14,17 @@ const EXT = 'chrome-extension://fillwright-test/';
 
 describe('message sender gate', () => {
   it('lets extension pages send ui messages', () => {
-    expect(senderMayCall('ui:export-data', { id: 'fillwright-test', url: `${EXT}options.html` })).toBe(true);
+    expect(
+      senderMayCall('ui:export-data', { id: 'fillwright-test', url: `${EXT}options.html` }),
+    ).toBe(true);
   });
 
   it('refuses profile-reading ui messages from content scripts', () => {
-    const tab = { id: 'fillwright-test', url: 'https://evil.example/apply', tab: { id: 3 } } as chrome.runtime.MessageSender;
+    const tab = {
+      id: 'fillwright-test',
+      url: 'https://evil.example/apply',
+      tab: { id: 3 },
+    } as chrome.runtime.MessageSender;
     expect(senderMayCall('ui:export-data', tab)).toBe(false);
     expect(senderMayCall('ui:get-profile', tab)).toBe(false);
     expect(senderMayCall('ui:set-settings', tab)).toBe(false);
@@ -31,7 +37,9 @@ describe('message sender gate', () => {
   });
 
   it('refuses other extensions', () => {
-    expect(senderMayCall('ui:export-data', { id: 'someone-else', url: `${EXT}options.html` })).toBe(false);
+    expect(senderMayCall('ui:export-data', { id: 'someone-else', url: `${EXT}options.html` })).toBe(
+      false,
+    );
   });
 });
 
@@ -46,7 +54,12 @@ describe('import hardening', () => {
 
   it('round-trips a profile with fresh ids', () => {
     const source = profile();
-    const plan = parseImport({ format: 'fillwright-export', version: 2, profiles: [source], mappings: [] });
+    const plan = parseImport({
+      format: 'fillwright-export',
+      version: 2,
+      profiles: [source],
+      mappings: [],
+    });
     const imported = plan.profiles[0]!;
     expect(imported.id).not.toBe(source.id);
     expect(imported.experience[0]!.id).not.toBe(source.experience[0]!.id);
@@ -84,7 +97,9 @@ describe('import hardening', () => {
 
   it('rejects other files and newer formats', () => {
     expect(() => parseImport({ format: 'something-else', profiles: [] })).toThrow();
-    expect(() => parseImport({ format: 'fillwright-export', version: 99, profiles: [profile()] })).toThrow(/newer/);
+    expect(() =>
+      parseImport({ format: 'fillwright-export', version: 99, profiles: [profile()] }),
+    ).toThrow(/newer/);
     expect(() => parseImport([])).toThrow();
     expect(() => parseImport({ profiles: ['x'] })).toThrow(/No usable/);
   });
@@ -93,7 +108,12 @@ describe('import hardening', () => {
     const plan = parseImport({
       profiles: [profile()],
       mappings: [
-        { origin: 'https://jobs.example.com/x', fingerprint: 'cand id', canonical: 'personal.email', label: 'ID' },
+        {
+          origin: 'https://jobs.example.com/x',
+          fingerprint: 'cand id',
+          canonical: 'personal.email',
+          label: 'ID',
+        },
         { origin: 'javascript:alert(1)', fingerprint: 'a', canonical: 'personal.email' },
         { origin: 'https://ok.example', fingerprint: 'b', canonical: 'not.a.field' },
       ],
@@ -134,7 +154,10 @@ describe('one-off corrections', () => {
     expect(mappings[0]!.fromSavedRule).toBe(false);
     expect(mappings[0]!.corrected).toBe(true);
 
-    const plan = buildFillPlan({ url: '', pageKey: '', adapterId: null, scannedAt: '', fields, mappings }, '1');
+    const plan = buildFillPlan(
+      { url: '', pageKey: '', adapterId: null, scannedAt: '', fields, mappings },
+      '1',
+    );
     expect(plan.entries[0]!.remembered).toBe(false);
     expect(plan.entries[0]!.corrected).toBe(true);
   });
@@ -168,27 +191,56 @@ describe('on-page panel', () => {
     available: { education: 0, experience: 0 },
     entries: [
       {
-        fieldId: 'f1', label: 'First name', canonical: 'personal.firstName', currentValue: '',
-        newValue: 'Aditi', status: 'ready', confidence: 0.97, rationale: 'Matched "first name".',
-        selected: true, fingerprint: 'first name', remembered: false,
+        fieldId: 'f1',
+        label: 'First name',
+        canonical: 'personal.firstName',
+        currentValue: '',
+        newValue: 'Aditi',
+        status: 'ready',
+        confidence: 0.97,
+        rationale: 'Matched "first name".',
+        selected: true,
+        fingerprint: 'first name',
+        remembered: false,
       },
       {
-        fieldId: 'f2', label: 'Why us?', canonical: 'unknown', currentValue: '', newValue: '',
-        status: 'manual-required', confidence: 0, rationale: 'A written question.', selected: false,
-        fingerprint: 'why us', remembered: false,
+        fieldId: 'f2',
+        label: 'Why us?',
+        canonical: 'unknown',
+        currentValue: '',
+        newValue: '',
+        status: 'manual-required',
+        confidence: 0,
+        rationale: 'A written question.',
+        selected: false,
+        fingerprint: 'why us',
+        remembered: false,
       },
     ],
   };
 
   const noop: WidgetCallbacks = {
-    onFill: () => undefined, onUndo: () => undefined, onClose: () => undefined, onRescan: () => undefined,
-    onTeach: () => undefined, onListProfiles: async () => [], onSwitchProfile: () => undefined,
-    onAddEntries: () => undefined, onUnlock: () => undefined, canDraft: () => false,
-    onDraftStart: () => undefined, onDraftGenerate: () => undefined, onDraftUse: () => undefined,
+    onFill: () => undefined,
+    onUndo: () => undefined,
+    onClose: () => undefined,
+    onRescan: () => undefined,
+    onTeach: () => undefined,
+    onListProfiles: async () => [],
+    onSwitchProfile: () => undefined,
+    onAddEntries: () => undefined,
+    onOpenPage: () => undefined,
+    onReload: () => undefined,
+    onUnlock: () => undefined,
+    canDraft: () => false,
+    onDraftStart: () => undefined,
+    onDraftGenerate: () => undefined,
+    onDraftUse: () => undefined,
   };
 
   beforeEach(() => {
-    document.documentElement.querySelectorAll('[data-fillwright-widget]').forEach((node) => node.remove());
+    document.documentElement
+      .querySelectorAll('[data-fillwright-widget]')
+      .forEach((node) => node.remove());
   });
 
   it('hides its contents from page scripts', () => {
@@ -206,7 +258,9 @@ describe('on-page panel', () => {
     expect(widget.state).toBe('analyzing');
     widget.renderPlan(plan);
     expect(widget.state).toBe('ready');
-    widget.shadow.querySelector('.fw-widget')!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    widget.shadow
+      .querySelector('.fw-widget')!
+      .dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
     expect(widget.shadow.querySelector('.fw-pill')?.textContent).toContain('1 ready');
     widget.markFilled({ filled: 1, failures: [], remaining: 1, manual: 1 });
     expect(widget.state).toBe('partial');
@@ -219,7 +273,9 @@ describe('on-page panel', () => {
   it('offers Change on confident rows, not only doubtful ones', () => {
     const widget = new FillwrightWidget(noop, true);
     widget.renderPlan(plan);
-    const review = [...widget.shadow.querySelectorAll('button')].find((b) => b.textContent === 'Review')!;
+    const review = [...widget.shadow.querySelectorAll('button')].find(
+      (b) => b.textContent === 'Review',
+    )!;
     review.click();
     const labels = [...widget.shadow.querySelectorAll('button')].map((b) => b.textContent);
     expect(labels).toContain('Change');

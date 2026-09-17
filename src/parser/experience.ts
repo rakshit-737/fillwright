@@ -12,7 +12,8 @@ import type { ResumeSection } from './sections';
 export interface ParsedExperience {
   company: string;
   title: string;
-  employmentType: 'full-time' | 'part-time' | 'internship' | 'contract' | 'freelance' | 'other' | '';
+  employmentType:
+    'full-time' | 'part-time' | 'internship' | 'contract' | 'freelance' | 'other' | '';
   location: string;
   locationType: 'onsite' | 'remote' | 'hybrid' | '';
   startDate: string;

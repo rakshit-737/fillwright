@@ -10,15 +10,11 @@ import type {
 import type { Profile } from '@/types/profile';
 import type { Settings } from '@/types/settings';
 import { classifyField, describeField, isThirdPartyField } from '@/field-detection/classify';
-import {
-  assignGroups,
-  countBlocks,
-  groupKindOf,
-  type FieldGroup,
-} from '@/field-detection/groups';
+import { assignGroups, countBlocks, groupKindOf, type FieldGroup } from '@/field-detection/groups';
 import { resolveForField } from './resolve';
 import { isSensitiveField, requiresExplicitConsent } from '@/security/sensitive';
 import { normalizeLabel } from '@/field-detection/normalize';
+export { STATUS_LABELS } from './status';
 
 /**
  * Turns detected fields into a reviewable plan.
@@ -60,6 +56,8 @@ export function buildMappings(
         : classifyField(field.signals),
     );
   }
+
+  resolveLoneNameField(fields, classifications);
 
   const groups = assignGroups(
     fields,
@@ -114,12 +112,16 @@ export function buildMappings(
       return { ...base, status: 'unmapped' };
     }
 
-    if (classification.field === 'documents.resume' || classification.field === 'documents.coverLetter') {
+    if (
+      classification.field === 'documents.resume' ||
+      classification.field === 'documents.coverLetter'
+    ) {
       // File inputs cannot be populated programmatically, by browser design.
       return {
         ...base,
         status: 'manual-required',
-        rationale: 'browsers do not allow an extension to attach a file — please choose it yourself',
+        rationale:
+          'browsers do not allow an extension to attach a file — please choose it yourself',
       };
     }
 
@@ -165,7 +167,11 @@ export function buildMappings(
     // saved answer. Consenting to a background check is not something an
     // extension should do unattended.
     if (requiresExplicitConsent(classification.field)) {
-      return { ...entry, status: 'needs-consent', rationale: `${entry.rationale} This one always needs your confirmation.` };
+      return {
+        ...entry,
+        status: 'needs-consent',
+        rationale: `${entry.rationale} This one always needs your confirmation.`,
+      };
     }
 
     if (field.hasExistingValue && !settings.autofill.allowOverwrite) {
@@ -183,6 +189,40 @@ export function buildMappings(
     // A sensitive field with a real stored answer is still surfaced distinctly
     // in the UI, but it is fillable.
     return { ...entry, status: sensitive ? 'review' : 'ready' };
+  });
+}
+
+/**
+ * A bare "Name" is ambiguous on its own, so it scores below the autofill
+ * threshold. On a form that asks for the candidate's email and has no
+ * separate first/last name fields, it is the candidate's name — Lever and
+ * Ashby both ask this way. The field is still skipped if it reads as someone
+ * else's (the third-party check runs later, as for every field).
+ */
+function resolveLoneNameField(
+  fields: DetectedField[],
+  classifications: Map<string, ReturnType<typeof classifyField>>,
+): void {
+  const kinds = [...classifications.values()];
+  const hasEmail = kinds.some((c) => c.field === 'personal.email' && c.confidence >= 0.7);
+  const hasSplitName = kinds.some(
+    (c) =>
+      (c.field === 'personal.firstName' || c.field === 'personal.lastName') && c.confidence >= 0.5,
+  );
+  if (!hasEmail || hasSplitName) return;
+
+  const bare = fields.filter((field) => {
+    const c = classifications.get(field.id);
+    const label = normalizeLabel(field.signals.labelText || field.signals.ariaLabel);
+    return c?.field === 'personal.fullName' && c.confidence < 0.7 && /^(?:your )?name$/.test(label);
+  });
+  if (bare.length !== 1) return;
+  const only = bare[0]!;
+  const current = classifications.get(only.id)!;
+  classifications.set(only.id, {
+    ...current,
+    confidence: 0.8,
+    rationale: `${current.rationale} It is the only name field on a form that asks for your email, so it is almost certainly yours.`,
   });
 }
 
@@ -289,13 +329,3 @@ export function displayLabel(field: DetectedField): string {
     'Unlabelled field';
   return raw.length > 80 ? `${raw.slice(0, 77)}…` : raw;
 }
-
-export const STATUS_LABELS: Record<MappingStatus, string> = {
-  ready: 'Ready to fill',
-  review: 'Check this one',
-  'needs-consent': 'Needs your answer',
-  'missing-value': 'Not in your profile',
-  'manual-required': 'You need to write this',
-  'skipped-existing': 'Already filled in',
-  unmapped: 'Not recognised',
-};

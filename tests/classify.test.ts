@@ -76,7 +76,13 @@ describe('the many spellings of one field', () => {
   });
 
   it('maps university wording to the institution field', () => {
-    for (const label of ['University', 'College', 'School', 'University / College', 'Institution']) {
+    for (const label of [
+      'University',
+      'College',
+      'School',
+      'University / College',
+      'Institution',
+    ]) {
       expect(classify({ labelText: label }).field).toBe('education.institution');
     }
   });
@@ -179,7 +185,10 @@ describe('fields that must not be confused', () => {
 describe('high-risk questions are recognised as such', () => {
   const cases: Array<[string, string]> = [
     ['Are you legally authorized to work in the United States?', 'sensitive.workAuthorization'],
-    ['Will you now or in the future require sponsorship for employment visa status?', 'sensitive.requiresSponsorship'],
+    [
+      'Will you now or in the future require sponsorship for employment visa status?',
+      'sensitive.requiresSponsorship',
+    ],
     ['Gender', 'sensitive.gender'],
     ['Race / Ethnicity', 'sensitive.raceEthnicity'],
     ['Disability Status', 'sensitive.disabilityStatus'],

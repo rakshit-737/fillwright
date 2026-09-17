@@ -3,6 +3,9 @@ import { isSafeToExpand } from '@/adapters';
 /**
  * "Add another" controls.
  *
+ * Trust boundary: content script, acting on an untrusted page. This is the
+ * only place Fillwright presses a page button, and only on explicit request.
+ *
  * When a profile has three education entries and the form shows one block,
  * the form usually offers a "+ Add education" button. Fillwright can press it
  * for the user — but only when the user asks, only a bounded number of times,
@@ -26,7 +29,8 @@ export interface AddControl {
 const EDUCATION = /\b(?:education|school|degree|qualification|university|college|academic)\b/;
 const EXPERIENCE = /\b(?:experience|employment|work|job|position|employer|role|internship)\b/;
 const ADD = /^\s*(?:\+\s*)?(?:add|new)\b(?:\s+(?:another|more|an?|one more))?\b/;
-const FORBIDDEN = /\b(?:submit|apply|send|delete|remove|save and|finish|review|next|continue|sign|log ?in)\b/;
+const FORBIDDEN =
+  /\b(?:submit|apply|send|delete|remove|save and|finish|review|next|continue|sign|log ?in)\b/;
 
 export function classifyAddLabel(label: string): RepeatKind | null {
   const text = label.replace(/\s+/g, ' ').trim().toLowerCase();
@@ -79,5 +83,10 @@ export async function addEntries(kind: RepeatKind, times: number, settleMs = 450
 }
 
 function accessibleText(element: HTMLElement): string {
-  return (element.getAttribute('aria-label') || element.textContent || element.getAttribute('title') || '').trim();
+  return (
+    element.getAttribute('aria-label') ||
+    element.textContent ||
+    element.getAttribute('title') ||
+    ''
+  ).trim();
 }

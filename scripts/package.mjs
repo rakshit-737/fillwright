@@ -5,7 +5,14 @@
  * and the structural verification in verify-build.mjs), so a package that
  * exists is one that has been checked.
  */
-import { createWriteStream, readFileSync, readdirSync, statSync, mkdirSync, existsSync } from 'node:fs';
+import {
+  createWriteStream,
+  readFileSync,
+  readdirSync,
+  statSync,
+  mkdirSync,
+  existsSync,
+} from 'node:fs';
 import { resolve, dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { deflateRawSync, crc32 } from 'node:zlib';
@@ -34,8 +41,10 @@ function collect(dir, base = dir) {
 }
 
 function dosTime(date) {
-  const time = ((date.getHours() << 11) | (date.getMinutes() << 5) | (date.getSeconds() / 2)) & 0xffff;
-  const day = (((date.getFullYear() - 1980) << 9) | ((date.getMonth() + 1) << 5) | date.getDate()) & 0xffff;
+  const time =
+    ((date.getHours() << 11) | (date.getMinutes() << 5) | (date.getSeconds() / 2)) & 0xffff;
+  const day =
+    (((date.getFullYear() - 1980) << 9) | ((date.getMonth() + 1) << 5) | date.getDate()) & 0xffff;
   return { time, day };
 }
 

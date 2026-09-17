@@ -75,7 +75,9 @@ function ReadinessRow({
         <span className="fw-ready__text">
           <span className="fw-ready__label">{section.label}</span>
           {section.missing.length > 0 && (
-            <span className="fw-ready__missing">Missing {section.missing.join(', ')}</span>
+            <span className="fw-ready__missing">
+              Missing: {section.missing.map(sentenceCase).join(', ')}
+            </span>
           )}
         </span>
         <span className="fw-ready__go" aria-hidden="true">
@@ -108,3 +110,11 @@ const DESTINATIONS: Record<string, { route: string; anchor?: string }> = {
   projects: { route: 'profile' },
   authorization: { route: 'preferences' },
 };
+
+/** "At least five skills" reads better mid-sentence as "at least five skills". */
+function sentenceCase(text: string): string {
+  // Keep proper nouns and acronyms (GitHub, GPA) as written.
+  return /^[A-Z][a-z]+\b/.test(text) && !/^(?:GitHub|LinkedIn)/.test(text)
+    ? text.charAt(0).toLowerCase() + text.slice(1)
+    : text;
+}

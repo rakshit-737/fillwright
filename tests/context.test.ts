@@ -23,7 +23,13 @@ describe('application context', () => {
       input({
         headings: ['Apply for Software Engineer'],
         url: 'boards.greenhouse.io/acme/jobs/1',
-        fieldKinds: ['personal.firstName', 'personal.lastName', 'personal.email', 'links.linkedin', 'documents.resume'],
+        fieldKinds: [
+          'personal.firstName',
+          'personal.lastName',
+          'personal.email',
+          'links.linkedin',
+          'documents.resume',
+        ],
         hasFileInput: true,
         buttonLabels: ['Submit application'],
       }),
@@ -34,7 +40,11 @@ describe('application context', () => {
 
   it('ignores a newsletter signup', () => {
     const verdict = scoreApplicationContext(
-      input({ headings: ['Subscribe to our newsletter'], fieldKinds: ['personal.email'], buttonLabels: ['Subscribe'] }),
+      input({
+        headings: ['Subscribe to our newsletter'],
+        fieldKinds: ['personal.email'],
+        buttonLabels: ['Subscribe'],
+      }),
     );
     expect(verdict.level).toBe('none');
   });
@@ -76,7 +86,9 @@ describe('job description match', () => {
   it('separates skills the profile has from ones it does not', () => {
     const match = matchJobDescription(posting, ['Python', 'React', 'Kubernetes', 'Figma']);
     expect(match.present).toEqual(['Python', 'React', 'Kubernetes']);
-    expect(match.missing).toEqual(expect.arrayContaining(['Go', 'PostgreSQL', 'Rust', 'Terraform']));
+    expect(match.missing).toEqual(
+      expect.arrayContaining(['Go', 'PostgreSQL', 'Rust', 'Terraform']),
+    );
     expect(match.missing).not.toContain('Python');
     expect(match.missing).not.toContain('Figma');
     expect(match.yearsRequired).toBe(3);
@@ -177,9 +189,20 @@ describe('add-another controls', () => {
 
 describe('employer semantics', () => {
   const base: FieldSignals = {
-    labelText: '', ariaLabel: '', ariaDescription: '', placeholder: '', name: '', id: '',
-    autocomplete: '', inputType: 'text', title: '', sectionHeading: '', precedingText: '',
-    optionLabels: [], required: false, maxLength: null,
+    labelText: '',
+    ariaLabel: '',
+    ariaDescription: '',
+    placeholder: '',
+    name: '',
+    id: '',
+    autocomplete: '',
+    inputType: 'text',
+    title: '',
+    sectionHeading: '',
+    precedingText: '',
+    optionLabels: [],
+    required: false,
+    maxLength: null,
   };
   const classify = (labelText: string) => classifyField({ ...base, labelText }).field;
 

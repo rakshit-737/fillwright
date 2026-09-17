@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Apply — Platform Engineer (steps)</title>
+    <link rel="stylesheet" href="./shared.css" />
+  </head>
+  <body>
+    <h1>Apply: Platform Engineer</h1>
+    <p class="lead">
+      Expected: a client-side router. "Continue" swaps the step with history.pushState, with no
+      page load. Fillwright re-reads the new step — but not while you are typing, and not under an
+      open review list (it shows "This page changed" instead). Fillwright never presses
+      "Continue".
+    </p>
+    <form id="app">
+      <div id="step"></div>
+      <p><button type="button" id="continue">Continue</button></p>
+    </form>
+    <script>
+      const steps = {
+        1: [
+          ['s-first', 'First Name', 'given-name', 'first_name'],
+          ['s-last', 'Last Name', 'family-name', 'last_name'],
+          ['s-email', 'Email', 'email', 'email'],
+        ],
+        2: [
+          ['s-school', 'University', '', 'school'],
+          ['s-degree', 'Degree', '', 'degree'],
+          ['s-github', 'GitHub URL', '', 'github'],
+          ['s-linkedin', 'LinkedIn Profile', '', 'linkedin'],
+          ['s-notes', 'Notes for the recruiter', '', 'recruiter_notes'],
+        ],
+      };
+      function render(n) {
+        const host = document.getElementById('step');
+        host.replaceChildren();
+        const heading = document.createElement('h2');
+        heading.textContent = n === 1 ? 'Step 1: About you' : 'Step 2: Background';
+        host.appendChild(heading);
+        for (const [id, text, auto, name] of steps[n]) {
+          const label = document.createElement('label');
+          label.htmlFor = id;
+          label.textContent = text;
+          const input = document.createElement('input');
+          input.id = id;
+          input.name = name;
+          if (auto) input.autocomplete = auto;
+          host.append(label, input);
+        }
+        window.__step = n;
+      }
+      render(1);
+      window.__continue = () => {
+        history.pushState({ step: 2 }, '', '?step=2');
+        render(2);
+      };
+      document.getElementById('continue').addEventListener('click', window.__continue);
+    </script>
+    <script src="./shared.js"></script>
+  </body>
+</html>

@@ -1,4 +1,4 @@
-import type { CanonicalField, FillOutcome, FillPlan, FillPlanEntry, ScanResult, SavedMapping } from './fields';
+import type { CanonicalField, FillOutcome, ScanResult, SavedMapping } from './fields';
 import type { Profile } from './profile';
 import type { Settings } from './settings';
 
@@ -19,6 +19,8 @@ export interface ApplicationHistoryEntry {
   appliedAt: string;
   /** Fillwright never records what was typed — only that a fill happened. */
   fieldsFilled: number;
+  /** Which of the user's profiles was used. */
+  profileId?: string;
 }
 
 /* ---------- popup / options → background ---------- */
@@ -50,15 +52,14 @@ export type UiRequest =
   | { type: 'ui:vault-change-passphrase'; current: string; next: string }
   | { type: 'ui:vault-disable'; passphrase: string }
   | { type: 'ui:scan-active-tab' }
-  | { type: 'ui:request-fill'; entries: FillPlanEntry[] }
-  | { type: 'ui:undo-fill' };
+  /** The onboarding practice page asks for a plan for its own fields. */
+  | { type: 'ui:practice-plan'; fields: unknown };
 
 /* ---------- content script → background ---------- */
 
 export type ContentRequest =
   | { type: 'content:ready'; url: string }
   | { type: 'ui:open-security' }
-  | { type: 'content:scan-result'; scan: ScanResult }
   | {
       type: 'content:request-mappings';
       scan: ScanResult;
@@ -70,26 +71,29 @@ export type ContentRequest =
     }
   | { type: 'content:fill-complete'; outcomes: FillOutcome[] }
   | { type: 'content:save-mapping'; mapping: Omit<SavedMapping, 'id' | 'createdAt' | 'useCount'> }
-  | { type: 'content:log-application'; company: string; role: string; origin: string; fieldsFilled: number }
+  | {
+      type: 'content:log-application';
+      company: string;
+      role: string;
+      origin: string;
+      fieldsFilled: number;
+    }
   /** Passive (Assist/Smart) boot: what should an uninvited script do here? */
   | { type: 'content:get-mode' }
+  /** Passive check: is this page an application? Signals only, no values. */
+  | { type: 'content:assess-page'; fields: unknown; page: unknown }
   /** Multi-step progress for this tab, kept in the worker's session storage. */
   | { type: 'content:step-progress'; filled: number; stepKey: string }
   | { type: 'content:get-progress' }
+  /** Whether the vault is locked right now. No key material, no data. */
+  | { type: 'content:vault-state' }
   | { type: 'content:job-match'; text: string }
   | { type: 'content:list-profiles' }
+  /** Opens one of a fixed set of Fillwright pages (import, privacy, …). */
+  | { type: 'content:open-page'; route: string }
   | { type: 'content:switch-profile'; profileId: string }
   | { type: 'content:draft-facts' }
   | { type: 'content:draft'; question: string; factIds: string[]; maxCharacters?: number };
-
-/* ---------- background → content script ---------- */
-
-export type BackgroundCommand =
-  | { type: 'bg:scan' }
-  | { type: 'bg:show-plan'; plan: FillPlan }
-  | { type: 'bg:fill'; entries: FillPlanEntry[] }
-  | { type: 'bg:undo' }
-  | { type: 'bg:teardown' };
 
 export type AnyRequest = UiRequest | ContentRequest;
 

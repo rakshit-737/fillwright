@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Careers — Apply</title>
+    <link rel="stylesheet" href="./shared.css" />
+    <style>
+      iframe { width: 100%; height: 640px; border: 1px solid #e6e3de; border-radius: 10px; }
+    </style>
+  </head>
+  <body>
+    <h1>Apply for this role</h1>
+    <p class="lead">
+      Expected: the form lives in an iframe from a different origin that Fillwright has no access
+      to. Fillwright says the form is in a frame it can't reach, and changes nothing. The frame URL
+      is given as <code>?frame=</code>.
+    </p>
+    <iframe id="ats" title="Application form"></iframe>
+    <script>
+      const src = new URLSearchParams(location.search).get('frame');
+      if (src) document.getElementById('ats').src = src;
+    </script>
+  </body>
+</html>

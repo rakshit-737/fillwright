@@ -1,3 +1,4 @@
+import { containsWords, sameByAlias } from './aliases';
 import type { CanonicalField, DetectedField, FieldOption } from '@/types/fields';
 import type { Profile, TriState } from '@/types/profile';
 import { formatDate } from '@/parser/dates';
@@ -16,7 +17,12 @@ export interface ResolvedValue {
   needsConsent: boolean;
 }
 
-const none = (note = ''): ResolvedValue => ({ value: '', confidence: 0, note, needsConsent: false });
+const none = (note = ''): ResolvedValue => ({
+  value: '',
+  confidence: 0,
+  note,
+  needsConsent: false,
+});
 
 /**
  * Produces the value Fillwright would write into a given canonical field.
@@ -60,9 +66,16 @@ export function resolveValue(
       if (stored.value) return stored;
       // Compose it, but say so — a composed name can be wrong for people whose
       // legal name is ordered differently.
-      const parts = [profile.personal.firstName.value, profile.personal.lastName.value].filter(Boolean);
+      const parts = [profile.personal.firstName.value, profile.personal.lastName.value].filter(
+        Boolean,
+      );
       return parts.length === 2
-        ? { value: parts.join(' '), confidence: 0.8, note: 'built from your first and last name', needsConsent: false }
+        ? {
+            value: parts.join(' '),
+            confidence: 0.8,
+            note: 'built from your first and last name',
+            needsConsent: false,
+          }
         : none('no name is stored');
     }
     case 'personal.preferredName': {
@@ -94,11 +107,20 @@ export function resolveValue(
     case 'address.formatted': {
       const stored = fromTracked(profile.address.formatted);
       if (stored.value) return stored;
-      const parts = [profile.address.city.value, profile.address.state.value, profile.address.country.value]
+      const parts = [
+        profile.address.city.value,
+        profile.address.state.value,
+        profile.address.country.value,
+      ]
         .filter(Boolean)
         .join(', ');
       return parts
-        ? { value: parts, confidence: 0.82, note: 'built from your city, state and country', needsConsent: false }
+        ? {
+            value: parts,
+            confidence: 0.82,
+            note: 'built from your city, state and country',
+            needsConsent: false,
+          }
         : none('no location is stored');
     }
 
@@ -155,7 +177,12 @@ export function resolveValue(
     case 'experience.yearsOfExperience': {
       const years = totalYearsOfExperience(profile);
       return years
-        ? { value: years, confidence: 0.7, note: 'calculated from your work history', needsConsent: false }
+        ? {
+            value: years,
+            confidence: 0.7,
+            note: 'calculated from your work history',
+            needsConsent: false,
+          }
         : none('no work history is stored');
     }
 
@@ -165,7 +192,12 @@ export function resolveValue(
     case 'profile.skills': {
       const skills = profile.skills.map((skill) => skill.name).filter(Boolean);
       return skills.length
-        ? { value: skills.join(', '), confidence: 0.85, note: 'from your skills list', needsConsent: false }
+        ? {
+            value: skills.join(', '),
+            confidence: 0.85,
+            note: 'from your skills list',
+            needsConsent: false,
+          }
         : none('no skills are stored');
     }
 
@@ -184,7 +216,10 @@ export function resolveValue(
     /* ----------------------------------------------------------- sensitive */
     case 'preferences.desiredSalary': {
       if (!profile.sensitive.compensation.shareCompensation) {
-        return { ...none('salary answers are switched off in your preferences'), needsConsent: true };
+        return {
+          ...none('salary answers are switched off in your preferences'),
+          needsConsent: true,
+        };
       }
       return fromPreference(profile.sensitive.compensation.expectedSalary, 'your expected salary');
     }
@@ -201,11 +236,23 @@ export function resolveValue(
     case 'sensitive.gender':
       return demographic(profile, profile.sensitive.demographics.gender, 'your gender answer');
     case 'sensitive.raceEthnicity':
-      return demographic(profile, profile.sensitive.demographics.raceEthnicity, 'your ethnicity answer');
+      return demographic(
+        profile,
+        profile.sensitive.demographics.raceEthnicity,
+        'your ethnicity answer',
+      );
     case 'sensitive.disabilityStatus':
-      return demographic(profile, profile.sensitive.demographics.disabilityStatus, 'your disability answer');
+      return demographic(
+        profile,
+        profile.sensitive.demographics.disabilityStatus,
+        'your disability answer',
+      );
     case 'sensitive.veteranStatus':
-      return demographic(profile, profile.sensitive.demographics.veteranStatus, 'your veteran status answer');
+      return demographic(
+        profile,
+        profile.sensitive.demographics.veteranStatus,
+        'your veteran status answer',
+      );
 
     case 'sensitive.securityClearance':
       return sensitiveText(profile.sensitive.background.securityClearance, 'your clearance answer');
@@ -214,7 +261,10 @@ export function resolveValue(
     case 'sensitive.drugTestConsent':
       return fromTriState(profile.sensitive.background.drugTestConsent, 'your consent answer');
     case 'sensitive.backgroundCheckConsent':
-      return fromTriState(profile.sensitive.background.backgroundCheckConsent, 'your consent answer');
+      return fromTriState(
+        profile.sensitive.background.backgroundCheckConsent,
+        'your consent answer',
+      );
     case 'sensitive.willingToRelocate':
       return fromTriState(profile.sensitive.relocation.willingToRelocate, 'your relocation answer');
     case 'sensitive.willingToTravel':
@@ -249,7 +299,10 @@ export function resolveForField(
   if (detected.kind === 'date' || detected.kind === 'month') {
     resolved = { ...resolved, value: formatForDateInput(resolved.value, detected.kind) };
     if (!resolved.value) {
-      return { ...none('the stored date is not precise enough for this field'), needsConsent: resolved.needsConsent };
+      return {
+        ...none('the stored date is not precise enough for this field'),
+        needsConsent: resolved.needsConsent,
+      };
     }
   } else if (/date|graduation/i.test(field) && /^\d{4}(?:-\d{2})?$/.test(resolved.value)) {
     // A text field reads better as "May 2026" than "2026-05".
@@ -374,12 +427,24 @@ export function matchOption(value: string, options: FieldOption[]): OptionMatch 
 
   // 1. Exact match on label or value.
   for (const option of usable) {
-    if (option.label.trim().toLowerCase() === target || option.value.trim().toLowerCase() === target) {
+    if (
+      option.label.trim().toLowerCase() === target ||
+      option.value.trim().toLowerCase() === target
+    ) {
       return { option, confidence: 0.95, exact: true };
     }
   }
 
-  // 2. Yes/No equivalence, which is how most compliance questions are shaped.
+  // 2. A known alias: "USA" for "United States of America", "B.Tech" for
+  //    "Bachelor of Technology", "Sep" for "September". Only if unique.
+  const aliased = usable.filter(
+    (option) => sameByAlias(option.label, target) || sameByAlias(option.value, target),
+  );
+  if (aliased.length === 1) {
+    return { option: aliased[0]!, confidence: 0.9, exact: true };
+  }
+
+  // 3. Yes/No equivalence, which is how most compliance questions are shaped.
   if (YES_RE.test(target) || NO_RE.test(target)) {
     const wantYes = YES_RE.test(target);
     for (const option of usable) {
@@ -390,12 +455,9 @@ export function matchOption(value: string, options: FieldOption[]): OptionMatch 
     }
   }
 
-  // 3. One option contains the value as a whole phrase ("India" in
+  // 4. One option contains the value as a whole phrase ("India" in
   //    "India (IN)"), or the value contains the option.
-  const contained = usable.filter((option) => {
-    const label = option.label.trim().toLowerCase();
-    return label.includes(target) || target.includes(label);
-  });
+  const contained = usable.filter((option) => containsWords(option.label, target));
   // Ambiguous containment is not a match: "Bachelor" matching both
   // "Bachelor of Arts" and "Bachelor of Science" must not silently pick one.
   if (contained.length === 1) {
@@ -407,12 +469,16 @@ export function matchOption(value: string, options: FieldOption[]): OptionMatch 
 
 /* ------------------------------------------------------------------ helpers */
 
-function fromTracked(tracked: { value: string; provenance: { confidence: number; source: string } }): ResolvedValue {
+function fromTracked(tracked: {
+  value: string;
+  provenance: { confidence: number; source: string };
+}): ResolvedValue {
   if (!tracked.value.trim()) return none('not stored in your profile');
   return {
     value: tracked.value,
     // A value the user typed is certain; a parsed one carries its parse score.
-    confidence: tracked.provenance.source === 'user' ? 1 : Math.max(0.6, tracked.provenance.confidence),
+    confidence:
+      tracked.provenance.source === 'user' ? 1 : Math.max(0.6, tracked.provenance.confidence),
     note: tracked.provenance.source === 'user' ? 'you entered this' : 'read from your resume',
     needsConsent: false,
   };
@@ -449,7 +515,10 @@ function sensitiveText(value: string, note: string): ResolvedValue {
  */
 function demographic(profile: Profile, value: string, note: string): ResolvedValue {
   if (!profile.sensitive.demographics.shareDemographics) {
-    return { ...none('demographic answers are switched off in your preferences'), needsConsent: true };
+    return {
+      ...none('demographic answers are switched off in your preferences'),
+      needsConsent: true,
+    };
   }
   if (!value.trim()) return { ...none('you have not answered this'), needsConsent: true };
   return { value, confidence: 1, note: `from ${note}`, needsConsent: false };
@@ -458,7 +527,12 @@ function demographic(profile: Profile, value: string, note: string): ResolvedVal
 /** `unset` is never silently converted into "No". */
 function fromTriState(state: TriState, note: string): ResolvedValue {
   if (state === 'unset') return { ...none('you have not answered this'), needsConsent: true };
-  return { value: state === 'yes' ? 'Yes' : 'No', confidence: 1, note: `from ${note}`, needsConsent: false };
+  return {
+    value: state === 'yes' ? 'Yes' : 'No',
+    confidence: 1,
+    note: `from ${note}`,
+    needsConsent: false,
+  };
 }
 
 /**
@@ -499,7 +573,10 @@ function totalYearsOfExperience(profile: Profile): string {
     if (!start) continue;
     const end = entry.current ? new Date() : parseYearMonth(entry.endDate);
     if (!end) continue;
-    months += Math.max(0, (end.getFullYear() - start.getFullYear()) * 12 + (end.getMonth() - start.getMonth()));
+    months += Math.max(
+      0,
+      (end.getFullYear() - start.getFullYear()) * 12 + (end.getMonth() - start.getMonth()),
+    );
   }
   if (months === 0) return '';
   const years = months / 12;

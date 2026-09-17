@@ -6,6 +6,9 @@ import { logApplication } from '@/storage/history';
 import { buildMappings, buildFillPlan } from '@/autofill/plan';
 import { originFromUrl, pageKeyFromUrl, sanitizeString } from '@/security/validate';
 import { validateScan } from '@/security/scan-guard';
+import { classifyField } from '@/field-detection/classify';
+import { scoreApplicationContext } from '@/field-detection/context';
+import { describeError, unsupportedPageCode } from '@/utils/errors';
 import { FIELD_CATALOG } from '@/field-detection/catalog';
 import type { CanonicalField, SavedMapping, ScanResult } from '@/types/fields';
 import type { ContentRequest, UiRequest } from '@/types/messages';
@@ -25,36 +28,48 @@ import type { ContentRequest, UiRequest } from '@/types/messages';
  */
 export async function scanActiveTab() {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  if (!tab?.id || !tab.url) return err('No active tab', 'ENOTAB');
-  if (!/^https?:/.test(tab.url)) {
-    return err('Fillwright only works on web pages.', 'EBADSCHEME');
-  }
+  if (!tab?.id) return fail('ENOTAB');
+  // Chrome withholds the URL when it has not granted access to this tab.
+  if (!tab.url) return fail('ENOACCESS');
+  const unsupported = unsupportedPageCode(tab.url);
+  if (unsupported) return fail(unsupported);
 
-  try {
-    // Marks this injection as an explicit activation, so the content script
-    // scans immediately instead of applying the passive-mode checks. A
-    // serialised function, not a string — nothing here is evaluated as code.
-    await chrome.scripting.executeScript({
-      target: { tabId: tab.id, allFrames: true },
-      func: () => {
-        (globalThis as unknown as { __fillwrightActivation?: number }).__fillwrightActivation = Date.now();
-      },
-    });
-    // activeTab grants access only because the user just invoked us. The
-    // script is a bundled file — never remote, never generated from a string.
-    // Re-running it on an already-injected page triggers a fresh scan.
-    await chrome.scripting.executeScript({
-      target: { tabId: tab.id, allFrames: true },
-      files: ['content.js'],
-    });
-  } catch (cause) {
-    return err(
-      cause instanceof Error ? cause.message : 'Fillwright could not read this page.',
-      'EINJECT',
-    );
-  }
+  // Marks this injection as an explicit activation, so the content script
+  // scans immediately instead of applying the passive-mode checks. A
+  // serialised function, not a string — nothing here is evaluated as code.
+  const mark = () => {
+    (globalThis as unknown as { __fillwrightActivation?: number }).__fillwrightActivation =
+      Date.now();
+  };
 
-  return ok({ started: true });
+  // activeTab grants access only because the user just invoked us. The script
+  // is a bundled file — never remote, never generated from a string. Re-running
+  // it on an already-injected page triggers a fresh scan.
+  //
+  // Every frame is tried first, so same-origin application iframes work. A
+  // cross-origin frame the tab grant does not cover makes that call fail as a
+  // whole; the top frame alone is then tried, and it reports the frame to the
+  // user itself.
+  for (const allFrames of [true, false]) {
+    try {
+      await chrome.scripting.executeScript({ target: { tabId: tab.id, allFrames }, func: mark });
+      await chrome.scripting.executeScript({
+        target: { tabId: tab.id, allFrames },
+        files: ['content.js'],
+      });
+      return ok({ started: true, allFrames });
+    } catch (cause) {
+      if (!allFrames) {
+        const text = cause instanceof Error ? cause.message : '';
+        return fail(/gallery|webstore/i.test(text) ? 'ESTORE' : 'EINJECT');
+      }
+    }
+  }
+  return fail('EINJECT');
+}
+
+function fail(code: string) {
+  return err(describeError(code).message, code);
 }
 
 export interface StepProgress {
@@ -83,7 +98,8 @@ function emptyProgress(origin: string): StepProgress {
 async function readProgress(tabId: number, origin: string): Promise<StepProgress | null> {
   const key = progressKey(tabId);
   const stored = (await chrome.storage.session.get(key))[key] as StepProgress | undefined;
-  if (!stored || stored.origin !== origin || Date.now() - stored.updatedAt > PROGRESS_TTL_MS) return null;
+  if (!stored || stored.origin !== origin || Date.now() - stored.updatedAt > PROGRESS_TTL_MS)
+    return null;
   return stored;
 }
 
@@ -117,7 +133,10 @@ export function registerAutofillHandlers(): void {
    * This is the only path by which profile data reaches a page.
    */
   handle('content:request-mappings', async (request, sender) => {
-    const { scan, overrides } = request as Extract<ContentRequest, { type: 'content:request-mappings' }>;
+    const { scan, overrides } = request as Extract<
+      ContentRequest,
+      { type: 'content:request-mappings' }
+    >;
 
     const guard = validateScan(scan);
     if (!guard.ok) return err(guard.error, 'EBADSCAN');
@@ -131,10 +150,10 @@ export function registerAutofillHandlers(): void {
 
     const settings = await getSettings();
     if (!settings.activeProfileId) {
-      return err('No profile is set up yet. Import a resume first.', 'ENOPROFILE');
+      return fail('ENOPROFILE');
     }
     const profile = await getProfile(settings.activeProfileId);
-    if (!profile) return err('The active profile could not be loaded.', 'ENOPROFILE');
+    if (!profile) return fail('ENOPROFILE');
 
     // Paused rules are kept for the user to re-enable, but never applied.
     const saved = (await listMappings(origin)).filter((mapping) => !mapping.disabled);
@@ -183,11 +202,44 @@ export function registerAutofillHandlers(): void {
     return ok(saved);
   });
 
+  /**
+   * The practice form in onboarding is an extension page, so it cannot use
+   * the content-script path. Same guard, same planner; no site rules apply.
+   * Only Fillwright's own pages can send `ui:*` messages (see router).
+   */
+  handle('ui:practice-plan', async (request) => {
+    const { fields } = request as Extract<UiRequest, { type: 'ui:practice-plan' }>;
+    const guard = validateScan({ fields });
+    if (!guard.ok) return err(guard.error, 'EBADSCAN');
+    const settings = await getSettings();
+    if (!settings.activeProfileId) return fail('ENOPROFILE');
+    const profile = await getProfile(settings.activeProfileId);
+    if (!profile) return fail('ENOPROFILE');
+    const scan: ScanResult = {
+      url: '',
+      pageKey: 'practice',
+      adapterId: null,
+      scannedAt: new Date().toISOString(),
+      fields: guard.scan.fields,
+      mappings: buildMappings(guard.scan.fields, profile, settings, []),
+    };
+    return ok({
+      plan: buildFillPlan(scan, `${Date.now()}`, {
+        education: profile.education.length,
+        experience: profile.experience.length,
+      }),
+      profileName: profile.name,
+    });
+  });
+
   /** Optional, off by default, and metadata only. */
   handle('content:log-application', async (request, sender) => {
     const payload = request as Extract<ContentRequest, { type: 'content:log-application' }>;
     const origin = originFromUrl(sender.tab?.url ?? sender.url ?? '');
+    if (!origin) return err('Unknown sender', 'ENOSENDER');
+    const { activeProfileId } = await getSettings();
     const entry = await logApplication({
+      ...(activeProfileId ? { profileId: activeProfileId } : {}),
       company: sanitizeString(payload.company, 120),
       role: sanitizeString(payload.role, 120),
       origin,
@@ -207,9 +259,42 @@ export function registerAutofillHandlers(): void {
     const origin = originFromUrl(sender.tab?.url ?? sender.url ?? '');
     return ok({
       mode: settings.autofill.mode,
-      enabled: settings.ui.showFloatingWidget && Boolean(origin) && Boolean(settings.activeProfileId),
+      enabled:
+        settings.ui.showFloatingWidget && Boolean(origin) && Boolean(settings.activeProfileId),
       progress: sender.tab?.id !== undefined ? await readProgress(sender.tab.id, origin) : null,
     });
+  });
+
+  /**
+   * Scores a page for Assist/Smart. The fields go through the same guard as a
+   * scan; the page signals are capped here. Nothing is stored, and the reply
+   * is only a level.
+   */
+  handle('content:assess-page', async (request, sender) => {
+    const { fields, page } = request as Extract<ContentRequest, { type: 'content:assess-page' }>;
+    const settings = await getSettings();
+    if (settings.autofill.mode === 'manual') return err('Not in a proactive mode', 'EMANUAL');
+    const guard = validateScan({ fields });
+    if (!guard.ok) return err(guard.error, 'EBADSCAN');
+    const raw = (page ?? {}) as Record<string, unknown>;
+    const texts = (value: unknown, max: number) =>
+      Array.isArray(value) ? value.slice(0, max).map((item) => sanitizeString(item, 160)) : [];
+    let url = '';
+    try {
+      const parsed = new URL(sender.tab?.url ?? sender.url ?? '');
+      url = `${parsed.hostname}${parsed.pathname}`;
+    } catch {
+      url = '';
+    }
+    const verdict = scoreApplicationContext({
+      headings: texts(raw.headings, 12),
+      buttonLabels: texts(raw.buttonLabels, 60),
+      hasFileInput: raw.hasFileInput === true,
+      passwordFields: Math.max(0, Math.min(50, Math.trunc(Number(raw.passwordFields)) || 0)),
+      url,
+      fieldKinds: guard.scan.fields.map((field) => classifyField(field.signals).field),
+    });
+    return ok({ level: verdict.level });
   });
 
   handle('content:get-progress', async (_request, sender) => {
@@ -220,7 +305,10 @@ export function registerAutofillHandlers(): void {
 
   /** Counts per step of a multi-step application. Values are never recorded. */
   handle('content:step-progress', async (request, sender) => {
-    const { filled, stepKey } = request as Extract<ContentRequest, { type: 'content:step-progress' }>;
+    const { filled, stepKey } = request as Extract<
+      ContentRequest,
+      { type: 'content:step-progress' }
+    >;
     const origin = originFromUrl(sender.tab?.url ?? sender.url ?? '');
     if (sender.tab?.id === undefined || !origin) return err('Unknown sender', 'ENOSENDER');
     const key = sanitizeString(stepKey, 200);
@@ -245,23 +333,5 @@ export function registerAutofillHandlers(): void {
     // Counts only. Field values are never recorded, here or anywhere else.
     const filled = Array.isArray(outcomes) ? outcomes.filter((outcome) => outcome?.ok).length : 0;
     return ok({ filled });
-  });
-
-  /** Relays a fill request from the popup to the tab the user is looking at. */
-  handle('ui:request-fill', async (request) => {
-    const { entries } = request as Extract<UiRequest, { type: 'ui:request-fill' }>;
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (!tab?.id) return err('No active tab', 'ENOTAB');
-    const response = await chrome.tabs
-      .sendMessage(tab.id, { type: 'bg:fill', entries })
-      .catch(() => null);
-    return response ? ok(response) : err('The page did not respond.', 'ENORESP');
-  });
-
-  handle('ui:undo-fill', async () => {
-    const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-    if (!tab?.id) return err('No active tab', 'ENOTAB');
-    const response = await chrome.tabs.sendMessage(tab.id, { type: 'bg:undo' }).catch(() => null);
-    return response ? ok(response) : err('The page did not respond.', 'ENORESP');
   });
 }

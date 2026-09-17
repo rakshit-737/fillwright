@@ -43,7 +43,10 @@ const chromeMock = {
   },
   action: { openPopup: vi.fn(async () => undefined) },
   commands: { onCommand: { addListener: vi.fn() } },
-  permissions: { contains: vi.fn(async () => true), request: vi.fn(async () => true) },
+  permissions: {
+    contains: vi.fn(async (_query?: { origins?: string[] }) => true),
+    request: vi.fn(async () => true),
+  },
 };
 
 vi.stubGlobal('chrome', chromeMock);

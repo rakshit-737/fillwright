@@ -8,6 +8,10 @@ export interface Settings {
   /** Profile currently used for autofill. */
   activeProfileId: string | null;
   onboardingCompleted: boolean;
+  /** Where the user left onboarding, so it resumes if the tab was closed. */
+  onboardingStep: number;
+  /** Set once the practice form has been filled. */
+  onboardingTriedFill: boolean;
 
   autofill: {
     /** Never overwrite a field the user already typed into. Default: true. */
@@ -76,11 +80,13 @@ export interface Settings {
   version: number;
 }
 
-export const SETTINGS_VERSION = 1;
+export const SETTINGS_VERSION = 2;
 
 export const DEFAULT_SETTINGS: Settings = {
   activeProfileId: null,
   onboardingCompleted: false,
+  onboardingStep: 0,
+  onboardingTriedFill: false,
   autofill: {
     fillEmptyFieldsOnly: true,
     allowOverwrite: false,

@@ -1,5 +1,7 @@
 import type { FillOutcome, FillPlanEntry } from '@/types/fields';
 import { isCombobox, selectInCombobox } from './combobox';
+import { ariaOptionValue } from '@/field-detection/harvest';
+import { isPressSafe } from './press-guard';
 
 /**
  * Writes values into form controls.
@@ -145,27 +147,41 @@ interface Verdict {
  * mask that turns "9845012345" into "(984) 501-2345" has accepted the value,
  * while a control that silently reverted to empty has not.
  */
+/** What a combobox reported selecting, for the verification that follows. */
+const comboSelections = new WeakMap<HTMLElement, string[]>();
+
 export function verify(elements: HTMLElement[], intended: string): Verdict {
   const first = elements[0]!;
 
   // A combobox shows its selection as text somewhere in the control rather than
   // in a `value`, so the whole control is checked for it.
   if (!(first instanceof HTMLSelectElement) && isCombobox(first)) {
+    // Widgets show the choice beside the input (a chip, a single-value div),
+    // so the control and its immediate container are both read.
     const control = (first.closest('[role="combobox"], [aria-haspopup="listbox"]') ??
-      first.parentElement ??
       first) as HTMLElement;
-    const shown = `${currentValue(first)} ${control.textContent ?? ''}`;
-    return normalizeForCompare(shown).includes(normalizeForCompare(intended))
+    const shown = normalizeForCompare(
+      `${currentValue(first)} ${control.textContent ?? ''} ${control.parentElement?.textContent ?? ''}`,
+    );
+    const expected = comboSelections.get(first) ?? [intended];
+    return expected.every((label) => shown.includes(normalizeForCompare(label)))
       ? { ok: true, reason: '' }
       : { ok: false, reason: 'The dropdown did not keep the selection.' };
   }
 
   if (first instanceof HTMLInputElement && first.type === 'radio') {
     const checked = elements.find((element) => (element as HTMLInputElement).checked) as
-      | HTMLInputElement
-      | undefined;
+      HTMLInputElement | undefined;
     if (!checked) return { ok: false, reason: 'The page did not accept the selection.' };
     return matches(checked.value, intended) || matches(labelTextOf(checked), intended)
+      ? { ok: true, reason: '' }
+      : { ok: false, reason: 'A different option ended up selected.' };
+  }
+
+  if (isAriaRadio(first)) {
+    const checked = elements.find((element) => element.getAttribute('aria-checked') === 'true');
+    if (!checked) return { ok: false, reason: 'The page did not accept the selection.' };
+    return matches(ariaOptionValue(checked), intended)
       ? { ok: true, reason: '' }
       : { ok: false, reason: 'A different option ended up selected.' };
   }
@@ -233,13 +249,22 @@ function snapshot(fieldId: string, elements: HTMLElement[]): UndoRecord {
       previousCheckedValue: (checked as HTMLInputElement | undefined)?.value ?? '',
     };
   }
+  if (isAriaRadio(first)) {
+    const checked = elements.find((element) => element.getAttribute('aria-checked') === 'true');
+    const previous = checked ? ariaOptionValue(checked) : '';
+    return { fieldId, elements, previousValue: previous, previousCheckedValue: previous };
+  }
   return { fieldId, elements, previousValue: currentValue(first), previousCheckedValue: null };
 }
 
 function currentValue(element: HTMLElement): string {
   if (element instanceof HTMLSelectElement) return element.value;
   if (element instanceof HTMLInputElement) {
-    return element.type === 'checkbox' ? (element.checked ? element.value || 'on' : '') : element.value;
+    return element.type === 'checkbox'
+      ? element.checked
+        ? element.value || 'on'
+        : ''
+      : element.value;
   }
   if (element instanceof HTMLTextAreaElement) return element.value;
   if (element.isContentEditable) return element.textContent ?? '';
@@ -255,11 +280,15 @@ async function writeValue(elements: HTMLElement[], value: string): Promise<boole
   if (!(first instanceof HTMLSelectElement) && isCombobox(first)) {
     const result = await selectInCombobox(first, value);
     if (!result.ok) throw new Error(result.reason);
+    comboSelections.set(first, result.selected);
     return true;
   }
 
   if (first instanceof HTMLInputElement && first.type === 'radio') {
     return setRadioGroup(elements as HTMLInputElement[], value);
+  }
+  if (isAriaRadio(first)) {
+    return setAriaRadioGroup(elements, value);
   }
   if (first instanceof HTMLInputElement && first.type === 'checkbox') {
     return setCheckbox(first, value);
@@ -289,8 +318,14 @@ async function writeValue(elements: HTMLElement[], value: string): Promise<boole
  * prototype's setter directly updates the DOM underneath React, and the `input`
  * event that follows is what makes React adopt it.
  */
-export function setNativeValue(element: HTMLInputElement | HTMLTextAreaElement, value: string): void {
-  const prototype = element instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+export function setNativeValue(
+  element: HTMLInputElement | HTMLTextAreaElement,
+  value: string,
+): void {
+  const prototype =
+    element instanceof HTMLTextAreaElement
+      ? HTMLTextAreaElement.prototype
+      : HTMLInputElement.prototype;
   const descriptor = Object.getOwnPropertyDescriptor(prototype, 'value');
 
   element.focus({ preventScroll: true });
@@ -318,9 +353,33 @@ function setSelect(element: HTMLSelectElement, value: string): boolean {
   return true;
 }
 
+function isAriaRadio(element: HTMLElement): boolean {
+  return (
+    !(element instanceof HTMLInputElement) &&
+    element.getAttribute('role') === 'radio' &&
+    element.closest('[role="radiogroup"]') !== null
+  );
+}
+
+/**
+ * Selects an option in a button-based radio group by pressing it, as a person
+ * would. Only elements with role="radio" inside a role="radiogroup" are ever
+ * pressed — never a generic button.
+ */
+function setAriaRadioGroup(members: HTMLElement[], value: string): boolean {
+  const target = members.find((member) => matches(ariaOptionValue(member), value));
+  if (!target || !isAriaRadio(target) || !isPressSafe(target)) return false;
+  if (target.getAttribute('aria-checked') === 'true') return true;
+  target.focus({ preventScroll: true });
+  target.click();
+  target.blur();
+  return true;
+}
+
 function setRadioGroup(members: HTMLInputElement[], value: string): boolean {
   const target = members.find(
-    (member) => member.value === value || (member.labels?.[0]?.textContent ?? '').trim() === value.trim(),
+    (member) =>
+      member.value === value || (member.labels?.[0]?.textContent ?? '').trim() === value.trim(),
   );
   if (!target) return false;
   if (target.checked) return true;

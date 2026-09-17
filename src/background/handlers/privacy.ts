@@ -1,7 +1,13 @@
 import { handle, ok, err } from '../router';
 import { destroyDb, idb } from '@/storage/idb';
 import { clearHistory, listHistory } from '@/storage/history';
-import { clearMappings, deleteMapping, listMappings, saveMapping, updateMapping } from '@/storage/mappings';
+import {
+  clearMappings,
+  deleteMapping,
+  listMappings,
+  saveMapping,
+  updateMapping,
+} from '@/storage/mappings';
 import { clearSettings, getSettings, setSettings } from '@/storage/settings';
 import { listProfiles, getProfile, saveProfile } from '@/storage/profiles';
 import { originFromUrl, sanitizeString } from '@/security/validate';
@@ -37,10 +43,14 @@ export function registerPrivacyHandlers(): void {
   });
 
   handle('ui:update-saved-mapping', async (request) => {
-    const { id, canonical, disabled } = request as Extract<UiRequest, { type: 'ui:update-saved-mapping' }>;
+    const { id, canonical, disabled } = request as Extract<
+      UiRequest,
+      { type: 'ui:update-saved-mapping' }
+    >;
     const patch: { canonical?: CanonicalField; disabled?: boolean } = {};
     if (canonical !== undefined) {
-      if (!FIELD_CATALOG.some((entry) => entry.field === canonical)) return err('Unknown field', 'EBADFIELD');
+      if (!FIELD_CATALOG.some((entry) => entry.field === canonical))
+        return err('Unknown field', 'EBADFIELD');
       patch.canonical = canonical;
     }
     if (typeof disabled === 'boolean') patch.disabled = disabled;
@@ -100,9 +110,15 @@ export function registerPrivacyHandlers(): void {
     const existing = await listProfiles();
     let plan;
     try {
-      plan = parseImport(payload, existing.map((profile) => profile.name));
+      plan = parseImport(
+        payload,
+        existing.map((profile) => profile.name),
+      );
     } catch (cause) {
-      return err(cause instanceof Error ? cause.message : 'This file could not be read.', 'EBADIMPORT');
+      return err(
+        cause instanceof Error ? cause.message : 'This file could not be read.',
+        'EBADIMPORT',
+      );
     }
 
     // Written one by one: if the vault is locked, the first write throws and

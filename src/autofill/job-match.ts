@@ -1,6 +1,10 @@
 /**
  * Job description → profile match.
  *
+ * Trust boundary: the posting text is read in the content script (page data,
+ * untrusted); matching runs in the worker against the profile's skill names,
+ * and only skill names that already appear in the posting are returned.
+ *
  * Reads the job posting text that is already visible on the page and reports
  * which skills it mentions that the user's profile does, and does not, contain.
  *
@@ -33,17 +37,81 @@ export interface JobMatch {
  * and tell the user nothing.
  */
 const KNOWN_SKILLS = [
-  'Python', 'Java', 'JavaScript', 'TypeScript', 'Go', 'Golang', 'Rust', 'C++', 'C#', 'Ruby', 'PHP',
-  'Kotlin', 'Swift', 'Scala', 'SQL', 'NoSQL', 'PostgreSQL', 'MySQL', 'MongoDB', 'Redis', 'GraphQL',
-  'React', 'Angular', 'Vue', 'Next.js', 'Node.js', 'Django', 'Flask', 'FastAPI', 'Spring',
-  'Express', '.NET', 'HTML', 'CSS', 'Tailwind',
-  'AWS', 'Azure', 'GCP', 'Docker', 'Kubernetes', 'Terraform', 'Ansible', 'Linux', 'Git',
-  'CI/CD', 'Jenkins', 'Kafka', 'Spark', 'Hadoop', 'Airflow', 'Snowflake',
-  'TensorFlow', 'PyTorch', 'scikit-learn', 'Pandas', 'NumPy', 'Machine Learning', 'Deep Learning',
-  'NLP', 'Computer Vision', 'LLM',
-  'Figma', 'Tableau', 'Power BI', 'Excel',
-  'SIEM', 'Splunk', 'Wireshark', 'Burp Suite', 'Penetration Testing', 'OWASP', 'Metasploit',
-  'Nmap', 'Incident Response', 'Threat Modeling',
+  'Python',
+  'Java',
+  'JavaScript',
+  'TypeScript',
+  'Go',
+  'Golang',
+  'Rust',
+  'C++',
+  'C#',
+  'Ruby',
+  'PHP',
+  'Kotlin',
+  'Swift',
+  'Scala',
+  'SQL',
+  'NoSQL',
+  'PostgreSQL',
+  'MySQL',
+  'MongoDB',
+  'Redis',
+  'GraphQL',
+  'React',
+  'Angular',
+  'Vue',
+  'Next.js',
+  'Node.js',
+  'Django',
+  'Flask',
+  'FastAPI',
+  'Spring',
+  'Express',
+  '.NET',
+  'HTML',
+  'CSS',
+  'Tailwind',
+  'AWS',
+  'Azure',
+  'GCP',
+  'Docker',
+  'Kubernetes',
+  'Terraform',
+  'Ansible',
+  'Linux',
+  'Git',
+  'CI/CD',
+  'Jenkins',
+  'Kafka',
+  'Spark',
+  'Hadoop',
+  'Airflow',
+  'Snowflake',
+  'TensorFlow',
+  'PyTorch',
+  'scikit-learn',
+  'Pandas',
+  'NumPy',
+  'Machine Learning',
+  'Deep Learning',
+  'NLP',
+  'Computer Vision',
+  'LLM',
+  'Figma',
+  'Tableau',
+  'Power BI',
+  'Excel',
+  'SIEM',
+  'Splunk',
+  'Wireshark',
+  'Burp Suite',
+  'Penetration Testing',
+  'OWASP',
+  'Metasploit',
+  'Nmap',
+  'Incident Response',
+  'Threat Modeling',
 ];
 
 const POSTING_WORDS =
@@ -91,7 +159,7 @@ function canonical(term: string): string {
   const lower = term.trim().toLowerCase();
   const aliases: Record<string, string> = {
     golang: 'go',
-    'node': 'node.js',
+    node: 'node.js',
     nodejs: 'node.js',
     reactjs: 'react',
     'react.js': 'react',
@@ -104,7 +172,9 @@ function canonical(term: string): string {
 }
 
 function yearsFrom(text: string): number | null {
-  const match = text.match(/\b(\d{1,2})\s*\+?\s*(?:or more\s+)?years?(?:\s+of)?\s+(?:\w+\s+){0,3}experience\b/i);
+  const match = text.match(
+    /\b(\d{1,2})\s*\+?\s*(?:or more\s+)?years?(?:\s+of)?\s+(?:\w+\s+){0,3}experience\b/i,
+  );
   if (!match) return null;
   const years = Number(match[1]);
   return years > 0 && years < 40 ? years : null;
@@ -121,6 +191,8 @@ export function collectPostingText(doc: Document): string {
     ),
   ).filter((node) => !node.closest('[data-fillwright-ui]') && !node.closest('form'));
 
-  const source = candidates.sort((a, b) => (b.textContent?.length ?? 0) - (a.textContent?.length ?? 0))[0];
+  const source = candidates.sort(
+    (a, b) => (b.textContent?.length ?? 0) - (a.textContent?.length ?? 0),
+  )[0];
   return (source?.textContent ?? '').replace(/\s+/g, ' ').trim().slice(0, MAX_TEXT);
 }

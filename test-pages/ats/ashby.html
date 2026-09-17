@@ -1,0 +1,112 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Application — Machine Learning Engineer @ Acme</title>
+    <link rel="stylesheet" href="../shared.css" />
+    <style>
+      ._option { border: 1px solid #ccc; border-radius: 6px; padding: 4px 10px; margin-right: 6px; background: #fff; }
+      ._option[aria-checked='true'] { background: #4b3ecf; color: #fff; }
+    </style>
+  </head>
+  <body>
+    <div class="ashby-job-posting-right-pane">
+      <h1>Machine Learning Engineer</h1>
+      <p class="lead">
+        Expected (Ashby markup): React-controlled inputs that keep their own state (a value set
+        without the right events is reverted on the next render), and radio groups rendered as
+        buttons with role="radio" and aria-checked. "Preferred work setting" is answered from the
+        profile by pressing the matching option; "Are you willing to relocate?" is a sensitive
+        question with no saved answer and is left alone. The "Submit Application" button is never
+        pressed.
+      </p>
+      <div id="root"></div>
+    </div>
+    <script>
+      // A minimal controlled-input model: state is the source of truth, and
+      // every render writes state back into the DOM.
+      const state = { name: '', email: '', phone: '', linkedin: '', workMode: '', relocate: '' };
+      window.__state = state;
+      window.__submitted = false;
+      const root = document.getElementById('root');
+      const inputs = {};
+
+      function render() {
+        for (const [key, input] of Object.entries(inputs)) {
+          if (input.value !== state[key]) input.value = state[key];
+        }
+        document.querySelectorAll('[role=radio]').forEach((option) => {
+          const group = option.closest('[role=radiogroup]').dataset.key;
+          option.setAttribute('aria-checked', String(state[group] === option.dataset.value));
+        });
+      }
+
+      function textField(key, label, type = 'text') {
+        const wrap = document.createElement('div');
+        wrap.className = 'ashby-application-form-field-entry';
+        const id = `_systemfield_${key}`;
+        const lab = document.createElement('label');
+        lab.htmlFor = id;
+        lab.className = 'ashby-application-form-question-title';
+        lab.textContent = label;
+        const input = document.createElement('input');
+        input.id = id;
+        input.name = id;
+        input.type = type;
+        // React listens for 'input'; anything else is overwritten on render.
+        input.addEventListener('input', () => {
+          state[key] = input.value;
+          render();
+        });
+        inputs[key] = input;
+        wrap.append(lab, input);
+        root.appendChild(wrap);
+      }
+
+      function radioField(key, label, options) {
+        const wrap = document.createElement('fieldset');
+        wrap.className = 'ashby-application-form-field-entry';
+        const legend = document.createElement('legend');
+        legend.id = `q-${key}`;
+        legend.textContent = label;
+        const group = document.createElement('div');
+        group.setAttribute('role', 'radiogroup');
+        group.setAttribute('aria-labelledby', `q-${key}`);
+        group.dataset.key = key;
+        for (const option of options) {
+          const button = document.createElement('button');
+          button.type = 'button';
+          button.className = '_option';
+          button.setAttribute('role', 'radio');
+          button.setAttribute('aria-checked', 'false');
+          button.dataset.value = option;
+          button.textContent = option;
+          button.addEventListener('click', () => {
+            state[key] = option;
+            render();
+          });
+          group.appendChild(button);
+        }
+        wrap.append(legend, group);
+        root.appendChild(wrap);
+      }
+
+      textField('name', 'Name');
+      textField('email', 'Email', 'email');
+      textField('phone', 'Phone', 'tel');
+      textField('linkedin', 'LinkedIn Profile');
+      radioField('workMode', 'Preferred work setting', ['Remote', 'Hybrid', 'Onsite']);
+      radioField('relocate', 'Are you willing to relocate?', ['Yes', 'No']);
+
+      const submit = document.createElement('button');
+      submit.type = 'button';
+      submit.className = 'ashby-application-form-submit-button';
+      submit.textContent = 'Submit Application';
+      submit.addEventListener('click', () => (window.__submitted = true));
+      root.appendChild(submit);
+
+      // Re-render periodically, as a busy React tree would.
+      setInterval(render, 200);
+    </script>
+  </body>
+</html>

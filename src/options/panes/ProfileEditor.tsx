@@ -1,6 +1,16 @@
+import { useId, useState } from 'react';
 import { useProfile, saveStateLabel } from '../useProfile';
+import { LoadError } from '@/components/LoadError';
+import { AutofillPreview } from '@/components/AutofillPreview';
+import { checkEmail, checkPhone, checkUrl, splitList } from '@/profile/input-checks';
 import { EntryList, moveItem } from '@/components/EntryList';
-import { CheckField, PlainField, SelectField, TagsField, TrackedField } from '@/components/TrackedField';
+import {
+  CheckField,
+  PlainField,
+  SelectField,
+  TagsField,
+  TrackedField,
+} from '@/components/TrackedField';
 import { Readiness } from '@/components/Readiness';
 import { newId, provenance } from '@/profile/factory';
 import {
@@ -41,18 +51,28 @@ export function ProfileEditor({ settings }: { settings: Settings | null }) {
   if (editor.loading) {
     return (
       <div className="fw-pane" role="status" aria-live="polite">
-        <span className="fw-spinner" aria-hidden="true" /> <span className="fw-muted">Loading your profile…</span>
+        <span className="fw-spinner" aria-hidden="true" />{' '}
+        <span className="fw-muted">Loading your profile…</span>
       </div>
     );
   }
 
   if (!profile) {
+    if (editor.error) {
+      return (
+        <LoadError
+          message={editor.error}
+          actionLabel={editor.errorCode === 'ELOCKED' ? 'Unlock Fillwright' : 'Try again'}
+          onRetry={() =>
+            editor.errorCode === 'ELOCKED' ? (location.hash = '#/security') : editor.reload()
+          }
+        />
+      );
+    }
     return (
       <div className="fw-pane">
         <h1 className="fw-pane__title">Profile</h1>
-        <p className="fw-muted">
-          {editor.error || 'No profile is active yet. Import a resume to create one.'}
-        </p>
+        <p className="fw-muted">No profile is active yet. Import a resume to create one.</p>
       </div>
     );
   }
@@ -64,9 +84,18 @@ export function ProfileEditor({ settings }: { settings: Settings | null }) {
       <header className="fw-pane__header">
         <div className="fw-pane__titlerow">
           <h1 className="fw-pane__title">{profile.name}</h1>
-          <span className={`fw-savestate fw-savestate--${editor.saveState}`} role="status" aria-live="polite">
+          <span
+            className={`fw-savestate fw-savestate--${editor.saveState}`}
+            role="status"
+            aria-live="polite"
+          >
             {status}
           </span>
+          {editor.saveState === 'error' && (
+            <button className="fw-btn fw-btn--sm" onClick={() => void editor.flush()}>
+              {editor.errorCode === 'ELOCKED' ? 'Unlock, then retry' : 'Retry saving'}
+            </button>
+          )}
         </div>
         <p className="fw-pane__subtitle">
           Everything here stays on this device. Edits you make are never replaced by a future resume
@@ -121,6 +150,15 @@ export function ProfileEditor({ settings }: { settings: Settings | null }) {
             onChange={(next) => update((draft) => void (draft.personal.pronouns = next))}
           />
         </div>
+        <AutofillPreview
+          profile={profile}
+          fields={[
+            'personal.firstName',
+            'personal.lastName',
+            'personal.fullName',
+            'personal.preferredName',
+          ]}
+        />
       </section>
 
       {/* ----------------------------------------------------------- contact */}
@@ -130,6 +168,7 @@ export function ProfileEditor({ settings }: { settings: Settings | null }) {
           <TrackedField
             label="Email"
             type="email"
+            check={checkEmail}
             value={profile.personal.email}
             important
             onChange={(next) => update((draft) => void (draft.personal.email = next))}
@@ -137,6 +176,7 @@ export function ProfileEditor({ settings }: { settings: Settings | null }) {
           <TrackedField
             label="Phone"
             type="tel"
+            check={checkPhone}
             value={profile.personal.phone}
             important
             hint="Include the country code if you apply internationally."
@@ -145,6 +185,7 @@ export function ProfileEditor({ settings }: { settings: Settings | null }) {
           <TrackedField
             label="Alternate email"
             type="email"
+            check={checkEmail}
             value={profile.personal.alternateEmail}
             onChange={(next) => update((draft) => void (draft.personal.alternateEmail = next))}
           />
@@ -186,6 +227,17 @@ export function ProfileEditor({ settings }: { settings: Settings | null }) {
             onChange={(next) => update((draft) => void (draft.address.country = next))}
           />
         </div>
+        <AutofillPreview
+          profile={profile}
+          fields={[
+            'personal.email',
+            'personal.phone',
+            'address.city',
+            'address.state',
+            'address.country',
+            'address.formatted',
+          ]}
+        />
       </section>
 
       {/* ------------------------------------------------------------- links */}
@@ -195,6 +247,7 @@ export function ProfileEditor({ settings }: { settings: Settings | null }) {
           <TrackedField
             label="LinkedIn"
             type="url"
+            check={checkUrl}
             value={profile.links.linkedin}
             important
             onChange={(next) => update((draft) => void (draft.links.linkedin = next))}
@@ -202,34 +255,43 @@ export function ProfileEditor({ settings }: { settings: Settings | null }) {
           <TrackedField
             label="GitHub"
             type="url"
+            check={checkUrl}
             value={profile.links.github}
             onChange={(next) => update((draft) => void (draft.links.github = next))}
           />
           <TrackedField
             label="Portfolio"
             type="url"
+            check={checkUrl}
             value={profile.links.portfolio}
             onChange={(next) => update((draft) => void (draft.links.portfolio = next))}
           />
           <TrackedField
             label="Personal website"
             type="url"
+            check={checkUrl}
             value={profile.links.website}
             onChange={(next) => update((draft) => void (draft.links.website = next))}
           />
           <TrackedField
             label="Twitter / X"
             type="url"
+            check={checkUrl}
             value={profile.links.twitter}
             onChange={(next) => update((draft) => void (draft.links.twitter = next))}
           />
           <TrackedField
             label="Stack Overflow"
             type="url"
+            check={checkUrl}
             value={profile.links.stackoverflow}
             onChange={(next) => update((draft) => void (draft.links.stackoverflow = next))}
           />
         </div>
+        <AutofillPreview
+          profile={profile}
+          fields={['links.linkedin', 'links.github', 'links.portfolio', 'links.website']}
+        />
       </section>
 
       {/* ----------------------------------------------------------- summary */}
@@ -246,6 +308,19 @@ export function ProfileEditor({ settings }: { settings: Settings | null }) {
 
       {/* --------------------------------------------------------- education */}
       <EntryList<EducationEntry>
+        footer={
+          <AutofillPreview
+            profile={profile}
+            entries={Math.min(3, profile.education.length)}
+            fields={[
+              'education.institution',
+              'education.degree',
+              'education.major',
+              'education.graduationDate',
+              'education.gpa',
+            ]}
+          />
+        }
         title="Education"
         entries={profile.education}
         keyOf={(entry) => entry.id}
@@ -359,6 +434,19 @@ export function ProfileEditor({ settings }: { settings: Settings | null }) {
 
       {/* -------------------------------------------------------- experience */}
       <EntryList<ExperienceEntry>
+        footer={
+          <AutofillPreview
+            profile={profile}
+            entries={Math.min(3, profile.experience.length)}
+            fields={[
+              'experience.company',
+              'experience.title',
+              'experience.startDate',
+              'experience.endDate',
+              'experience.yearsOfExperience',
+            ]}
+          />
+        }
         title="Experience"
         description="Roles, internships and contract work."
         entries={profile.experience}
@@ -369,7 +457,9 @@ export function ProfileEditor({ settings }: { settings: Settings | null }) {
             entry.title && entry.company ? entry.company : '',
             entry.current
               ? `${formatDate(entry.startDate)} – Present`
-              : [formatDate(entry.startDate), formatDate(entry.endDate)].filter(Boolean).join(' – '),
+              : [formatDate(entry.startDate), formatDate(entry.endDate)]
+                  .filter(Boolean)
+                  .join(' – '),
           ]
             .filter(Boolean)
             .join(' · '),
@@ -416,7 +506,10 @@ export function ProfileEditor({ settings }: { settings: Settings | null }) {
                 ['other', 'Other'],
               ]}
               onChange={(value) =>
-                set((draft) => void (draft.employmentType = value as ExperienceEntry['employmentType']))
+                set(
+                  (draft) =>
+                    void (draft.employmentType = value as ExperienceEntry['employmentType']),
+                )
               }
             />
             <SelectField
@@ -526,12 +619,14 @@ export function ProfileEditor({ settings }: { settings: Settings | null }) {
               label="Live URL"
               value={entry.url}
               type="url"
+              check={checkUrl}
               onChange={(value) => set((draft) => void (draft.url = value))}
             />
             <PlainField
               label="Repository"
               value={entry.repositoryUrl}
               type="url"
+              check={checkUrl}
               onChange={(value) => set((draft) => void (draft.repositoryUrl = value))}
             />
             <div className="fw-grid2__full">
@@ -615,7 +710,8 @@ export function ProfileEditor({ settings }: { settings: Settings | null }) {
                   onChange={(event) =>
                     update((draft) => {
                       const target = draft.skills[index];
-                      if (target) target.proficiency = event.target.value as SkillEntry['proficiency'];
+                      if (target)
+                        target.proficiency = event.target.value as SkillEntry['proficiency'];
                     })
                   }
                 >
@@ -636,6 +732,15 @@ export function ProfileEditor({ settings }: { settings: Settings | null }) {
             ))}
           </ul>
         )}
+        <BulkSkills
+          existing={profile.skills.map((skill) => skill.name)}
+          onAdd={(names) =>
+            update((draft) => {
+              for (const name of names) draft.skills.push({ ...emptySkill(), name });
+            })
+          }
+        />
+        <AutofillPreview profile={profile} fields={['profile.skills']} />
       </section>
 
       {/* ---------------------------------------------------- certifications */}
@@ -654,7 +759,8 @@ export function ProfileEditor({ settings }: { settings: Settings | null }) {
         onRemove={(index) => update((draft) => void draft.certifications.splice(index, 1))}
         onMove={(index, direction) =>
           update(
-            (draft) => void (draft.certifications = moveItem(draft.certifications, index, direction)),
+            (draft) =>
+              void (draft.certifications = moveItem(draft.certifications, index, direction)),
           )
         }
         onUpdate={(index, mutate) =>
@@ -668,12 +774,39 @@ export function ProfileEditor({ settings }: { settings: Settings | null }) {
         }
         renderEditor={(entry, set) => (
           <div className="fw-grid2">
-            <PlainField label="Name" value={entry.name} onChange={(v) => set((d) => void (d.name = v))} />
-            <PlainField label="Issuer" value={entry.issuer} onChange={(v) => set((d) => void (d.issuer = v))} />
-            <PlainField label="Issued" value={entry.issueDate} placeholder="2025-03" onChange={(v) => set((d) => void (d.issueDate = v))} />
-            <PlainField label="Expires" value={entry.expiryDate} onChange={(v) => set((d) => void (d.expiryDate = v))} />
-            <PlainField label="Credential ID" value={entry.credentialId} onChange={(v) => set((d) => void (d.credentialId = v))} />
-            <PlainField label="Credential URL" type="url" value={entry.credentialUrl} onChange={(v) => set((d) => void (d.credentialUrl = v))} />
+            <PlainField
+              label="Name"
+              value={entry.name}
+              onChange={(v) => set((d) => void (d.name = v))}
+            />
+            <PlainField
+              label="Issuer"
+              value={entry.issuer}
+              onChange={(v) => set((d) => void (d.issuer = v))}
+            />
+            <PlainField
+              label="Issued"
+              value={entry.issueDate}
+              placeholder="2025-03"
+              onChange={(v) => set((d) => void (d.issueDate = v))}
+            />
+            <PlainField
+              label="Expires"
+              value={entry.expiryDate}
+              onChange={(v) => set((d) => void (d.expiryDate = v))}
+            />
+            <PlainField
+              label="Credential ID"
+              value={entry.credentialId}
+              onChange={(v) => set((d) => void (d.credentialId = v))}
+            />
+            <PlainField
+              label="Credential URL"
+              type="url"
+              check={checkUrl}
+              value={entry.credentialUrl}
+              onChange={(v) => set((d) => void (d.credentialUrl = v))}
+            />
           </div>
         )}
       />
@@ -693,7 +826,9 @@ export function ProfileEditor({ settings }: { settings: Settings | null }) {
         onAdd={() => update((draft) => void draft.achievements.unshift(emptyAchievement()))}
         onRemove={(index) => update((draft) => void draft.achievements.splice(index, 1))}
         onMove={(index, direction) =>
-          update((draft) => void (draft.achievements = moveItem(draft.achievements, index, direction)))
+          update(
+            (draft) => void (draft.achievements = moveItem(draft.achievements, index, direction)),
+          )
         }
         onUpdate={(index, mutate) =>
           update((draft) => {
@@ -706,9 +841,21 @@ export function ProfileEditor({ settings }: { settings: Settings | null }) {
         }
         renderEditor={(entry, set) => (
           <div className="fw-grid2">
-            <PlainField label="Title" value={entry.title} onChange={(v) => set((d) => void (d.title = v))} />
-            <PlainField label="Date" value={entry.date} onChange={(v) => set((d) => void (d.date = v))} />
-            <PlainField label="Awarded by" value={entry.issuer} onChange={(v) => set((d) => void (d.issuer = v))} />
+            <PlainField
+              label="Title"
+              value={entry.title}
+              onChange={(v) => set((d) => void (d.title = v))}
+            />
+            <PlainField
+              label="Date"
+              value={entry.date}
+              onChange={(v) => set((d) => void (d.date = v))}
+            />
+            <PlainField
+              label="Awarded by"
+              value={entry.issuer}
+              onChange={(v) => set((d) => void (d.issuer = v))}
+            />
             <div className="fw-grid2__full">
               <PlainField
                 label="Details"
@@ -749,7 +896,11 @@ export function ProfileEditor({ settings }: { settings: Settings | null }) {
         }
         renderEditor={(entry, set) => (
           <div className="fw-grid2">
-            <PlainField label="Language" value={entry.name} onChange={(v) => set((d) => void (d.name = v))} />
+            <PlainField
+              label="Language"
+              value={entry.name}
+              onChange={(v) => set((d) => void (d.name = v))}
+            />
             <SelectField
               label="Proficiency"
               value={entry.proficiency}
@@ -774,21 +925,22 @@ export function ProfileEditor({ settings }: { settings: Settings | null }) {
             <h2 className="fw-section__title">Other information</h2>
             <p className="fw-field__hint">
               Anything a form asks for that does not fit above — a candidate ID, a referral code, a
-              student number. You can map a site&rsquo;s field to one of these when Fillwright cannot
-              identify it.
+              student number. You can map a site&rsquo;s field to one of these when Fillwright
+              cannot identify it.
             </p>
           </div>
           <button
             className="fw-btn fw-btn--sm"
             onClick={() =>
-              update((draft) =>
-                void draft.custom.push({
-                  id: newId('cf'),
-                  key: `custom${draft.custom.length + 1}`,
-                  label: '',
-                  value: '',
-                  provenance: userProv(),
-                }),
+              update(
+                (draft) =>
+                  void draft.custom.push({
+                    id: newId('cf'),
+                    key: `custom${draft.custom.length + 1}`,
+                    label: '',
+                    value: '',
+                    provenance: userProv(),
+                  }),
               )
             }
           >
@@ -845,3 +997,42 @@ export function ProfileEditor({ settings }: { settings: Settings | null }) {
   );
 }
 
+/** Paste a list of skills — comma, semicolon or line separated. */
+function BulkSkills({ existing, onAdd }: { existing: string[]; onAdd: (names: string[]) => void }) {
+  const [text, setText] = useState('');
+  const [note, setNote] = useState('');
+  const id = useId();
+  const add = () => {
+    const names = splitList(text, existing);
+    if (names.length === 0) {
+      setNote('Nothing new to add — those skills are already listed.');
+      return;
+    }
+    onAdd(names);
+    setText('');
+    setNote(`Added ${names.length} skill${names.length === 1 ? '' : 's'}.`);
+  };
+  return (
+    <div className="fw-bulk">
+      <label className="fw-tf__label" htmlFor={id}>
+        Add several at once
+      </label>
+      <div className="fw-bulk__row">
+        <textarea
+          id={id}
+          className="fw-textarea"
+          rows={2}
+          value={text}
+          placeholder="Python, React, PostgreSQL"
+          onChange={(event) => setText(event.target.value)}
+        />
+        <button className="fw-btn fw-btn--sm" onClick={add} disabled={!text.trim()}>
+          Add skills
+        </button>
+      </div>
+      <p className="fw-field__hint" role="status">
+        {note || 'Separate with commas or new lines. Duplicates are skipped.'}
+      </p>
+    </div>
+  );
+}

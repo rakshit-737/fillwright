@@ -38,7 +38,10 @@ export function extractDocx(bytes: ArrayBuffer): ExtractedText {
     if (extra.trim()) parts.push(extra);
   }
 
-  const text = parts.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+  const text = parts
+    .join('\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
 
   if (!text) {
     throw new ExtractionError(
@@ -104,8 +107,15 @@ export function xmlToText(xml: string): string {
 
   return out
     .split('\n')
-    .map((line) => line.replace(/\t+/g, '\t').replace(/[ \t]+$/, '').trimEnd())
-    .filter((line, index, all) => line.trim().length > 0 || (all[index - 1] ?? '').trim().length > 0)
+    .map((line) =>
+      line
+        .replace(/\t+/g, '\t')
+        .replace(/[ \t]+$/, '')
+        .trimEnd(),
+    )
+    .filter(
+      (line, index, all) => line.trim().length > 0 || (all[index - 1] ?? '').trim().length > 0,
+    )
     .join('\n');
 }
 

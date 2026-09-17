@@ -61,7 +61,9 @@ describe('value resolution', () => {
   it('resolves stored profile values', () => {
     const profile = testProfile();
     expect(resolveValue('personal.firstName', profile).value).toBe('Aditi');
-    expect(resolveValue('education.institution', profile).value).toBe('Vellore Institute of Technology');
+    expect(resolveValue('education.institution', profile).value).toBe(
+      'Vellore Institute of Technology',
+    );
     expect(resolveValue('education.graduationDate', profile).value).toBe('2026-05');
   });
 
@@ -243,14 +245,16 @@ describe('the fill plan', () => {
   });
 
   it('never fills a referee field with the candidate details', () => {
-    document.body.innerHTML = '<label for="a">Referee Email Address</label><input id="a" type="email">';
+    document.body.innerHTML =
+      '<label for="a">Referee Email Address</label><input id="a" type="email">';
     const { plan } = scanOf(testProfile());
     const entry = plan.entries[0];
     expect(entry?.newValue ?? '').toBe('');
   });
 
   it('always confirms a background-check consent, even with an answer saved', () => {
-    document.body.innerHTML = '<label for="a">Do you consent to a background check?</label><input id="a">';
+    document.body.innerHTML =
+      '<label for="a">Do you consent to a background check?</label><input id="a">';
     const profile = testProfile();
     profile.sensitive.background.backgroundCheckConsent = 'yes';
     const { plan } = scanOf(profile);

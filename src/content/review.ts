@@ -1,6 +1,6 @@
 import type { CanonicalField, FieldSignals, FillPlanEntry, MappingStatus } from '@/types/fields';
 import { FIELD_CATALOG, catalogGroups } from '@/field-detection/catalog';
-import { STATUS_LABELS } from '@/autofill/plan';
+import { STATUS_LABELS } from '@/autofill/status';
 
 /**
  * The review row.
@@ -57,9 +57,7 @@ export function renderReviewList(
   list.setAttribute('aria-label', 'Fields Fillwright found');
 
   for (const entry of entries) {
-    list.appendChild(
-      renderRow(entry, selection, expandedExplanations, teaching, callbacks),
-    );
+    list.appendChild(renderRow(entry, selection, expandedExplanations, teaching, callbacks));
   }
 
   return list;
@@ -84,9 +82,7 @@ function renderRow(
     checkbox.className = 'fw-check';
     checkbox.checked = selection.has(entry.fieldId);
     checkbox.id = `fw-check-${entry.fieldId}`;
-    checkbox.addEventListener('change', () =>
-      callbacks.onToggle(entry.fieldId, checkbox.checked),
-    );
+    checkbox.addEventListener('change', () => callbacks.onToggle(entry.fieldId, checkbox.checked));
     row.appendChild(checkbox);
   } else {
     row.appendChild(el('span', 'fw-check fw-check--spacer'));
@@ -160,7 +156,11 @@ function renderRow(
   // better. Unrecognised fields are phrased as a question instead.
   if (entry.fingerprint) {
     const opening = teaching.has(entry.fieldId);
-    const label = opening ? 'Cancel' : entry.canonical === 'unknown' ? 'Set what this is' : 'Change';
+    const label = opening
+      ? 'Cancel'
+      : entry.canonical === 'unknown'
+        ? 'Set what this is'
+        : 'Change';
     const change = button(label, 'fw-link', () => {
       if (teaching.has(entry.fieldId)) teaching.delete(entry.fieldId);
       else teaching.add(entry.fieldId);
@@ -175,7 +175,9 @@ function renderRow(
     callbacks.canDraft?.(entry) &&
     !callbacks.drafts?.has(entry.fieldId)
   ) {
-    tools.appendChild(button('Draft with on-device AI', 'fw-link', () => callbacks.onDraftStart?.(entry)));
+    tools.appendChild(
+      button('Draft with on-device AI', 'fw-link', () => callbacks.onDraftStart?.(entry)),
+    );
   }
 
   if (tools.childElementCount > 0) item.appendChild(tools);
@@ -208,9 +210,7 @@ function renderRow(
 function renderTeachPicker(entry: FillPlanEntry, callbacks: ReviewCallbacks): HTMLElement {
   const panel = el('div', 'fw-teach');
 
-  panel.appendChild(
-    el('p', 'fw-teach__lead', `What does “${entry.label}” ask for?`),
-  );
+  panel.appendChild(el('p', 'fw-teach__lead', `What does “${entry.label}” ask for?`));
 
   const select = document.createElement('select');
   select.className = 'fw-teach__select';
@@ -303,12 +303,21 @@ function renderWhy(entry: FillPlanEntry): HTMLElement {
  * on-device model and untick any; generate; then read, edit and choose to use
  * it. Nothing reaches the form until "Use this answer" is pressed.
  */
-function renderDraft(entry: FillPlanEntry, draft: DraftView, callbacks: ReviewCallbacks): HTMLElement {
+function renderDraft(
+  entry: FillPlanEntry,
+  draft: DraftView,
+  callbacks: ReviewCallbacks,
+): HTMLElement {
   const panel = el('div', 'fw-teach fw-draft');
-  panel.setAttribute('aria-busy', String(draft.phase === 'loading' || draft.phase === 'generating'));
+  panel.setAttribute(
+    'aria-busy',
+    String(draft.phase === 'loading' || draft.phase === 'generating'),
+  );
 
   const actions = el('div', 'fw-teach__actions');
-  const cancel = button('Cancel', 'fw-btn fw-btn--ghost fw-btn--sm', () => callbacks.onDraftCancel?.(entry));
+  const cancel = button('Cancel', 'fw-btn fw-btn--ghost fw-btn--sm', () =>
+    callbacks.onDraftCancel?.(entry),
+  );
 
   if (draft.phase === 'loading') {
     panel.appendChild(el('p', 'fw-note', 'Checking the on-device model…'));
@@ -352,8 +361,10 @@ function renderDraft(entry: FillPlanEntry, draft: DraftView, callbacks: ReviewCa
     panel.appendChild(list);
 
     actions.appendChild(cancel);
-    const generate = button(busy ? 'Writing…' : 'Write a draft', 'fw-btn fw-btn--primary fw-btn--sm', () =>
-      callbacks.onDraftGenerate?.(entry, [...draft.chosen]),
+    const generate = button(
+      busy ? 'Writing…' : 'Write a draft',
+      'fw-btn fw-btn--primary fw-btn--sm',
+      () => callbacks.onDraftGenerate?.(entry, [...draft.chosen]),
     );
     generate.disabled = busy;
     actions.appendChild(generate);
@@ -373,7 +384,9 @@ function renderDraft(entry: FillPlanEntry, draft: DraftView, callbacks: ReviewCa
     draft.text = area.value;
   });
   panel.appendChild(area);
-  panel.appendChild(el('p', 'fw-note', 'Check every claim. A model can state things that are not true about you.'));
+  panel.appendChild(
+    el('p', 'fw-note', 'Check every claim. A model can state things that are not true about you.'),
+  );
 
   actions.appendChild(cancel);
   actions.appendChild(

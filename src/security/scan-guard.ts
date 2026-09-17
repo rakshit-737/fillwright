@@ -18,13 +18,25 @@ const MAX_LABEL = 600;
 const MAX_VALUE = 5_000;
 
 const CONTROL_KINDS: ReadonlySet<string> = new Set<ControlKind>([
-  'text', 'email', 'tel', 'url', 'number', 'date', 'month', 'textarea', 'select',
-  'radio-group', 'checkbox', 'checkbox-group', 'file', 'contenteditable', 'combobox', 'unsupported',
+  'text',
+  'email',
+  'tel',
+  'url',
+  'number',
+  'date',
+  'month',
+  'textarea',
+  'select',
+  'radio-group',
+  'checkbox',
+  'checkbox-group',
+  'file',
+  'contenteditable',
+  'combobox',
+  'unsupported',
 ]);
 
-export type ScanGuardResult =
-  | { ok: true; scan: ScanResult }
-  | { ok: false; error: string };
+export type ScanGuardResult = { ok: true; scan: ScanResult } | { ok: false; error: string };
 
 export function validateScan(input: unknown): ScanGuardResult {
   if (!isPlainObject(input)) return { ok: false, error: 'Scan is not an object' };
@@ -79,7 +91,10 @@ export function validateScan(input: unknown): ScanGuardResult {
       visible: sanitizeBoolean(raw.visible, true),
       disabled: sanitizeBoolean(raw.disabled),
       readOnly: sanitizeBoolean(raw.readOnly),
-      order: typeof raw.order === 'number' && Number.isFinite(raw.order) ? Math.trunc(raw.order) : fields.length,
+      order:
+        typeof raw.order === 'number' && Number.isFinite(raw.order)
+          ? Math.trunc(raw.order)
+          : fields.length,
       selectorHint: sanitizeString(raw.selectorHint, 240),
       groupSignature: sanitizeString(raw.groupSignature, 400) || null,
       groupOrdinal:

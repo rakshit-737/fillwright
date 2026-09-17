@@ -1,0 +1,61 @@
+/*
+ * The onboarding practice form. Plain, like a real job board.
+ * Trust boundary: static CSS for an extension page.
+ */
+.practice {
+  max-width: 40rem;
+  margin: 0 auto;
+  padding: var(--fw-space-8) var(--fw-space-4) 12rem;
+}
+
+.practice h1 {
+  font-size: var(--fw-text-2xl);
+  margin: var(--fw-space-4) 0 var(--fw-space-2);
+}
+
+.practice h2 {
+  font-size: var(--fw-text-md);
+  margin: var(--fw-space-6) 0 var(--fw-space-2);
+}
+
+.practice__lead {
+  color: var(--fw-ink-muted);
+}
+
+.practice__banner {
+  padding: var(--fw-space-3) var(--fw-space-4);
+  border-radius: var(--fw-radius);
+  background: var(--fw-accent-soft);
+  color: var(--fw-ink);
+  font-size: var(--fw-text-sm);
+}
+
+.practice label {
+  display: block;
+  margin-top: var(--fw-space-3);
+  font-size: var(--fw-text-sm);
+  font-weight: 600;
+}
+
+.practice input,
+.practice textarea {
+  width: 100%;
+  margin-top: var(--fw-space-1);
+  padding: var(--fw-space-2);
+  border: 1px solid var(--fw-line-strong);
+  border-radius: var(--fw-radius-sm);
+  background: var(--fw-surface);
+  color: var(--fw-ink);
+  font: inherit;
+}
+
+.practice button[type='submit'] {
+  margin-top: var(--fw-space-6);
+  padding: var(--fw-space-2) var(--fw-space-4);
+  border: 1px solid var(--fw-line-strong);
+  border-radius: var(--fw-radius);
+  background: var(--fw-surface);
+  color: var(--fw-ink);
+  font: inherit;
+  cursor: pointer;
+}

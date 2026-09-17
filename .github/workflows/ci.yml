@@ -25,6 +25,13 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      - name: Formatting
+        run: npx prettier --check "src/**/*.{ts,tsx,css}" "tests/**/*.{ts,mjs}" "scripts/**/*.mjs"
+
+      # Fails on any high or critical advisory, in shipped or tooling packages.
+      - name: Dependency audit
+        run: npm run audit
+
       - name: Unit and integration tests
         run: npm test
 
@@ -37,6 +44,10 @@ jobs:
       # are enforced by the build rather than by review.
       - name: Verify the build
         run: npm run verify
+
+      # Packages the zip and inspects it for anything that must not ship.
+      - name: Pre-submission check
+        run: node scripts/package.mjs && node scripts/presubmit.mjs --no-build
 
   browser:
     name: End-to-end in Chrome
@@ -57,6 +68,11 @@ jobs:
       # every flat form.
       - name: End-to-end
         run: npm run test:e2e
+        env:
+          CI: 'true'
+
+      - name: Performance budget
+        run: node scripts/perf.mjs
         env:
           CI: 'true'
 

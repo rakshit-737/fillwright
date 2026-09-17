@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { send } from '@/utils/messaging';
+import { describeError, looksTechnical } from '@/utils/errors';
 import { ExtractionError, extractResumeText, parseResume, type ParsedResume } from '@/parser';
 import { mergeResumeIntoProfile, type MergeChange } from '@/profile/merge';
 import { assertNoSensitiveInference } from '@/security/sensitive';
@@ -34,13 +35,22 @@ interface SourceInfo {
  * extension's own message bus — they go straight from the file input to
  * IndexedDB on this device.
  */
-export function ImportResume({ settings }: { settings: Settings | null }) {
+export function ImportResume({
+  settings,
+  embedded = false,
+  onSaved,
+}: {
+  settings: Settings | null;
+  /** Inside onboarding: no page header, and completion is reported upward. */
+  embedded?: boolean;
+  onSaved?: () => void;
+}) {
   const [stage, setStage] = useState<Stage>({ name: 'idle' });
   const [dragging, setDragging] = useState(false);
   const [pasted, setPasted] = useState('');
   const [strategy, setStrategy] = useState<'fill-gaps' | 'replace'>('fill-gaps');
   const [existingResume, setExistingResume] = useState<ResumeAttachment | null>(null);
-  const [attachmentWarning, setAttachmentWarning] = useState("");
+  const [attachmentWarning, setAttachmentWarning] = useState('');
   const fileInput = useRef<HTMLInputElement>(null);
 
   const profileId = settings?.activeProfileId ?? null;
@@ -56,7 +66,8 @@ export function ImportResume({ settings }: { settings: Settings | null }) {
         setExistingResume(null);
         return;
       }
-      const attachment = await getResume(resumeId);
+      // Best effort: a locked vault or a storage hiccup only hides the notice.
+      const attachment = await getResume(resumeId).catch(() => undefined);
       if (!cancelled) setExistingResume(attachment ?? null);
     })();
     return () => {
@@ -64,12 +75,25 @@ export function ImportResume({ settings }: { settings: Settings | null }) {
     };
   }, [profileId, stage.name]);
 
+  // Onboarding moves on once the profile is saved.
+  useEffect(() => {
+    if (stage.name === 'done') onSaved?.();
+  }, [stage.name, onSaved]);
+
   const handleText = useCallback((text: string, source: SourceInfo) => {
-    const parsed = parseResume(text);
-    // Defence in depth: fail loudly if the parser ever starts producing
-    // sensitive fields, rather than letting them flow into the profile.
-    assertNoSensitiveInference(parsed);
-    setStage({ name: 'review', parsed, source });
+    try {
+      const parsed = parseResume(text);
+      // Defence in depth: fail loudly if the parser ever starts producing
+      // sensitive fields, rather than letting them flow into the profile.
+      assertNoSensitiveInference(parsed);
+      setStage({ name: 'review', parsed, source });
+    } catch {
+      setStage({
+        name: 'error',
+        message:
+          'Fillwright couldn’t read that text as a resume. Nothing was saved. Check it’s the full resume, or try the original file.',
+      });
+    }
   }, []);
 
   const handleFile = useCallback(
@@ -120,7 +144,7 @@ export function ImportResume({ settings }: { settings: Settings | null }) {
     try {
       const current = await send<Profile>({ type: 'ui:get-profile', profileId });
       if (!current.ok) {
-        setStage({ name: 'error', message: describeSaveFailure(current.error) });
+        setStage({ name: 'error', message: describeSaveFailure(current.error, current.code) });
         return;
       }
 
@@ -151,7 +175,7 @@ export function ImportResume({ settings }: { settings: Settings | null }) {
 
       const saved = await send<Profile>({ type: 'ui:save-profile', profile });
       if (!saved.ok) {
-        setStage({ name: 'error', message: describeSaveFailure(saved.error) });
+        setStage({ name: 'error', message: describeSaveFailure(saved.error, saved.code) });
         return;
       }
       setStage({ name: 'done', changeCount: changes.length });
@@ -170,14 +194,16 @@ export function ImportResume({ settings }: { settings: Settings | null }) {
   }
 
   return (
-    <div className="fw-pane">
-      <header className="fw-pane__header">
-        <h1 className="fw-pane__title">Resume</h1>
-        <p className="fw-pane__subtitle">
-          Fillwright reads your resume on this device and turns it into a profile you can edit.
-          The file is not uploaded anywhere.
-        </p>
-      </header>
+    <div className={embedded ? 'fw-embedded' : 'fw-pane'}>
+      {!embedded && (
+        <header className="fw-pane__header">
+          <h1 className="fw-pane__title">Resume</h1>
+          <p className="fw-pane__subtitle">
+            Fillwright reads your resume on this device and turns it into a profile you can edit.
+            The file is not uploaded anywhere.
+          </p>
+        </header>
+      )}
 
       {existingResume && stage.name === 'idle' && (
         <div className="fw-notice" role="status">
@@ -208,7 +234,13 @@ export function ImportResume({ settings }: { settings: Settings | null }) {
             onDragLeave={() => setDragging(false)}
             onDrop={onDrop}
           >
-            <svg viewBox="0 0 24 24" width="28" height="28" aria-hidden="true" className="fw-drop__icon">
+            <svg
+              viewBox="0 0 24 24"
+              width="28"
+              height="28"
+              aria-hidden="true"
+              className="fw-drop__icon"
+            >
               <path
                 fill="none"
                 stroke="currentColor"
@@ -226,6 +258,10 @@ export function ImportResume({ settings }: { settings: Settings | null }) {
             <input
               ref={fileInput}
               type="file"
+              // The "Choose a file" button is the control; this input is its
+              // implementation, so it is labelled and kept out of the tab order.
+              aria-label="Resume file"
+              tabIndex={-1}
               className="fw-sr-only"
               accept=".pdf,.docx,.txt,.md,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,text/plain"
               onChange={(event) => {
@@ -279,14 +315,17 @@ export function ImportResume({ settings }: { settings: Settings | null }) {
         </div>
       )}
 
-      {stage.name === 'done' && (
+      {stage.name === 'done' && !embedded && (
         <div className="fw-notice" role="status">
           <strong>Profile updated.</strong> {stage.changeCount} field
           {stage.changeCount === 1 ? '' : 's'} written. Review everything on the Profile page —
           nothing is used to fill a form until you say so.
           {attachmentWarning && <p className="fw-field__hint">{attachmentWarning}</p>}
           <div className="fw-actions">
-            <button className="fw-btn fw-btn--primary" onClick={() => (location.hash = '#/profile')}>
+            <button
+              className="fw-btn fw-btn--primary"
+              onClick={() => (location.hash = '#/profile')}
+            >
               Review my profile
             </button>
             <button className="fw-btn" onClick={() => setStage({ name: 'idle' })}>
@@ -383,13 +422,44 @@ function ReviewParsed({
       </table>
 
       <ul className="fw-countlist">
-        <CountRow label="Education" count={parsed.education.length} sample={parsed.education[0]?.institution} />
-        <CountRow label="Experience" count={parsed.experience.length} sample={parsed.experience[0]?.company} />
-        <CountRow label="Projects" count={parsed.projects.length} sample={parsed.projects[0]?.name} />
-        <CountRow label="Skills" count={parsed.skills.length} sample={parsed.skills.slice(0, 4).map((s) => s.name).join(', ')} />
-        <CountRow label="Certifications" count={parsed.certifications.length} sample={parsed.certifications[0]?.name} />
-        <CountRow label="Achievements" count={parsed.achievements.length} sample={parsed.achievements[0]?.title} />
-        <CountRow label="Languages" count={parsed.languages.length} sample={parsed.languages.map((l) => l.name).join(', ')} />
+        <CountRow
+          label="Education"
+          count={parsed.education.length}
+          sample={parsed.education[0]?.institution}
+        />
+        <CountRow
+          label="Experience"
+          count={parsed.experience.length}
+          sample={parsed.experience[0]?.company}
+        />
+        <CountRow
+          label="Projects"
+          count={parsed.projects.length}
+          sample={parsed.projects[0]?.name}
+        />
+        <CountRow
+          label="Skills"
+          count={parsed.skills.length}
+          sample={parsed.skills
+            .slice(0, 4)
+            .map((s) => s.name)
+            .join(', ')}
+        />
+        <CountRow
+          label="Certifications"
+          count={parsed.certifications.length}
+          sample={parsed.certifications[0]?.name}
+        />
+        <CountRow
+          label="Achievements"
+          count={parsed.achievements.length}
+          sample={parsed.achievements[0]?.title}
+        />
+        <CountRow
+          label="Languages"
+          count={parsed.languages.length}
+          sample={parsed.languages.map((l) => l.name).join(', ')}
+        />
       </ul>
 
       <div className="fw-notice fw-notice--quiet">
@@ -420,9 +490,7 @@ function ReviewParsed({
             <span>Replace with the resume version</span>
           </label>
         </div>
-        <span className="fw-field__hint">
-          Either way, anything you typed by hand is kept.
-        </span>
+        <span className="fw-field__hint">Either way, anything you typed by hand is kept.</span>
       </fieldset>
 
       <div className="fw-actions">
@@ -461,8 +529,11 @@ export type { MergeChange };
  * "Something went wrong" tells the user nothing and leaves them guessing
  * whether to retry, change the file, or give up.
  */
-function describeSaveFailure(cause: unknown): string {
+function describeSaveFailure(cause: unknown, code?: string): string {
   const message = cause instanceof Error ? cause.message : String(cause ?? '');
+  if (code === 'ELOCKED')
+    return 'Fillwright is locked. Unlock it under Security, then import again.';
+  if (code === 'EQUOTA') return describeError('EQUOTA').message;
 
   if (/detached/i.test(message)) {
     return 'The file could not be read a second time. Please choose it again and retry.';
@@ -479,9 +550,9 @@ function describeSaveFailure(cause: unknown): string {
   if (/timed out/i.test(message)) {
     return 'Saving took too long and was stopped. Please try again.';
   }
-  return message
-    ? `Your profile could not be saved: ${message}`
-    : 'Your profile could not be saved. Please try again.';
+  return message && !looksTechnical(message)
+    ? `Your profile could not be saved. ${message}`
+    : 'Your profile could not be saved. Please try again — nothing was lost.';
 }
 
 /** A failed file copy is recoverable: the parsed profile is unaffected. */

@@ -35,20 +35,14 @@ const PERMISSIONS: PermissionDoc[] = [
   },
   {
     id: 'host',
-    name: 'Access to specific sites (optional)',
-    why: 'Only if you turn on automatic detection, so the Fillwright widget can appear on application pages without a click.',
+    name: 'Access to https sites (optional)',
+    why: 'Only if you choose Assist or Smart mode, so Fillwright can offer help on application pages before you click. Chrome asks you first.',
     canAccess:
-      'Only the sites you explicitly approve when you enable the feature. The list is limited to ' +
-      'https sites, plus localhost so that locally served forms work during development.',
-    cannotAccess: 'Any site you have not approved. Revoking it in Chrome immediately stops access.',
-    optional: true,
-  },
-  {
-    id: 'tabs',
-    name: 'tabs (optional)',
-    why: 'Used only to read a page title when you ask Fillwright to log an application to your local history.',
-    canAccess: 'Titles and URLs of tabs, if you grant it.',
-    cannotAccess: 'Page contents. Fillwright never requests it unless you enable history logging.',
+      'Pages on https sites while Assist or Smart is on. Fillwright checks locally whether a page is an ' +
+      'application and stays silent if it is not. Localhost can be granted separately for testing your own forms.',
+    cannotAccess:
+      'Anything while you are in Manual mode. Switching back to Manual, or removing the access in Chrome, ' +
+      'stops it immediately.',
     optional: true,
   },
 ];

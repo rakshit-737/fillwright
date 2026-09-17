@@ -23,6 +23,7 @@ export function SavedMappings() {
   const refresh = useCallback(async () => {
     const result = await send<SavedMapping[]>({ type: 'ui:list-saved-mappings' });
     if (result.ok) setMappings(result.data);
+    else setNotice(`What Fillwright learned couldn’t be loaded. ${result.error}`);
     setLoading(false);
   }, []);
 
@@ -39,9 +40,13 @@ export function SavedMappings() {
   }, [mappings]);
 
   const remove = async (mapping: SavedMapping) => {
-    await send({ type: 'ui:delete-saved-mapping', id: mapping.id });
+    const result = await send({ type: 'ui:delete-saved-mapping', id: mapping.id });
     await refresh();
-    setNotice(`Forgot “${mapping.label || 'that field'}”. Fillwright will classify it normally again.`);
+    setNotice(
+      result.ok
+        ? `Forgot “${mapping.label || 'that field'}”. Fillwright will classify it normally again.`
+        : `Nothing was forgotten. ${result.error}`,
+    );
   };
 
   const retarget = async (mapping: SavedMapping, canonical: CanonicalField) => {
@@ -57,8 +62,12 @@ export function SavedMappings() {
   };
 
   const setPaused = async (mapping: SavedMapping, disabled: boolean) => {
-    await send({ type: 'ui:update-saved-mapping', id: mapping.id, disabled });
+    const result = await send({ type: 'ui:update-saved-mapping', id: mapping.id, disabled });
     await refresh();
+    if (!result.ok) {
+      setNotice(`Nothing was changed. ${result.error}`);
+      return;
+    }
     setNotice(
       disabled
         ? `Paused “${mapping.label || 'that field'}”. Fillwright ignores it until you resume it.`
@@ -75,9 +84,13 @@ export function SavedMappings() {
     ) {
       return;
     }
-    await send({ type: 'ui:clear-saved-mappings', origin });
+    const result = await send({ type: 'ui:clear-saved-mappings', origin });
     await refresh();
-    setNotice(`Forgot everything for ${hostOf(origin)}.`);
+    setNotice(
+      result.ok
+        ? `Forgot everything for ${hostOf(origin)}.`
+        : `Nothing was forgotten. ${result.error}`,
+    );
   };
 
   const forgetAll = async () => {
@@ -89,15 +102,20 @@ export function SavedMappings() {
     ) {
       return;
     }
-    await send({ type: 'ui:clear-saved-mappings' });
+    const result = await send({ type: 'ui:clear-saved-mappings' });
     await refresh();
-    setNotice('Fillwright has forgotten every website correction.');
+    setNotice(
+      result.ok
+        ? 'Fillwright has forgotten every website correction.'
+        : `Nothing was forgotten. ${result.error}`,
+    );
   };
 
   if (loading) {
     return (
       <div className="fw-pane" role="status">
-        <span className="fw-spinner" aria-hidden="true" /> <span className="fw-muted">Loading…</span>
+        <span className="fw-spinner" aria-hidden="true" />{' '}
+        <span className="fw-muted">Loading…</span>
       </div>
     );
   }
@@ -120,9 +138,9 @@ export function SavedMappings() {
 
       {mappings.length === 0 ? (
         <p className="fw-empty">
-          Nothing learned yet. On an application, open Fillwright’s list, choose <strong>Change</strong>{' '}
-          or <strong>Set what this is</strong> on a field, and tick “Remember this for this website”.
-          The correction will appear here.
+          Nothing learned yet. On an application, open Fillwright’s list, choose{' '}
+          <strong>Change</strong> or <strong>Set what this is</strong> on a field, and tick
+          “Remember this for this website”. The correction will appear here.
         </p>
       ) : (
         <>
@@ -139,7 +157,10 @@ export function SavedMappings() {
                       ` · ${items.filter((item) => item.disabled).length} paused`}
                   </p>
                 </div>
-                <button className="fw-btn fw-btn--sm" onClick={() => void forgetSite(origin, items)}>
+                <button
+                  className="fw-btn fw-btn--sm"
+                  onClick={() => void forgetSite(origin, items)}
+                >
                   Reset this site
                 </button>
               </div>
@@ -152,7 +173,9 @@ export function SavedMappings() {
                   >
                     <div className="fw-mapping__row">
                       <div className="fw-mapping__text">
-                        <span className="fw-mapping__label">{mapping.label || 'Unlabelled field'}</span>
+                        <span className="fw-mapping__label">
+                          {mapping.label || 'Unlabelled field'}
+                        </span>
                         {editing === mapping.id ? (
                           <FieldPicker
                             value={mapping.canonical}
@@ -163,7 +186,9 @@ export function SavedMappings() {
                         ) : (
                           <span className="fw-mapping__target">
                             &rarr; {catalogLabel(mapping.canonical)}
-                            {mapping.disabled && <span className="fw-mapping__state"> · paused</span>}
+                            {mapping.disabled && (
+                              <span className="fw-mapping__state"> · paused</span>
+                            )}
                           </span>
                         )}
                       </div>
@@ -182,7 +207,10 @@ export function SavedMappings() {
                       >
                         Change
                       </button>
-                      <button className="fw-linkbtn" onClick={() => void setPaused(mapping, !mapping.disabled)}>
+                      <button
+                        className="fw-linkbtn"
+                        onClick={() => void setPaused(mapping, !mapping.disabled)}
+                      >
                         {mapping.disabled ? 'Resume' : 'Pause'}
                       </button>
                       <button
@@ -224,8 +252,8 @@ export function SavedMappings() {
           <section className="fw-section">
             <h2 className="fw-section__title">Start over</h2>
             <p className="fw-section__lead">
-              Removes every correction on every website. Fillwright goes back to recognising fields on
-              its own.
+              Removes every correction on every website. Fillwright goes back to recognising fields
+              on its own.
             </p>
             <div className="fw-actions">
               <button className="fw-btn fw-btn--danger" onClick={() => void forgetAll()}>

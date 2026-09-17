@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { send } from '@/utils/messaging';
+import { describeError, unsupportedPageCode } from '@/utils/errors';
 import { computeCompleteness, type Completeness } from '@/profile/completeness';
 import type { ProfileSummary } from '@/storage/profiles';
 import type { Settings } from '@/types/settings';
@@ -14,7 +15,12 @@ type Load =
   | { phase: 'loading' }
   | { phase: 'locked' }
   | { phase: 'error'; message: string }
-  | { phase: 'ready'; state: PopupState; profile: Profile | null; completeness: Completeness | null };
+  | {
+      phase: 'ready';
+      state: PopupState;
+      profile: Profile | null;
+      completeness: Completeness | null;
+    };
 
 export function App() {
   const [load, setLoad] = useState<Load>({ phase: 'loading' });
@@ -45,6 +51,12 @@ export function App() {
         // A locked vault is expected, not an error: the popup says so and
         // offers the one action that fixes it.
         else if (profileResult.code === 'ELOCKED') locked = true;
+        // Anything else is a real failure — never show "set up" to someone who
+        // already has a profile.
+        else if (profileResult.code !== 'ENOTFOUND') {
+          setLoad({ phase: 'error', message: profileResult.error });
+          return;
+        }
       }
       if (cancelled) return;
 
@@ -68,7 +80,26 @@ export function App() {
   const switchProfile = async (profileId: string) => {
     const result = await send({ type: 'ui:set-active-profile', profileId });
     if (result.ok) setReload((value) => value + 1);
+    else {
+      setScanState('error');
+      setScanError(`The profile wasn’t switched. ${result.error}`);
+    }
   };
+
+  // Some tabs can never be filled. Say so before the user tries.
+  const [pageBlock, setPageBlock] = useState('');
+  useEffect(() => {
+    chrome.tabs
+      .query({ active: true, currentWindow: true })
+      .then(([tab]) => {
+        // Opening the popup grants activeTab, which reveals the URL of any
+        // page Fillwright can work on. Chrome withholds it only for pages it
+        // keeps off-limits, so a missing URL is itself the answer.
+        const code = !tab ? null : tab.url ? unsupportedPageCode(tab.url) : 'ERESTRICTED';
+        setPageBlock(code ? describeError(code).message : '');
+      })
+      .catch(() => setPageBlock(''));
+  }, []);
 
   const scanPage = async () => {
     setScanState('scanning');
@@ -83,8 +114,15 @@ export function App() {
   };
 
   const openOptions = (hash = '') => {
-    chrome.tabs.create({ url: chrome.runtime.getURL(`options.html${hash}`) });
-    window.close();
+    chrome.tabs
+      .create({ url: chrome.runtime.getURL(`options.html${hash}`) })
+      .then(() => window.close())
+      .catch(() => {
+        setScanState('error');
+        setScanError(
+          'Fillwright’s settings couldn’t be opened. Right-click the toolbar icon and choose Options.',
+        );
+      });
   };
 
   if (load.phase === 'loading') {
@@ -193,7 +231,9 @@ export function App() {
               <div className="fw-meter__fill" style={{ width: `${completeness?.percent ?? 0}%` }} />
             </div>
             {completeness && completeness.topGaps.length > 0 && (
-              <p className="fw-muted fw-card__hint">Still missing: {completeness.topGaps.slice(0, 3).join(', ')}</p>
+              <p className="fw-muted fw-card__hint">
+                Still missing: {completeness.topGaps.slice(0, 3).join(', ')}
+              </p>
             )}
           </section>
 
@@ -212,6 +252,11 @@ export function App() {
           </ul>
 
           <div className="fw-popup__actions">
+            {pageBlock && (
+              <p className="fw-muted fw-page-block" role="status">
+                {pageBlock}
+              </p>
+            )}
             {scanState === 'error' && (
               <p className="fw-scan-error" role="alert">
                 {scanError}
@@ -220,14 +265,21 @@ export function App() {
             <button
               className="fw-btn fw-btn--primary"
               onClick={scanPage}
-              disabled={scanState === 'scanning' || !ready}
-              title={ready ? 'Scan this page for application fields' : 'Add more profile details first'}
+              disabled={scanState === 'scanning' || !ready || Boolean(pageBlock)}
+              title={
+                ready ? 'Scan this page for application fields' : 'Add more profile details first'
+              }
             >
               {scanState === 'scanning' ? 'Scanning…' : 'Fill this page'}
             </button>
             <button className="fw-btn" onClick={() => openOptions('#/profile')}>
               Open profile
             </button>
+            {!state.settings.onboardingCompleted && (
+              <button className="fw-btn" onClick={() => openOptions('#/welcome')}>
+                Finish setting up
+              </button>
+            )}
             {!hasResume && (
               <button className="fw-btn" onClick={() => openOptions('#/import')}>
                 Import resume
@@ -238,7 +290,9 @@ export function App() {
       ) : (
         <main className="fw-popup__body fw-popup--centered">
           <h2 className="fw-popup__title">Let’s set you up</h2>
-          <p className="fw-muted">Import a resume and Fillwright will build your profile locally.</p>
+          <p className="fw-muted">
+            Import a resume and Fillwright will build your profile locally.
+          </p>
           <button className="fw-btn fw-btn--primary" onClick={() => openOptions('#/welcome')}>
             Get started
           </button>

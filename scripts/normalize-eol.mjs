@@ -13,7 +13,18 @@ import { fileURLToPath } from 'node:url';
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
 const TEXT = new Set([
-  '.ts', '.tsx', '.js', '.mjs', '.cjs', '.json', '.css', '.html', '.md', '.yml', '.yaml', '.txt',
+  '.ts',
+  '.tsx',
+  '.js',
+  '.mjs',
+  '.cjs',
+  '.json',
+  '.css',
+  '.html',
+  '.md',
+  '.yml',
+  '.yaml',
+  '.txt',
 ]);
 const SKIP = new Set(['node_modules', 'dist', 'dist-e2e', 'release', '.git', 'coverage']);
 

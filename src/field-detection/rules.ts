@@ -35,7 +35,8 @@ export const THIRD_PARTY_RE =
   /\b(?:referr?er|referee|reference|emergency|contact person|recruiter|manager|supervisor|guardian|parent|spouse|friend|colleague|witness|next of kin)\b/;
 
 /** Words that mean the field is about a company, not a person. */
-const COMPANY_CONTEXT_RE = /\b(?:company|employer|organization|organisation|business|firm|agency|school|university|college|institution)\b/;
+const COMPANY_CONTEXT_RE =
+  /\b(?:company|employer|organization|organisation|business|firm|agency|school|university|college|institution)\b/;
 
 export const FIELD_RULES: FieldRule[] = [
   /* ------------------------------------------------------------- identity */
@@ -114,7 +115,15 @@ export const FIELD_RULES: FieldRule[] = [
   /* -------------------------------------------------------------- address */
   {
     field: 'address.line1',
-    exact: ['address', 'street address', 'address line 1', 'address 1', 'street', 'mailing address', 'current address'],
+    exact: [
+      'address',
+      'street address',
+      'address line 1',
+      'address 1',
+      'street',
+      'mailing address',
+      'current address',
+    ],
     includes: ['address line 1', 'street address'],
     autocomplete: ['street-address', 'address-line1'],
     not: [/\bemail\b/, /\bip\b/, THIRD_PARTY_RE],
@@ -203,14 +212,30 @@ export const FIELD_RULES: FieldRule[] = [
   /* ------------------------------------------------------------ education */
   {
     field: 'education.institution',
-    exact: ['school', 'university', 'college', 'institution', 'school name', 'university college', 'alma mater'],
+    exact: [
+      'school',
+      'university',
+      'college',
+      'institution',
+      'school name',
+      'university college',
+      'alma mater',
+    ],
     includes: ['university', 'college', 'institution'],
     patterns: [/\bschool\b(?!.*\bhigh\b)/],
     not: [/\b(?:high school diploma|business school essay)\b/],
   },
   {
     field: 'education.degree',
-    exact: ['degree', 'degree type', 'degree earned', 'qualification', 'highest degree', 'education level', 'level of education'],
+    exact: [
+      'degree',
+      'degree type',
+      'degree earned',
+      'qualification',
+      'highest degree',
+      'education level',
+      'level of education',
+    ],
     includes: ['degree'],
   },
   {
@@ -232,7 +257,13 @@ export const FIELD_RULES: FieldRule[] = [
   },
   {
     field: 'education.graduationDate',
-    exact: ['graduation date', 'expected graduation date', 'graduation', 'completion date', 'expected completion'],
+    exact: [
+      'graduation date',
+      'expected graduation date',
+      'graduation',
+      'completion date',
+      'expected completion',
+    ],
     includes: ['graduation date'],
     patterns: [/\bexpected\b.*\b(?:graduation|completion|date|year)\b/],
   },
@@ -251,9 +282,18 @@ export const FIELD_RULES: FieldRule[] = [
   {
     field: 'experience.company',
     exact: [
-      'company', 'employer', 'current employer', 'most recent employer', 'current company',
-      'previous employer', 'former employer', 'past employer', 'last employer', 'previous company',
-      'organization', 'organisation',
+      'company',
+      'employer',
+      'current employer',
+      'most recent employer',
+      'current company',
+      'previous employer',
+      'former employer',
+      'past employer',
+      'last employer',
+      'previous company',
+      'organization',
+      'organisation',
     ],
     includes: ['employer', 'company'],
     autocomplete: ['organization'],
@@ -268,14 +308,32 @@ export const FIELD_RULES: FieldRule[] = [
   },
   {
     field: 'experience.title',
-    exact: ['title', 'current title', 'job title', 'current job title', 'position', 'current position', 'most recent title', 'role'],
+    exact: [
+      'title',
+      'current title',
+      'job title',
+      'current job title',
+      'position',
+      'current position',
+      'most recent title',
+      'role',
+    ],
     includes: ['job title', 'current title'],
     autocomplete: ['organization-title'],
     not: [/\b(?:applying|desired|this|the) (?:role|position|title)\b/, /\bmr\b|\bms\b|\bmrs\b/],
   },
   {
     field: 'experience.yearsOfExperience',
-    exact: ['years of experience', 'total experience', 'total years of experience', 'relevant experience', 'experience in years'],
+    // "Years of experience with Python" asks about one skill, not a career
+    // total; answering it from total experience would overstate it.
+    not: [/\b(?:with|using)\b/, /\bexperience (?:in|on|of) (?!total|work|professional|years)\w/],
+    exact: [
+      'years of experience',
+      'total experience',
+      'total years of experience',
+      'relevant experience',
+      'experience in years',
+    ],
     includes: ['years of experience'],
     patterns: [/\byears\b.*\bexperience\b/],
   },
@@ -307,14 +365,29 @@ export const FIELD_RULES: FieldRule[] = [
   /* ------------------------------------------------------------- profile */
   {
     field: 'profile.summary',
-    exact: ['summary', 'professional summary', 'about you', 'about yourself', 'bio', 'profile summary', 'introduce yourself'],
+    exact: [
+      'summary',
+      'professional summary',
+      'about you',
+      'about yourself',
+      'bio',
+      'profile summary',
+      'introduce yourself',
+    ],
     includes: ['professional summary'],
     patterns: [/\btell us about yourself\b/],
     weight: 0.78,
   },
   {
     field: 'profile.skills',
-    exact: ['skills', 'key skills', 'technical skills', 'core skills', 'relevant skills', 'skill set'],
+    exact: [
+      'skills',
+      'key skills',
+      'technical skills',
+      'core skills',
+      'relevant skills',
+      'skill set',
+    ],
     includes: ['skills'],
     not: [/\b(?:rate|level|years|proficiency)\b/],
   },
@@ -322,7 +395,14 @@ export const FIELD_RULES: FieldRule[] = [
   /* --------------------------------------------------------- preferences */
   {
     field: 'preferences.startDate',
-    exact: ['available start date', 'earliest start date', 'when can you start', 'availability date', 'date available', 'preferred start date'],
+    exact: [
+      'available start date',
+      'earliest start date',
+      'when can you start',
+      'availability date',
+      'date available',
+      'preferred start date',
+    ],
     includes: ['start date'],
     patterns: [/\b(?:available|availability|earliest)\b.*\bstart\b/],
     weight: 0.85,
@@ -334,8 +414,19 @@ export const FIELD_RULES: FieldRule[] = [
   },
   {
     field: 'preferences.workMode',
-    exact: ['work preference', 'work mode', 'remote preference', 'work arrangement', 'work location preference'],
-    includes: ['work arrangement', 'work preference'],
+    exact: [
+      'work preference',
+      'work mode',
+      'remote preference',
+      'work arrangement',
+      'work location preference',
+      'work setting',
+      'preferred work setting',
+      'work model',
+      'workplace type',
+      'preferred workplace',
+    ],
+    includes: ['work arrangement', 'work preference', 'work setting', 'workplace type'],
   },
   {
     field: 'preferences.referredBy',
@@ -344,15 +435,32 @@ export const FIELD_RULES: FieldRule[] = [
   },
   {
     field: 'preferences.howDidYouHear',
-    exact: ['how did you hear about us', 'how did you hear about this role', 'source', 'how did you find us', 'referral source'],
+    exact: [
+      'how did you hear about us',
+      'how did you hear about this role',
+      'source',
+      'how did you find us',
+      'referral source',
+    ],
     includes: ['how did you hear'],
   },
 
   /* ------------------------------------------------------------ sensitive */
   {
     field: 'sensitive.workAuthorization',
-    exact: ['work authorization', 'are you legally authorized to work', 'work eligibility', 'right to work'],
-    includes: ['legally authorized', 'work authorization', 'authorized to work', 'right to work', 'work permit'],
+    exact: [
+      'work authorization',
+      'are you legally authorized to work',
+      'work eligibility',
+      'right to work',
+    ],
+    includes: [
+      'legally authorized',
+      'work authorization',
+      'authorized to work',
+      'right to work',
+      'work permit',
+    ],
     patterns: [/\bauthorized\b.*\bwork\b/, /\beligible\b.*\bwork\b/, /\blegally\b.*\bwork\b/],
   },
   {
@@ -363,7 +471,13 @@ export const FIELD_RULES: FieldRule[] = [
   },
   {
     field: 'sensitive.visaStatus',
-    exact: ['visa status', 'immigration status', 'work permit type', 'citizenship status', 'visa type'],
+    exact: [
+      'visa status',
+      'immigration status',
+      'work permit type',
+      'citizenship status',
+      'visa type',
+    ],
     includes: ['visa status', 'immigration status'],
   },
   {
@@ -420,7 +534,17 @@ export const FIELD_RULES: FieldRule[] = [
   },
   {
     field: 'preferences.desiredSalary',
-    exact: ['desired salary', 'expected salary', 'salary expectation', 'salary expectations', 'expected compensation', 'desired compensation', 'current salary', 'current ctc', 'expected ctc'],
+    exact: [
+      'desired salary',
+      'expected salary',
+      'salary expectation',
+      'salary expectations',
+      'expected compensation',
+      'desired compensation',
+      'current salary',
+      'current ctc',
+      'expected ctc',
+    ],
     includes: ['salary', 'compensation', 'ctc'],
   },
 ];

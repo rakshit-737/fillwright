@@ -50,10 +50,7 @@ export function extractTxt(bytes: ArrayBuffer): ExtractedText {
  * Extracts plain text from a resume file. Runs entirely in the page that called
  * it — no bytes are sent anywhere.
  */
-export async function extractResumeText(
-  bytes: ArrayBuffer,
-  fileName = '',
-): Promise<ExtractedText> {
+export async function extractResumeText(bytes: ArrayBuffer, fileName = ''): Promise<ExtractedText> {
   if (bytes.byteLength === 0) throw new ExtractionError('This file is empty.', 'EEMPTY');
   if (bytes.byteLength > MAX_RESUME_BYTES) {
     throw new ExtractionError(

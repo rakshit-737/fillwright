@@ -20,14 +20,23 @@ export function Assistance({
 }) {
   const [availability, setAvailability] = useState<Availability | null>(null);
   const [checking, setChecking] = useState(true);
+  const [saveError, setSaveError] = useState('');
 
   const provider = getProvider(settings?.ai.provider ?? 'none');
   const builtin = getProvider('chrome-builtin');
 
   const check = useCallback(async () => {
     setChecking(true);
-    setAvailability(await builtin.availability());
-    setChecking(false);
+    try {
+      setAvailability(await builtin.availability());
+    } catch {
+      setAvailability({
+        state: 'unavailable',
+        reason: 'Chrome didn’t say whether its on-device model is available.',
+      });
+    } finally {
+      setChecking(false);
+    }
   }, [builtin]);
 
   useEffect(() => {
@@ -36,7 +45,12 @@ export function Assistance({
 
   const patch = async (next: Partial<Settings['ai']>) => {
     const result = await send<Settings>({ type: 'ui:set-settings', patch: { ai: next } });
-    if (result.ok) onSettingsChange(result.data);
+    if (result.ok) {
+      onSettingsChange(result.data);
+      setSaveError('');
+    } else {
+      setSaveError(`That setting wasn’t saved. ${result.error}`);
+    }
   };
 
   const enabled = settings?.ai.enabled ?? false;
@@ -52,26 +66,40 @@ export function Assistance({
         </p>
       </header>
 
+      {saveError && (
+        <div className="fw-notice fw-notice--danger" role="alert">
+          {saveError}
+        </div>
+      )}
+
       <section className="fw-section">
         <h2 className="fw-section__title">What this can and cannot do</h2>
         <ul className="fw-checklist">
           <li className="fw-check">
-            <span className="fw-check__mark fw-check__mark--ok" aria-hidden="true">✓</span>
+            <span className="fw-check__mark fw-check__mark--ok" aria-hidden="true">
+              ✓
+            </span>
             <span>Draft an answer to a written question, which you then edit and approve</span>
           </li>
           <li className="fw-check">
-            <span className="fw-check__mark fw-check__mark--no" aria-hidden="true">✗</span>
+            <span className="fw-check__mark fw-check__mark--no" aria-hidden="true">
+              ✗
+            </span>
             <span>
               Decide what any field means — field matching stays entirely deterministic, with or
               without this switched on
             </span>
           </li>
           <li className="fw-check">
-            <span className="fw-check__mark fw-check__mark--no" aria-hidden="true">✗</span>
+            <span className="fw-check__mark fw-check__mark--no" aria-hidden="true">
+              ✗
+            </span>
             <span>Put anything into a form on its own, or submit anything</span>
           </li>
           <li className="fw-check">
-            <span className="fw-check__mark fw-check__mark--no" aria-hidden="true">✗</span>
+            <span className="fw-check__mark fw-check__mark--no" aria-hidden="true">
+              ✗
+            </span>
             <span>Send your resume, your profile or the application anywhere</span>
           </li>
         </ul>
@@ -101,9 +129,9 @@ export function Assistance({
 
         <div className="fw-notice fw-notice--quiet">
           <strong>Why there is no cloud option.</strong> Fillwright&rsquo;s content security policy
-          blocks all outbound network connections, which is what makes &ldquo;your data stays on this
-          device&rdquo; something you can verify rather than something we assert. Offering a hosted
-          model would mean removing that, so it is not offered at all.
+          blocks all outbound network connections, which is what makes &ldquo;your data stays on
+          this device&rdquo; something you can verify rather than something we assert. Offering a
+          hosted model would mean removing that, so it is not offered at all.
         </div>
       </section>
 

@@ -1,3 +1,5 @@
+import { isPressSafe } from '@/autofill/press-guard';
+
 /**
  * Site adapters.
  *
@@ -147,17 +149,20 @@ export async function applyAdapter(adapter: SiteAdapter): Promise<void> {
  * an adapter's selector matched.
  */
 export function isSafeToExpand(element: HTMLElement): boolean {
+  if (!isPressSafe(element)) return false;
   if (element.closest('[data-fillwright-ui]')) return false;
   // A <button> with no explicit type defaults to type="submit", so checking the
   // type alone would refuse almost every expander. What actually matters is
   // whether pressing it could submit something: a submit button owned by a form.
-  if (element instanceof HTMLButtonElement && element.type === 'submit' && element.form) return false;
+  if (element instanceof HTMLButtonElement && element.type === 'submit' && element.form)
+    return false;
   if (element instanceof HTMLInputElement) return false;
   if (element.getAttribute('aria-expanded') === 'true') return false;
   if ((element as HTMLButtonElement).disabled) return false;
   if (element.getClientRects().length === 0) return false;
 
-  const text = `${element.textContent ?? ''} ${element.getAttribute('aria-label') ?? ''}`.toLowerCase();
+  const text =
+    `${element.textContent ?? ''} ${element.getAttribute('aria-label') ?? ''}`.toLowerCase();
   return !/\b(?:submit|apply now|apply|send|finish|complete application|continue to review|pay|delete|remove)\b/.test(
     text,
   );

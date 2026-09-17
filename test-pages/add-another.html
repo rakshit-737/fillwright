@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Apply — Graduate Engineer</title>
+    <link rel="stylesheet" href="./shared.css" />
+  </head>
+  <body>
+    <h1>Apply: Graduate Engineer</h1>
+    <p class="lead">
+      Expected: one education block and a single "+ Add education" button. With three education
+      entries in the profile, Fillwright offers to add two more. Pressing it adds exactly two
+      blocks, and blocks 2 and 3 fill from entries 2 and 3 — never a copy of entry 1.
+    </p>
+    <form id="apply">
+      <label for="a-first">First Name</label>
+      <input id="a-first" name="candidate[first_name]" autocomplete="given-name" />
+      <label for="a-last">Last Name</label>
+      <input id="a-last" name="candidate[last_name]" autocomplete="family-name" />
+      <label for="a-email">Email</label>
+      <input id="a-email" name="candidate[email]" type="email" autocomplete="email" />
+
+      <h2>Education</h2>
+      <div id="education-list"></div>
+      <button type="button" id="add-education">+ Add education</button>
+
+      <p><button type="submit">Submit application</button></p>
+    </form>
+    <script>
+      const list = document.getElementById('education-list');
+      let count = 0;
+      function addBlock() {
+        const i = count++;
+        const block = document.createElement('fieldset');
+        block.className = 'edu-block';
+        const legend = document.createElement('legend');
+        legend.textContent = 'Education ' + (i + 1);
+        block.appendChild(legend);
+        for (const [key, text] of [
+          ['school', 'School'],
+          ['degree', 'Degree'],
+        ]) {
+          const id = 'edu-' + i + '-' + key;
+          const label = document.createElement('label');
+          label.htmlFor = id;
+          label.textContent = text;
+          const input = document.createElement('input');
+          input.id = id;
+          input.name = 'education[' + i + '][' + key + ']';
+          block.append(label, input);
+        }
+        list.appendChild(block);
+        window.__blocks = count;
+      }
+      addBlock();
+      document.getElementById('add-education').addEventListener('click', addBlock);
+    </script>
+    <script src="./shared.js"></script>
+  </body>
+</html>

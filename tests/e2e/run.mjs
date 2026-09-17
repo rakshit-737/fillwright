@@ -9,6 +9,11 @@
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { startServer } from './server.mjs';
+import { runV05Suite } from './suite-v05.mjs';
+import { runAtsSuite } from './suite-ats.mjs';
+import { runA11ySuite } from './suite-a11y.mjs';
+import { runOnboardingSuite } from './suite-onboarding.mjs';
+import { runEditorSuite } from './suite-editor.mjs';
 import {
   launch,
   evalInWorker,
@@ -27,6 +32,13 @@ const failures = [];
 const notes = [];
 
 async function test(name, fn) {
+  if (
+    process.env.E2E_ONLY &&
+    !name.startsWith(process.env.E2E_ONLY) &&
+    !name.startsWith('the service worker')
+  ) {
+    return;
+  }
   try {
     await fn();
     passed++;
@@ -44,7 +56,9 @@ function assert(condition, message) {
 
 function assertEqual(actual, expected, message) {
   if (actual !== expected) {
-    throw new Error(`${message}\n      expected: ${JSON.stringify(expected)}\n      actual:   ${JSON.stringify(actual)}`);
+    throw new Error(
+      `${message}\n      expected: ${JSON.stringify(expected)}\n      actual:   ${JSON.stringify(actual)}`,
+    );
   }
 }
 
@@ -145,7 +159,9 @@ const TEST_PROFILE = {
  */
 async function seedProfile(browser, extensionId) {
   const page = await browser.newPage();
-  await page.goto(`chrome-extension://${extensionId}/options.html`, { waitUntil: 'domcontentloaded' });
+  await page.goto(`chrome-extension://${extensionId}/options.html`, {
+    waitUntil: 'domcontentloaded',
+  });
 
   const result = await page.evaluate(async (data) => {
     const send = (message) => chrome.runtime.sendMessage(message);
@@ -289,6 +305,9 @@ async function readInputs(page, ids) {
 
 async function main() {
   const server = await startServer(resolve(root, 'test-pages'));
+  // A second loopback address is a different origin that the test build has
+  // no host access to — the "form in someone else's iframe" case.
+  const foreign = await startServer(resolve(root, 'test-pages'), 0, '127.0.0.2').catch(() => null);
   const { browser, worker, extensionId } = await launch({ headless: process.env.HEADED !== '1' });
 
   console.log(`\nFillwright end-to-end (real Chrome)`);
@@ -300,7 +319,9 @@ async function main() {
 
     await test('the service worker starts and answers messages', async () => {
       const page = await browser.newPage();
-      await page.goto(`chrome-extension://${extensionId}/options.html`, { waitUntil: 'domcontentloaded' });
+      await page.goto(`chrome-extension://${extensionId}/options.html`, {
+        waitUntil: 'domcontentloaded',
+      });
       const state = await page.evaluate(() => chrome.runtime.sendMessage({ type: 'ui:get-state' }));
       assert(state?.ok, `ui:get-state failed: ${state?.error}`);
       assert(state.data.settings, 'settings were not returned');
@@ -327,7 +348,9 @@ async function main() {
       const page = await browser.newPage();
       const errors = [];
       page.on('pageerror', (error) => errors.push(error.message));
-      await page.goto(`chrome-extension://${extensionId}/popup.html`, { waitUntil: 'networkidle0' });
+      await page.goto(`chrome-extension://${extensionId}/popup.html`, {
+        waitUntil: 'networkidle0',
+      });
       const text = await page.evaluate(() => document.body.innerText);
       assert(text.includes('Fillwright'), 'the popup did not render the brand');
       assertEqual(errors.length, 0, `console errors in the popup: ${errors.join(' | ')}`);
@@ -338,7 +361,9 @@ async function main() {
 
     await test('the extension cannot make an outbound network request', async () => {
       const page = await browser.newPage();
-      await page.goto(`chrome-extension://${extensionId}/options.html`, { waitUntil: 'domcontentloaded' });
+      await page.goto(`chrome-extension://${extensionId}/options.html`, {
+        waitUntil: 'domcontentloaded',
+      });
       const outcome = await page.evaluate(async () => {
         try {
           await fetch('https://example.com/collect', { method: 'POST', body: 'x' });
@@ -372,7 +397,7 @@ async function main() {
         ['privacy', 'Privacy Center'],
         ['permissions', 'Permissions'],
         ['settings', 'Settings'],
-        ['welcome', 'Welcome to Fillwright'],
+        ['welcome', 'Welcome'],
       ];
 
       for (const [route, heading] of routes) {
@@ -400,7 +425,6 @@ async function main() {
       }
     });
 
-
     /* --- the Greenhouse-shaped form ----------------------------------- */
 
     const greenhouse = await browser.newPage();
@@ -408,9 +432,14 @@ async function main() {
 
     await test('the panel appears on an application form', async () => {
       await scanPage(worker, `${server.origin}/greenhouse.html`);
-      const widget = await waitForWidget(greenhouse, (state) => state.text.includes('application field'));
+      const widget = await waitForWidget(greenhouse, (state) =>
+        state.text.includes('application field'),
+      );
       assert(widget.text.includes('Fillwright'), 'the panel did not render its heading');
-      assert(/\d+ application fields? found/.test(widget.text), `no field count shown: ${widget.text}`);
+      assert(
+        /\d+ application fields? found/.test(widget.text),
+        `no field count shown: ${widget.text}`,
+      );
     });
 
     await test('it renders inside a shadow root, isolated from the page', async () => {
@@ -426,12 +455,24 @@ async function main() {
       const widget = await waitForWidget(greenhouse, (state) => state.items.length > 0);
       const detail = dumpItems(widget);
 
-      assertEqual(findItem(widget, 'First Name')?.value, TEST_PROFILE.firstName, `first name is wrong
-      ${detail}`);
-      assertEqual(findItem(widget, 'Last Name')?.value, TEST_PROFILE.lastName, 'last name is wrong');
+      assertEqual(
+        findItem(widget, 'First Name')?.value,
+        TEST_PROFILE.firstName,
+        `first name is wrong
+      ${detail}`,
+      );
+      assertEqual(
+        findItem(widget, 'Last Name')?.value,
+        TEST_PROFILE.lastName,
+        'last name is wrong',
+      );
       assertEqual(findItem(widget, 'Email')?.value, TEST_PROFILE.email, 'email is wrong');
-      assertEqual(findItem(widget, 'University')?.value, TEST_PROFILE.institution, `university is wrong
-      ${detail}`);
+      assertEqual(
+        findItem(widget, 'University')?.value,
+        TEST_PROFILE.institution,
+        `university is wrong
+      ${detail}`,
+      );
       assertEqual(findItem(widget, 'Phone')?.value, TEST_PROFILE.phone, 'phone is wrong');
       assertEqual(findItem(widget, 'LinkedIn')?.value, TEST_PROFILE.linkedin, 'linkedin is wrong');
     });
@@ -446,8 +487,11 @@ async function main() {
     await test('a resume file input is flagged rather than attempted', async () => {
       const widget = await readWidget(greenhouse);
       const resume = findItem(widget, 'Resume');
-      assert(resume, `the resume field was not listed
-      ${dumpItems(widget)}`);
+      assert(
+        resume,
+        `the resume field was not listed
+      ${dumpItems(widget)}`,
+      );
       assertEqual(
         resume.badge,
         'You need to write this',
@@ -510,7 +554,9 @@ async function main() {
       const values = await readInputs(react, ['c1', 'c2']);
       assertEqual(values.c1, TEST_PROFILE.firstName, 'the controlled input reverted the value');
 
-      const state = await react.evaluate(() => JSON.parse(document.getElementById('state').textContent));
+      const state = await react.evaluate(() =>
+        JSON.parse(document.getElementById('state').textContent),
+      );
       assertEqual(state.firstName, TEST_PROFILE.firstName, 'component state did not update');
       assertEqual(state.email, TEST_PROFILE.email, 'component state did not update for email');
     });
@@ -537,8 +583,11 @@ async function main() {
     await test('prefilled fields are reported as already filled', async () => {
       const widget = await readWidget(edge);
       const prefilled = findItem(widget, 'First Name');
-      assert(prefilled, `the prefilled field was not listed
-      ${dumpItems(widget)}`);
+      assert(
+        prefilled,
+        `the prefilled field was not listed
+      ${dumpItems(widget)}`,
+      );
       assertEqual(prefilled.badge, 'Already filled in', 'a prefilled field was not protected');
     });
 
@@ -651,7 +700,7 @@ async function main() {
         const node = document.querySelector('[data-combo="ambiguous"] .combo__value');
         return node ? node.textContent.trim() : null;
       });
-      assertEqual(shown, "Select…", 'an ambiguous dropdown was guessed at');
+      assertEqual(shown, 'Select…', 'an ambiguous dropdown was guessed at');
     });
 
     await test('hard mode: no dropdown was left hanging open', async () => {
@@ -752,7 +801,8 @@ async function main() {
       // a stale row. That produced a genuinely flaky test.
       const after = await waitForWidget(
         teach,
-        (state) => state.items.some((item) => item.label.startsWith('xq_7734') && item.value !== ''),
+        (state) =>
+          state.items.some((item) => item.label.startsWith('xq_7734') && item.value !== ''),
         20_000,
       );
 
@@ -802,7 +852,6 @@ async function main() {
       );
       await page.close();
     });
-
 
     /* --- the encrypted vault ------------------------------------------ */
 
@@ -925,7 +974,11 @@ async function main() {
         profileId: state.data.settings.activeProfileId,
       });
       assert(profile.ok, 'the profile should be readable again');
-      assertEqual(profile.data.personal.email.value, TEST_PROFILE.email, 'data survived the round trip');
+      assertEqual(
+        profile.data.personal.email.value,
+        TEST_PROFILE.email,
+        'data survived the round trip',
+      );
     });
 
     await test('changing the passphrase re-encrypts everything', async () => {
@@ -990,7 +1043,6 @@ async function main() {
       assert(profile.ok, 'the profile should be readable with encryption off');
       assertEqual(profile.data.personal.email.value, TEST_PROFILE.email, 'data survived');
     });
-
 
     /* --- importing a real PDF through the UI -------------------------- */
 
@@ -1081,9 +1133,56 @@ async function main() {
       assert(stored.resumes >= 1, 'the resume file was not kept');
     });
 
+    /* --- v0.5: proactive modes, corrections, SPA, focus, portability --- */
+
+    await runV05Suite({
+      browser,
+      worker,
+      extensionId,
+      server,
+      test,
+      assert,
+      assertEqual,
+      scanPage,
+      evalInWorker,
+      foreign,
+    });
+
+    /* --- real-world ATS layouts ------------------------------------------ */
+
+    await runAtsSuite({
+      browser,
+      worker,
+      extensionId,
+      server,
+      test,
+      assert,
+      assertEqual,
+      evalInWorker,
+    });
+
+    /* --- accessibility ---------------------------------------------------- */
+
+    await runA11ySuite({ browser, worker, extensionId, server, test, assert, evalInWorker });
+
+    /* --- first run --------------------------------------------------------- */
+
+    await runEditorSuite({
+      browser,
+      extensionId,
+      server,
+      test,
+      assert,
+      assertEqual,
+      worker,
+      evalInWorker,
+    });
+
+    await runOnboardingSuite({ browser, extensionId, test, assert, assertEqual });
   } finally {
     await browser.close();
     await server.close();
+    await foreign?.close();
   }
 
   /* ------------------------------------------------------------- report */

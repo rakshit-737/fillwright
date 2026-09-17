@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Acme - Security Engineer</title>
+    <link rel="stylesheet" href="../shared.css" />
+  </head>
+  <body>
+    <div class="section page-centered application-form">
+      <h2>Submit your application</h2>
+      <p class="lead">
+        Expected (Lever markup): no &lt;label for&gt; — each field sits in a
+        <code>.application-label</code> div beside the input, with name attributes and
+        placeholders. Name, email, phone, current company and the URL fields fill. "Additional
+        information" is a written answer and is left for you. "Submit application" is never
+        pressed.
+      </p>
+      <form method="POST" enctype="multipart/form-data" id="application-form">
+        <ul>
+          <li class="application-question resume">
+            <div class="application-label">Resume/CV<span class="required">✱</span></div>
+            <div class="application-field"><input type="file" name="resume" id="resume-upload-input" /></div>
+          </li>
+          <li class="application-question">
+            <div class="application-label">Full name<span class="required">✱</span></div>
+            <div class="application-field"><input type="text" name="name" required /></div>
+          </li>
+          <li class="application-question">
+            <div class="application-label">Email<span class="required">✱</span></div>
+            <div class="application-field"><input type="text" name="email" required /></div>
+          </li>
+          <li class="application-question">
+            <div class="application-label">Phone</div>
+            <div class="application-field"><input type="text" name="phone" /></div>
+          </li>
+          <li class="application-question">
+            <div class="application-label">Current company</div>
+            <div class="application-field"><input type="text" name="org" /></div>
+          </li>
+        </ul>
+        <h4>Links</h4>
+        <ul>
+          <li class="application-question">
+            <div class="application-label">LinkedIn URL</div>
+            <div class="application-field"><input type="text" name="urls[LinkedIn]" /></div>
+          </li>
+          <li class="application-question">
+            <div class="application-label">GitHub URL</div>
+            <div class="application-field"><input type="text" name="urls[GitHub]" /></div>
+          </li>
+          <li class="application-question">
+            <div class="application-label">Portfolio URL</div>
+            <div class="application-field"><input type="text" name="urls[Portfolio]" /></div>
+          </li>
+          <li class="application-question">
+            <div class="application-label">Other website</div>
+            <div class="application-field"><input type="text" name="urls[Other]" /></div>
+          </li>
+        </ul>
+        <h4>Additional information</h4>
+        <div class="application-additional">
+          <textarea name="comments"
+            placeholder="Add a cover letter or anything else you want to share."></textarea>
+        </div>
+        <div class="application-submit">
+          <button type="submit" class="template-btn-submit postings-btn">Submit application</button>
+        </div>
+      </form>
+    </div>
+    <script src="../shared.js"></script>
+  </body>
+</html>

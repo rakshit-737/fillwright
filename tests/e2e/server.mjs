@@ -18,7 +18,7 @@ const TYPES = {
  * fixtures over http://localhost — the same way a real application form is
  * served.
  */
-export function startServer(root, port = 0) {
+export function startServer(root, port = 0, host = '127.0.0.1') {
   const server = createServer(async (request, response) => {
     try {
       const url = new URL(request.url ?? '/', 'http://localhost');
@@ -38,10 +38,10 @@ export function startServer(root, port = 0) {
   });
 
   return new Promise((done) => {
-    server.listen(port, '127.0.0.1', () => {
+    server.listen(port, host, () => {
       const address = server.address();
       done({
-        origin: `http://127.0.0.1:${address.port}`,
+        origin: `http://${host}:${address.port}`,
         close: () => new Promise((closed) => server.close(closed)),
       });
     });

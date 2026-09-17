@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Apply — Field Engineer (virtualised country list)</title>
+    <link rel="stylesheet" href="./shared.css" />
+    <style>
+      .vs-control { border: 1px solid #ccc; border-radius: 4px; padding: 6px; cursor: pointer; }
+      #country-list { height: 200px; overflow-y: auto; position: relative; border: 1px solid #ccc; background: #fff; }
+      #country-list [role=option] { position: absolute; left: 0; right: 0; height: 24px; padding: 2px 8px; }
+    </style>
+  </head>
+  <body>
+    <h1>Apply: Field Engineer</h1>
+    <p class="lead">
+      Expected: "Country of residence" is a virtualised list of 600 entries — only the rows in
+      view exist in the page. Fillwright scrolls the list to find "India" (entry 400) and selects
+      it. Nothing is typed, because the list has no search box.
+    </p>
+    <form>
+      <label for="v-first">First Name</label>
+      <input id="v-first" autocomplete="given-name" />
+      <label for="v-email">Email</label>
+      <input id="v-email" type="email" autocomplete="email" />
+      <label id="country-label">Country of residence</label>
+      <div class="vs-control" role="combobox" tabindex="0" aria-haspopup="listbox"
+        aria-expanded="false" aria-labelledby="country-label" aria-controls="country-list">
+        <span id="country-value">Select…</span>
+      </div>
+      <input type="hidden" name="country" id="country" />
+      <button type="submit">Submit application</button>
+    </form>
+    <script>
+      const COUNTRIES = Array.from({ length: 600 }, (_, i) => `Territory ${String(i).padStart(3, '0')}`);
+      COUNTRIES[400] = 'India';
+      COUNTRIES[401] = 'Indonesia';
+      const control = document.querySelector('.vs-control');
+      const ROW = 24;
+      let list = null;
+      window.__rendered = 0;
+      function render() {
+        const first = Math.floor(list.scrollTop / ROW);
+        const inner = list.firstElementChild;
+        inner.replaceChildren();
+        for (let i = first; i < Math.min(COUNTRIES.length, first + 10); i++) {
+          const option = document.createElement('div');
+          option.setAttribute('role', 'option');
+          option.style.top = `${i * ROW}px`;
+          option.textContent = COUNTRIES[i];
+          option.addEventListener('click', () => {
+            document.getElementById('country').value = COUNTRIES[i];
+            document.getElementById('country-value').textContent = COUNTRIES[i];
+            close();
+          });
+          inner.appendChild(option);
+        }
+        window.__rendered = Math.max(window.__rendered, inner.childElementCount);
+      }
+      function open() {
+        if (list) return;
+        list = document.createElement('div');
+        list.id = 'country-list';
+        list.setAttribute('role', 'listbox');
+        const inner = document.createElement('div');
+        inner.style.height = `${COUNTRIES.length * ROW}px`;
+        list.appendChild(inner);
+        list.addEventListener('scroll', render);
+        control.after(list);
+        control.setAttribute('aria-expanded', 'true');
+        render();
+      }
+      function close() {
+        list?.remove();
+        list = null;
+        control.setAttribute('aria-expanded', 'false');
+      }
+      control.addEventListener('click', () => (list ? close() : open()));
+    </script>
+    <script src="./shared.js"></script>
+  </body>
+</html>

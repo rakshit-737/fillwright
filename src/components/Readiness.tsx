@@ -114,7 +114,7 @@ const DESTINATIONS: Record<string, { route: string; anchor?: string }> = {
 /** "At least five skills" reads better mid-sentence as "at least five skills". */
 function sentenceCase(text: string): string {
   // Keep proper nouns and acronyms (GitHub, GPA) as written.
-  return /^[A-Z][a-z]+/.test(text) && !/^(?:GitHub|LinkedIn)/.test(text)
+  return /^[A-Z][a-z]+\b/.test(text) && !/^(?:GitHub|LinkedIn)/.test(text)
     ? text.charAt(0).toLowerCase() + text.slice(1)
     : text;
 }

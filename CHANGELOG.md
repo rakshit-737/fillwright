@@ -2,6 +2,48 @@
 
 Notable changes, newest first. Versions follow semantic versioning.
 
+## 0.4.0
+
+A product pass over the on-page experience, plus three security fixes.
+
+### Security
+
+- **The on-page panel now uses a closed shadow root.** With an open root, any
+  script on the application page could read the preview — proposed values and
+  sensitive answers — before the user approved anything. The release verifier
+  now fails on an open root.
+- **Content scripts can no longer call profile-level messages.** The router
+  accepted `ui:export-data`, `ui:get-profile` and friends from any sender. They
+  are now limited to Fillwright's own pages.
+- **The Workday adapter no longer presses "Add" on every scan.** Each rescan
+  created another empty entry block.
+
+### Fixed
+
+- **`Alt+Shift+F` did nothing.** The shortcut handler messaged the service
+  worker from inside the service worker, which Chrome never delivers.
+- A field that disappeared between scan and fill (a new step) is now reported,
+  not silently "filled".
+
+### Added
+
+- Panel rebuilt as an explicit state machine (detected, analysing, ready,
+  review, filling, success, partial, error, locked, undo), draggable, keyboard
+  movable, `Esc` to minimise, screen-reader announcements.
+- Autofill modes: Manual (default), Assist and Smart, with optional site access
+  and local "is this an application?" scoring.
+- SPA and multi-step awareness: route changes and new fields trigger a quiet
+  rescan, never while typing and never under an open review list; per-step
+  progress kept in session storage.
+- Any mapping can be changed; corrections can apply to this form only.
+- Remembered corrections can be retargeted, paused, inspected and reset.
+- "Add another entry" offers for forms with fewer blocks than the profile.
+- Job-posting skill comparison (present / not in profile).
+- On-device answer drafting in the panel: choose facts, generate, edit, use.
+- Profile switcher in the popup and the panel.
+- History sort; export with optional history and a sensitivity warning;
+  validated import.
+
 ## 0.3.1
 
 Fixes a bug that made importing a PDF resume appear to hang forever.

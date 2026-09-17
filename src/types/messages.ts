@@ -1,4 +1,4 @@
-import type { FillOutcome, FillPlan, FillPlanEntry, ScanResult, SavedMapping } from './fields';
+import type { CanonicalField, FillOutcome, FillPlan, FillPlanEntry, ScanResult, SavedMapping } from './fields';
 import type { Profile } from './profile';
 import type { Settings } from './settings';
 
@@ -37,8 +37,12 @@ export type UiRequest =
   | { type: 'ui:clear-history' }
   | { type: 'ui:list-saved-mappings'; origin?: string }
   | { type: 'ui:delete-saved-mapping'; id: string }
+  | { type: 'ui:update-saved-mapping'; id: string; canonical?: CanonicalField; disabled?: boolean }
+  | { type: 'ui:clear-saved-mappings'; origin?: string }
   | { type: 'ui:erase-all-data' }
-  | { type: 'ui:export-data' }
+  | { type: 'ui:export-data'; includeHistory?: boolean }
+  | { type: 'ui:import-data'; payload: unknown }
+  | { type: 'ui:sync-auto-detect' }
   | { type: 'ui:vault-status' }
   | { type: 'ui:vault-enable'; passphrase: string }
   | { type: 'ui:vault-unlock'; passphrase: string }
@@ -55,10 +59,28 @@ export type ContentRequest =
   | { type: 'content:ready'; url: string }
   | { type: 'ui:open-security' }
   | { type: 'content:scan-result'; scan: ScanResult }
-  | { type: 'content:request-mappings'; scan: ScanResult }
+  | {
+      type: 'content:request-mappings';
+      scan: ScanResult;
+      /**
+       * Corrections the user made for this fill only, without asking Fillwright
+       * to remember them. Applied like saved mappings, never persisted.
+       */
+      overrides?: Array<{ fingerprint: string; canonical: CanonicalField }>;
+    }
   | { type: 'content:fill-complete'; outcomes: FillOutcome[] }
   | { type: 'content:save-mapping'; mapping: Omit<SavedMapping, 'id' | 'createdAt' | 'useCount'> }
-  | { type: 'content:log-application'; company: string; role: string; origin: string; fieldsFilled: number };
+  | { type: 'content:log-application'; company: string; role: string; origin: string; fieldsFilled: number }
+  /** Passive (Assist/Smart) boot: what should an uninvited script do here? */
+  | { type: 'content:get-mode' }
+  /** Multi-step progress for this tab, kept in the worker's session storage. */
+  | { type: 'content:step-progress'; filled: number; stepKey: string }
+  | { type: 'content:get-progress' }
+  | { type: 'content:job-match'; text: string }
+  | { type: 'content:list-profiles' }
+  | { type: 'content:switch-profile'; profileId: string }
+  | { type: 'content:draft-facts' }
+  | { type: 'content:draft'; question: string; factIds: string[]; maxCharacters?: number };
 
 /* ---------- background → content script ---------- */
 

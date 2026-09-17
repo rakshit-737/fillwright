@@ -52,7 +52,9 @@ export function buildMappings(
         ? {
             field: saved.canonical,
             confidence: 0.99,
-            rationale: 'you taught Fillwright this mapping',
+            rationale: isOneOff(saved)
+              ? 'you chose this for this form'
+              : 'you taught Fillwright this mapping on this website',
             isOpenQuestion: false,
           }
         : classifyField(field.signals),
@@ -76,7 +78,8 @@ export function buildMappings(
       status: 'unmapped',
       proposedValue: '',
       rationale: classification.rationale,
-      fromSavedRule: Boolean(saved),
+      fromSavedRule: Boolean(saved) && !isOneOff(saved),
+      corrected: Boolean(saved),
       entryIndex: group.index,
     };
 
@@ -183,6 +186,11 @@ export function buildMappings(
   });
 }
 
+/** A correction made for the current form only; see `content:request-mappings`. */
+function isOneOff(mapping: SavedMapping | undefined): boolean {
+  return Boolean(mapping?.id.startsWith('override-'));
+}
+
 /**
  * A stable identity for a field on a given site, used to remember a mapping the
  * user taught us. Built from the label and name rather than the DOM position,
@@ -206,7 +214,7 @@ export function buildFillPlan(
   const fieldsById = new Map(scan.fields.map((field) => [field.id, field]));
 
   const entries: FillPlanEntry[] = scan.mappings
-    .map((mapping) => {
+    .map((mapping): FillPlanEntry | null => {
       const field = fieldsById.get(mapping.fieldId);
       if (!field) return null;
       return {
@@ -223,6 +231,8 @@ export function buildFillPlan(
         selected: mapping.status === 'ready',
         fingerprint: fingerprintOf(field),
         remembered: mapping.fromSavedRule,
+        corrected: Boolean(mapping.corrected),
+        required: field.signals.required,
       } satisfies FillPlanEntry;
     })
     .filter((entry): entry is FillPlanEntry => entry !== null)

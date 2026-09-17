@@ -57,7 +57,10 @@ export const ADAPTERS: SiteAdapter[] = [
     id: 'workday',
     label: 'Workday',
     matches: /(?:^|\.)myworkdayjobs\.com$|(?:^|\.)workday\.com$/i,
-    expandSelectors: ['button[data-automation-id="addButton"]', 'button[aria-expanded="false"]'],
+    // Workday's "Add" buttons create a new, empty entry block. They are never
+    // clicked here — doing so on every scan would add a block per rescan.
+    // Adding entries is an explicit user action (see autofill/repeat.ts).
+    expandSelectors: ['button[aria-expanded="false"]'],
     settleMs: 600,
     notes: 'Uses aria-labelledby rather than <label>, and ids containing colons and brackets.',
   },
@@ -143,7 +146,7 @@ export async function applyAdapter(adapter: SiteAdapter): Promise<void> {
  * Anything that could submit, apply, or navigate is refused outright, whatever
  * an adapter's selector matched.
  */
-function isSafeToExpand(element: HTMLElement): boolean {
+export function isSafeToExpand(element: HTMLElement): boolean {
   if (element.closest('[data-fillwright-ui]')) return false;
   // A <button> with no explicit type defaults to type="submit", so checking the
   // type alone would refuse almost every expander. What actually matters is

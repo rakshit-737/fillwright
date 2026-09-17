@@ -2,8 +2,10 @@ import { installRouter } from './router';
 import { registerProfileHandlers } from './handlers/profiles';
 import { registerSettingsHandlers } from './handlers/settings';
 import { registerPrivacyHandlers } from './handlers/privacy';
-import { registerAutofillHandlers } from './handlers/autofill';
+import { registerAutofillHandlers, scanActiveTab } from './handlers/autofill';
+import { registerAssistHandlers } from './handlers/assist';
 import { registerVaultHandlers } from './handlers/vault';
+import { syncAutoDetect } from './auto-detect';
 import { getSettings } from '@/storage/settings';
 import { countProfiles, createProfile } from '@/storage/profiles';
 import { setSettings } from '@/storage/settings';
@@ -21,6 +23,7 @@ registerSettingsHandlers();
 registerProfileHandlers();
 registerPrivacyHandlers();
 registerAutofillHandlers();
+registerAssistHandlers();
 registerVaultHandlers();
 
 chrome.runtime.onInstalled.addListener(async (details) => {
@@ -29,15 +32,30 @@ chrome.runtime.onInstalled.addListener(async (details) => {
     const profile = await createProfile('My Profile');
     await setSettings({ activeProfileId: profile.id });
   }
+  await syncAutoDetect().catch(() => undefined);
   const settings = await getSettings();
   if (details.reason === 'install' && !settings.onboardingCompleted) {
     await chrome.tabs.create({ url: chrome.runtime.getURL('options.html#/welcome') });
   }
 });
 
-chrome.commands?.onCommand.addListener(async (command) => {
+chrome.runtime.onStartup?.addListener(() => {
+  void syncAutoDetect().catch(() => undefined);
+});
+
+// Revoking site access from chrome://extensions must switch proactive modes off
+// immediately, not at the next restart.
+chrome.permissions?.onRemoved?.addListener(() => {
+  void syncAutoDetect().catch(() => undefined);
+});
+chrome.permissions?.onAdded?.addListener(() => {
+  void syncAutoDetect().catch(() => undefined);
+});
+
+chrome.commands?.onCommand.addListener((command) => {
   if (command !== 'fillwright-activate') return;
-  // Same path as the toolbar button: a user gesture grants activeTab, and the
-  // content script is injected only for this tab, only now.
-  await chrome.runtime.sendMessage({ type: 'ui:scan-active-tab' }).catch(() => undefined);
+  // Same path as the toolbar button: the shortcut is a user gesture, which
+  // grants activeTab for this tab only. Called directly — a service worker's
+  // own runtime.sendMessage is never delivered back to itself.
+  void scanActiveTab().catch(() => undefined);
 });

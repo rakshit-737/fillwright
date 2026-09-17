@@ -33,4 +33,16 @@ manifest.host_permissions = ['http://127.0.0.1/*', 'http://localhost/*'];
 
 writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
 
+// The shipped panel uses a closed shadow root so page scripts cannot read it.
+// The harness drives the panel from the page's world, so the test build — and
+// only the test build — reopens it.
+const contentPath = resolve(target, 'content.js');
+const content = readFileSync(contentPath, 'utf8');
+const reopened = content.replace(/attachShadow\(\{(\s*)mode:(\s*)(["'])closed\3/, 'attachShadow({$1mode:$2$3open$3');
+if (reopened === content) {
+  console.error('[fillwright] could not find the closed shadow root in content.js');
+  process.exit(1);
+}
+writeFileSync(contentPath, reopened);
+
 console.log('[fillwright] wrote dist-e2e/ with loopback access pre-granted (test build only)');

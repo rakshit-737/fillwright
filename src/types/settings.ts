@@ -1,5 +1,9 @@
 /** Lightweight, non-sensitive settings. Stored in chrome.storage.local. */
 
+export type AutofillMode = 'manual' | 'assist' | 'smart';
+
+export const AUTOFILL_MODES: readonly AutofillMode[] = ['manual', 'assist', 'smart'];
+
 export interface Settings {
   /** Profile currently used for autofill. */
   activeProfileId: string | null;
@@ -16,8 +20,18 @@ export interface Settings {
     previewBeforeFill: boolean;
     /** Briefly outline fields Fillwright changed. */
     highlightFilledFields: boolean;
-    /** Offer to scan automatically on pages that look like applications. */
-    autoDetectOnKnownSites: boolean;
+    /**
+     * How proactive Fillwright is on pages it was not explicitly invoked on.
+     *
+     *  - manual: only when the user clicks the toolbar button or presses the
+     *    shortcut. Needs no site access. The default.
+     *  - assist: offers a small prompt on pages that clearly are applications.
+     *  - smart: also prepares the plan in advance, so counts are ready when
+     *    the user opens the panel.
+     *
+     * No mode fills without confirmation, and no mode ever submits.
+     */
+    mode: AutofillMode;
   };
 
   privacy: {
@@ -73,7 +87,7 @@ export const DEFAULT_SETTINGS: Settings = {
     confidenceThreshold: 0.7,
     previewBeforeFill: true,
     highlightFilledFields: true,
-    autoDetectOnKnownSites: false,
+    mode: 'manual',
   },
   privacy: {
     keepApplicationHistory: false,

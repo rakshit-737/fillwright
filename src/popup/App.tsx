@@ -21,6 +21,8 @@ export function App() {
   const [scanState, setScanState] = useState<'idle' | 'scanning' | 'error'>('idle');
   const [scanError, setScanError] = useState('');
 
+  const [reload, setReload] = useState(0);
+
   useEffect(() => {
     let cancelled = false;
 
@@ -61,7 +63,12 @@ export function App() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [reload]);
+
+  const switchProfile = async (profileId: string) => {
+    const result = await send({ type: 'ui:set-active-profile', profileId });
+    if (result.ok) setReload((value) => value + 1);
+  };
 
   const scanPage = async () => {
     setScanState('scanning');
@@ -157,7 +164,22 @@ export function App() {
         <main className="fw-popup__body">
           <section className="fw-card">
             <div className="fw-card__row">
-              <h2 className="fw-card__label">{profile.name}</h2>
+              {state.profiles.length > 1 ? (
+                <select
+                  className="fw-profile-switch"
+                  value={profile.id}
+                  aria-label="Active profile"
+                  onChange={(event) => void switchProfile(event.target.value)}
+                >
+                  {state.profiles.map((option) => (
+                    <option value={option.id} key={option.id}>
+                      {option.name}
+                    </option>
+                  ))}
+                </select>
+              ) : (
+                <h2 className="fw-card__label">{profile.name}</h2>
+              )}
               <span className="fw-pct">{completeness?.percent ?? 0}%</span>
             </div>
             <div

@@ -67,13 +67,30 @@ To produce a Web Store zip: `npm run package` (runs every check first, writes
 4. **Options → Application preferences** — set work authorisation, relocation
    and (optionally) demographics and salary. All off and unanswered by default.
 5. **On an application**, click the Fillwright toolbar button or press
-   `Alt+Shift+F`. A panel appears with what it found.
+   `Alt+Shift+F`. A panel appears: "27 application fields found — 21 ready,
+   4 to review, 2 need you". It can be dragged (or moved with the arrow keys on
+   its title) and minimised with `Esc`.
+   Under **Settings → When Fillwright appears** you can choose Assist (it offers
+   help on pages that clearly are applications) or Smart (it also prepares the
+   plan in advance). Both need site access, which Chrome asks you for. Neither
+   fills or submits anything without you.
 6. **Review, then Fill.** Every row shows what will change, how confident
    Fillwright is, and — behind "Why?" — what it matched on.
-7. **Correct anything it got wrong.** "Set what this is" teaches Fillwright the
-   field for that site; it is remembered next time. Review everything under
+7. **Correct anything it got wrong.** "Change" (or "Set what this is") lets you
+   pick what a field means — for this form only, or remembered for the site.
+   Remembered corrections can be changed, paused, inspected or reset under
    Options → What Fillwright learned.
-8. Check the form, then submit it yourself.
+8. **Multi-entry forms.** Each education/experience block is filled from the
+   matching profile entry. If the form shows fewer blocks than you have entries
+   and has one clear "Add education" button, the panel offers to add them.
+9. **Written questions** are marked "You need to write this". With on-device AI
+   switched on, "Draft with on-device AI" shows exactly which facts would be
+   used, then gives you an editable draft; nothing reaches the form until you
+   press "Use this answer".
+10. **Job postings.** When the posting is on the page, the panel lists which
+    skills it mentions that your profile has, and which it does not. It never
+    changes your profile.
+11. Check the form, then submit it yourself. Fillwright never submits.
 
 ---
 
@@ -215,17 +232,20 @@ Summarised here; the full threat model is in [SECURITY.md](./SECURITY.md).
    with no matching profile entry is left empty rather than duplicated.
 6. **Local device access defeats the storage protections.** See SECURITY.md §3.5.
 7. **AI assistance is on-device only.** Hosted models would require relaxing the
-   CSP, which would undermine the central guarantee.
+   CSP, which would undermine the central guarantee. Drafting runs in the
+   service worker; if this Chrome build does not expose its on-device model
+   there, the panel says so rather than falling back to anything else.
+8. **Exports are not encrypted.** The export warns about this before saving.
+9. **Step progress is per tab and per session.** It lives in memory-only
+   session storage and resets when the browser closes.
 
 ---
 
 ## Future work
 
-- Answer drafting wired into the on-page panel — the provider and the safety
-  copy exist, the in-panel flow does not yet.
-- Job-description matching ("your profile mentions 3 of the 4 listed skills").
-- "Add another entry" support, for forms with fewer blocks than your profile has
-  entries.
+- Passive detection inside same-origin application iframes (explicit
+  activation already covers them).
+- A per-site mapping editor that can create rules before visiting the site.
 - Firefox support (MV3 there differs meaningfully).
 
 ---

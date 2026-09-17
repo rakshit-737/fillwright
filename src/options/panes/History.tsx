@@ -20,6 +20,7 @@ export function History({
 }) {
   const [entries, setEntries] = useState<ApplicationHistoryEntry[]>([]);
   const [query, setQuery] = useState('');
+  const [sort, setSort] = useState<SortOrder>('newest');
   const [loading, setLoading] = useState(true);
 
   const enabled = settings?.privacy.keepApplicationHistory ?? false;
@@ -36,13 +37,22 @@ export function History({
 
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase();
-    if (!needle) return entries;
-    return entries.filter((entry) =>
-      `${entry.company} ${entry.role} ${entry.origin}`.toLowerCase().includes(needle),
-    );
-  }, [entries, query]);
+    const matching = needle
+      ? entries.filter((entry) =>
+          `${entry.company} ${entry.role} ${entry.origin}`.toLowerCase().includes(needle),
+        )
+      : entries;
+    return sortEntries(matching, sort);
+  }, [entries, query, sort]);
 
-  const grouped = useMemo(() => groupByDay(filtered), [filtered]);
+  // Date headings only make sense when the list is in date order.
+  const grouped = useMemo(
+    () =>
+      sort === 'company'
+        ? [['A–Z by company', filtered] as [string, ApplicationHistoryEntry[]]]
+        : groupByDay(filtered),
+    [filtered, sort],
+  );
 
   const toggle = async (value: boolean) => {
     const result = await send<Settings>({
@@ -95,9 +105,21 @@ export function History({
               aria-label="Search application history"
               onChange={(event) => setQuery(event.target.value)}
             />
-            <button className="fw-btn fw-btn--danger fw-btn--sm" onClick={() => void clear()}>
-              Clear history
-            </button>
+            <div className="fw-historytools">
+              <select
+                className="fw-select"
+                value={sort}
+                aria-label="Sort application history"
+                onChange={(event) => setSort(event.target.value as SortOrder)}
+              >
+                <option value="newest">Newest first</option>
+                <option value="oldest">Oldest first</option>
+                <option value="company">Company A–Z</option>
+              </select>
+              <button className="fw-btn fw-btn--danger fw-btn--sm" onClick={() => void clear()}>
+                Clear history
+              </button>
+            </div>
           </div>
 
           {filtered.length === 0 ? (
@@ -131,6 +153,23 @@ export function History({
       {loading && <p className="fw-muted">Loading…</p>}
     </div>
   );
+}
+
+type SortOrder = 'newest' | 'oldest' | 'company';
+
+function sortEntries(entries: ApplicationHistoryEntry[], order: SortOrder): ApplicationHistoryEntry[] {
+  const copy = [...entries];
+  switch (order) {
+    case 'oldest':
+      return copy.sort((a, b) => a.appliedAt.localeCompare(b.appliedAt));
+    case 'company':
+      return copy.sort(
+        (a, b) => a.company.localeCompare(b.company, undefined, { sensitivity: 'base' }) ||
+          b.appliedAt.localeCompare(a.appliedAt),
+      );
+    default:
+      return copy.sort((a, b) => b.appliedAt.localeCompare(a.appliedAt));
+  }
 }
 
 function groupByDay(entries: ApplicationHistoryEntry[]): Array<[string, ApplicationHistoryEntry[]]> {

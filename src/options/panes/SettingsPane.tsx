@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { send } from '@/utils/messaging';
 import type { DeepPartial } from '@/types/messages';
-import type { Settings } from '@/types/settings';
+import type { AutofillMode, Settings } from '@/types/settings';
 
 interface Props {
   settings: Settings | null;
@@ -29,6 +29,8 @@ export function SettingsPane({ settings, onChange }: Props) {
           {saving && <span className="fw-saving"> Saving…</span>}
         </p>
       </header>
+
+      <AutofillModeSection settings={settings} onChange={onChange} />
 
       <section className="fw-section">
         <h2 className="fw-section__title">Autofill</h2>
@@ -186,5 +188,122 @@ function Radio({
         ))}
       </div>
     </fieldset>
+  );
+}
+
+const SITE_ACCESS = { origins: ['https://*/*'] };
+
+const MODES: Array<[AutofillMode, string, string]> = [
+  [
+    'manual',
+    'Manual',
+    'Fillwright only runs when you click its button or press the shortcut. Needs no access to websites.',
+  ],
+  [
+    'assist',
+    'Assist',
+    'Offers a small prompt on pages that clearly are job applications. Needs permission to read https pages.',
+  ],
+  [
+    'smart',
+    'Smart',
+    'Also prepares the fill plan in advance, so it is ready when you open the panel. Same permission as Assist.',
+  ],
+];
+
+/**
+ * How proactive Fillwright is. No mode fills without your approval, and no
+ * mode submits anything. Site access is requested here, in response to your
+ * click, so Chrome shows its own permission prompt and you can refuse it.
+ */
+function AutofillModeSection({
+  settings,
+  onChange,
+}: {
+  settings: Settings;
+  onChange: (settings: Settings) => void;
+}) {
+  const [notice, setNotice] = useState('');
+  const [shortcut, setShortcut] = useState('');
+
+  useEffect(() => {
+    chrome.commands
+      ?.getAll()
+      .then((commands) => {
+        setShortcut(commands.find((command) => command.name === 'fillwright-activate')?.shortcut ?? '');
+      })
+      .catch(() => undefined);
+  }, []);
+
+  const choose = async (mode: AutofillMode) => {
+    setNotice('');
+    if (mode !== 'manual') {
+      let granted = false;
+      try {
+        granted =
+          (await chrome.permissions.contains(SITE_ACCESS)) || (await chrome.permissions.request(SITE_ACCESS));
+      } catch {
+        granted = false;
+      }
+      if (!granted) {
+        setNotice('Site access was not granted, so Fillwright stays in Manual mode.');
+        return;
+      }
+    }
+    const result = await send<Settings>({ type: 'ui:set-settings', patch: { autofill: { mode } } });
+    if (result.ok) onChange(result.data);
+    if (mode === 'manual' && (await chrome.permissions.contains(SITE_ACCESS).catch(() => false))) {
+      setNotice('Manual mode is on. Fillwright still holds site access — remove it below if you no longer need it.');
+    }
+  };
+
+  const revoke = async () => {
+    const removed = await chrome.permissions.remove(SITE_ACCESS).catch(() => false);
+    await send({ type: 'ui:set-settings', patch: { autofill: { mode: 'manual' } } }).then((result) => {
+      if (result.ok) onChange(result.data as Settings);
+    });
+    setNotice(removed ? 'Site access removed.' : 'Chrome did not remove site access.');
+  };
+
+  return (
+    <section className="fw-section">
+      <h2 className="fw-section__title">When Fillwright appears</h2>
+      <fieldset className="fw-modes" aria-label="Autofill mode">
+        {MODES.map(([value, title, detail]) => (
+          <label className="fw-mode" key={value}>
+            <input
+              type="radio"
+              name="autofill-mode"
+              value={value}
+              checked={settings.autofill.mode === value}
+              onChange={() => void choose(value)}
+            />
+            <span>
+              <span className="fw-mode__title">{title}</span>
+              <span className="fw-mode__detail">{detail}</span>
+            </span>
+          </label>
+        ))}
+      </fieldset>
+      {notice && (
+        <p className="fw-field__hint" role="status">
+          {notice}
+        </p>
+      )}
+      <p className="fw-field__hint">
+        Keyboard shortcut: {shortcut ? <kbd className="fw-kbd">{shortcut}</kbd> : 'not set'}.{' '}
+        <button
+          className="fw-linkbtn"
+          onClick={() => void chrome.tabs.create({ url: 'chrome://extensions/shortcuts' })}
+        >
+          Change shortcut
+        </button>
+        {' · '}
+        <button className="fw-linkbtn" onClick={() => void revoke()}>
+          Remove site access
+        </button>
+      </p>
+      <p className="fw-field__hint">No mode fills a form without your approval, and none ever submits one.</p>
+    </section>
   );
 }

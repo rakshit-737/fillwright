@@ -182,6 +182,8 @@ export interface FieldMapping {
   rationale: string;
   /** True when this mapping came from a user-saved rule for this site. */
   fromSavedRule: boolean;
+  /** True when the user chose this mapping, saved or for this form only. */
+  corrected?: boolean;
   /**
    * Which repeated block this field belongs to, and therefore which profile
    * entry it draws from. 0 for non-repeating fields.
@@ -234,6 +236,10 @@ export interface FillPlanEntry {
   fingerprint: string;
   /** True when this mapping came from a correction the user already taught. */
   remembered: boolean;
+  /** True when the user picked this mapping, saved or not. */
+  corrected?: boolean;
+  /** The form marks this field as required. */
+  required?: boolean;
 }
 
 export interface FillOutcome {
@@ -258,4 +264,6 @@ export interface SavedMapping {
   customKey?: string;
   createdAt: string;
   useCount: number;
+  /** A paused rule is kept but not applied. */
+  disabled?: boolean;
 }

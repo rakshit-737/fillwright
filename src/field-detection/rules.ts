@@ -250,10 +250,21 @@ export const FIELD_RULES: FieldRule[] = [
   /* ----------------------------------------------------------- experience */
   {
     field: 'experience.company',
-    exact: ['company', 'employer', 'current employer', 'most recent employer', 'current company', 'organization', 'organisation'],
+    exact: [
+      'company', 'employer', 'current employer', 'most recent employer', 'current company',
+      'previous employer', 'former employer', 'past employer', 'last employer', 'previous company',
+      'organization', 'organisation',
+    ],
     includes: ['employer', 'company'],
     autocomplete: ['organization'],
-    not: [/\b(?:why|about|describe|size|website|url|address)\b/, THIRD_PARTY_RE],
+    // "Company you're applying to" names the hiring company, not the candidate's
+    // employer — writing a past employer there would be plainly wrong.
+    not: [
+      /\b(?:why|about|describe|size|website|url|address)\b/,
+      /\b(?:applying|apply|applied|hiring|interviewing)\b/,
+      /\b(?:this|our|target|prospective) (?:company|employer|organi[sz]ation)\b/,
+      THIRD_PARTY_RE,
+    ],
   },
   {
     field: 'experience.title',

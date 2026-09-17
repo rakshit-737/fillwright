@@ -56,6 +56,8 @@ export function buildMappings(
     );
   }
 
+  resolveLoneNameField(fields, classifications);
+
   const groups = assignGroups(
     fields,
     new Map([...classifications].map(([id, result]) => [id, result.field])),
@@ -186,6 +188,40 @@ export function buildMappings(
     // A sensitive field with a real stored answer is still surfaced distinctly
     // in the UI, but it is fillable.
     return { ...entry, status: sensitive ? 'review' : 'ready' };
+  });
+}
+
+/**
+ * A bare "Name" is ambiguous on its own, so it scores below the autofill
+ * threshold. On a form that asks for the candidate's email and has no
+ * separate first/last name fields, it is the candidate's name — Lever and
+ * Ashby both ask this way. The field is still skipped if it reads as someone
+ * else's (the third-party check runs later, as for every field).
+ */
+function resolveLoneNameField(
+  fields: DetectedField[],
+  classifications: Map<string, ReturnType<typeof classifyField>>,
+): void {
+  const kinds = [...classifications.values()];
+  const hasEmail = kinds.some((c) => c.field === 'personal.email' && c.confidence >= 0.7);
+  const hasSplitName = kinds.some(
+    (c) =>
+      (c.field === 'personal.firstName' || c.field === 'personal.lastName') && c.confidence >= 0.5,
+  );
+  if (!hasEmail || hasSplitName) return;
+
+  const bare = fields.filter((field) => {
+    const c = classifications.get(field.id);
+    const label = normalizeLabel(field.signals.labelText || field.signals.ariaLabel);
+    return c?.field === 'personal.fullName' && c.confidence < 0.7 && /^(?:your )?name$/.test(label);
+  });
+  if (bare.length !== 1) return;
+  const only = bare[0]!;
+  const current = classifications.get(only.id)!;
+  classifications.set(only.id, {
+    ...current,
+    confidence: 0.8,
+    rationale: `${current.rationale} It is the only name field on a form that asks for your email, so it is almost certainly yours.`,
   });
 }
 

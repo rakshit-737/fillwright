@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Software Engineer II — Acme Careers</title>
+    <link rel="stylesheet" href="../shared.css" />
+    <style>
+      [data-automation-id='promptOption'] { padding: 4px 8px; cursor: pointer; }
+      [role='listbox'] { border: 1px solid #ccc; background: #fff; max-height: 160px; overflow: auto; }
+    </style>
+  </head>
+  <body>
+    <div data-automation-id="applyFlowPage">
+      <h2 data-automation-id="jobPostingHeader">Software Engineer II</h2>
+      <p class="lead">
+        Expected (Workday markup): no &lt;label for&gt; — aria-labelledby and data-automation-id.
+        Step 1 fills name, email, phone and the country dropdown ("India"). Fillwright never
+        presses "Save and Continue"; the test presses it, and step 2 is read afresh. On step 2 the
+        "Add" button (aria-label "Add Education") is offered when the profile has entries; the
+        School field is a searchable prompt whose options load only after two characters are
+        typed. Fillwright types only the first few characters, waits, then picks the option.
+      </p>
+      <ol data-automation-id="progressBar">
+        <li data-automation-id="progressBarActiveStep" aria-current="step" id="step-name">My Information</li>
+        <li>My Experience</li>
+        <li>Review</li>
+      </ol>
+      <div id="page"></div>
+      <div data-automation-id="pageFooter">
+        <button type="button" data-automation-id="bottom-navigation-back-button">Back</button>
+        <button type="button" data-automation-id="bottom-navigation-next-button" id="next">Save and Continue</button>
+      </div>
+    </div>
+
+    <script>
+      window.__nextPresses = 0;
+      window.__searches = [];
+      const SCHOOLS = [
+        'Delhi Public School',
+        'Delhi University',
+        'Open University',
+        'Open University of Catalonia',
+        'Vellore Institute of Technology',
+        'Vellore Institute of Technology - Chennai',
+      ];
+      const page = document.getElementById('page');
+      let uid = 0;
+
+      function field(label, input) {
+        const id = `lbl-${uid++}`;
+        const wrap = document.createElement('div');
+        wrap.setAttribute('data-automation-id', 'formField');
+        const lab = document.createElement('label');
+        lab.id = id;
+        lab.textContent = label;
+        input.setAttribute('aria-labelledby', id);
+        wrap.append(lab, input);
+        return wrap;
+      }
+      function text(automation) {
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.setAttribute('data-automation-id', automation);
+        input.id = `input-${uid++}`;
+        return input;
+      }
+
+      function stepOne() {
+        page.replaceChildren();
+        const h = document.createElement('h3');
+        h.textContent = 'My Information';
+        page.appendChild(h);
+        const country = document.createElement('select');
+        country.setAttribute('data-automation-id', 'countryDropdown');
+        for (const c of ['Select One', 'Canada', 'India', 'United Kingdom', 'United States of America']) {
+          const o = document.createElement('option');
+          o.textContent = c;
+          o.value = c === 'Select One' ? '' : c;
+          country.appendChild(o);
+        }
+        page.append(
+          field('Country', country),
+          field('First Name', text('legalNameSection_firstName')),
+          field('Last Name', text('legalNameSection_lastName')),
+          field('Email Address', text('email')),
+          field('Phone Number', text('phone-number')),
+        );
+      }
+
+      /** Workday's searchable prompt: options load only after 2+ characters. */
+      function schoolPrompt() {
+        const box = document.createElement('div');
+        box.setAttribute('data-automation-id', 'multiselectInputContainer');
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.id = `school-${uid++}`;
+        input.setAttribute('role', 'combobox');
+        input.setAttribute('aria-haspopup', 'listbox');
+        input.setAttribute('aria-expanded', 'false');
+        input.setAttribute('data-automation-id', 'searchBox');
+        const listId = `list-${uid++}`;
+        input.setAttribute('aria-controls', listId);
+        const selected = document.createElement('div');
+        selected.setAttribute('data-automation-id', 'selectedItem');
+        let timer;
+        let list;
+        const render = (query) => {
+          list?.remove();
+          list = null;
+          if (query.length < 2) {
+            input.setAttribute('aria-expanded', 'false');
+            return;
+          }
+          window.__searches.push(query);
+          list = document.createElement('div');
+          list.id = listId;
+          list.setAttribute('role', 'listbox');
+          for (const school of SCHOOLS.filter((s) => s.toLowerCase().includes(query.toLowerCase()))) {
+            const option = document.createElement('div');
+            option.setAttribute('role', 'option');
+            option.setAttribute('data-automation-id', 'promptOption');
+            option.textContent = school;
+            option.addEventListener('click', () => {
+              selected.textContent = school;
+              input.value = '';
+              input.setAttribute('data-selected', school);
+              list.remove();
+              list = null;
+              input.setAttribute('aria-expanded', 'false');
+            });
+            list.appendChild(option);
+          }
+          box.appendChild(list);
+          input.setAttribute('aria-expanded', 'true');
+        };
+        input.addEventListener('input', () => {
+          clearTimeout(timer);
+          const query = input.value;
+          timer = setTimeout(() => render(query), 300); // a server round-trip
+        });
+        box.append(input, selected);
+        return box;
+      }
+
+      function educationBlock(n) {
+        const block = document.createElement('div');
+        block.setAttribute('data-automation-id', `education-${n}`);
+        const h = document.createElement('h4');
+        h.textContent = `Education ${n}`;
+        const degree = document.createElement('select');
+        degree.setAttribute('data-automation-id', 'degree');
+        for (const d of ['Select One', 'High School Diploma', 'B.Tech', "Bachelor's Degree", 'Certificate in Statistics']) {
+          const o = document.createElement('option');
+          o.textContent = d;
+          o.value = d === 'Select One' ? '' : d;
+          degree.appendChild(o);
+        }
+        block.append(h, field('School or University', schoolPrompt()), field('Degree', degree));
+        return block;
+      }
+
+      function stepTwo() {
+        page.replaceChildren();
+        document.getElementById('step-name').textContent = 'My Experience';
+        const h = document.createElement('h3');
+        h.textContent = 'My Experience';
+        const eduSection = document.createElement('div');
+        eduSection.setAttribute('data-automation-id', 'educationSection');
+        const eh = document.createElement('h3');
+        eh.textContent = 'Education';
+        const blocks = document.createElement('div');
+        let count = 0;
+        const add = document.createElement('button');
+        add.type = 'button';
+        add.textContent = 'Add';
+        add.setAttribute('aria-label', 'Add Education');
+        add.setAttribute('data-automation-id', 'Add');
+        add.addEventListener('click', () => blocks.appendChild(educationBlock(++count)));
+        blocks.appendChild(educationBlock(++count));
+        eduSection.append(eh, blocks, add);
+        page.append(h, eduSection);
+        window.__step = 2;
+      }
+
+      stepOne();
+      window.__step = 1;
+      document.getElementById('next').addEventListener('click', () => {
+        window.__nextPresses += 1;
+        if (window.__step === 1) stepTwo();
+      });
+    </script>
+  </body>
+</html>

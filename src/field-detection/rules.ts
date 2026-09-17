@@ -324,6 +324,9 @@ export const FIELD_RULES: FieldRule[] = [
   },
   {
     field: 'experience.yearsOfExperience',
+    // "Years of experience with Python" asks about one skill, not a career
+    // total; answering it from total experience would overstate it.
+    not: [/\b(?:with|using)\b/, /\bexperience (?:in|on|of) (?!total|work|professional|years)\w/],
     exact: [
       'years of experience',
       'total experience',
@@ -417,8 +420,13 @@ export const FIELD_RULES: FieldRule[] = [
       'remote preference',
       'work arrangement',
       'work location preference',
+      'work setting',
+      'preferred work setting',
+      'work model',
+      'workplace type',
+      'preferred workplace',
     ],
-    includes: ['work arrangement', 'work preference'],
+    includes: ['work arrangement', 'work preference', 'work setting', 'workplace type'],
   },
   {
     field: 'preferences.referredBy',

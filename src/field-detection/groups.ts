@@ -128,14 +128,24 @@ export function assignGroups(
 ): Map<string, FieldGroup> {
   const groups = new Map<string, FieldGroup>();
 
-  // How many distinct positions each structural signature spans. A signature
-  // with a single position is not evidence of repetition.
-  const positionsBySignature = new Map<string, Set<number>>();
+  // A structural signature is evidence of repetition only when the SAME kind
+  // of field appears at two or more positions under it — two schools, two
+  // employers. A wrapper that every field on the form sits in (Greenhouse's
+  // div.field, Lever's li.application-question) repeats too, but holds a
+  // different field each time, and must not be read as numbered blocks.
+  const positionsByKind = new Map<string, Set<number>>();
   for (const field of fields) {
     if (!field.groupSignature) continue;
-    const seen = positionsBySignature.get(field.groupSignature) ?? new Set<number>();
+    const canonical = classifications.get(field.id) ?? 'unknown';
+    if (groupKindOf(canonical) === 'other') continue;
+    const key = `${field.groupSignature}|${canonical}`;
+    const seen = positionsByKind.get(key) ?? new Set<number>();
     seen.add(field.groupOrdinal ?? 0);
-    positionsBySignature.set(field.groupSignature, seen);
+    positionsByKind.set(key, seen);
+  }
+  const repeatedSignatures = new Set<string>();
+  for (const [key, seen] of positionsByKind) {
+    if (seen.size > 1) repeatedSignatures.add(key.slice(0, key.lastIndexOf('|')));
   }
 
   for (const field of fields) {
@@ -147,8 +157,7 @@ export function assignGroups(
       continue;
     }
 
-    const fromName =
-      indexFromIdentifier(field.signals.name) ?? indexFromIdentifier(field.signals.id);
+    const fromName = indexFromIdentifier(field.signals.name);
     if (fromName !== null) {
       groups.set(field.id, { kind, index: fromName, source: 'field-name' });
       continue;
@@ -160,10 +169,22 @@ export function assignGroups(
       continue;
     }
 
-    const repeats = field.groupSignature
-      ? (positionsBySignature.get(field.groupSignature)?.size ?? 0)
-      : 0;
-    if (repeats > 1 && field.groupOrdinal !== null && field.groupOrdinal !== undefined) {
+    // Ids are often generated counters ("school-7") rather than positions, so
+    // an id is only trusted when it uses array syntax: education[1], edu.1.x.
+    // Greenhouse's "school--1" (double dash, zero-based) is also positional.
+    const doubleDash = field.signals.id.match(/--(\d{1,2})$/);
+    const fromId = doubleDash?.[1]
+      ? Number(doubleDash[1])
+      : /[[.]\d{1,2}[\].]/.test(field.signals.id)
+        ? indexFromIdentifier(field.signals.id)
+        : null;
+    if (fromId !== null) {
+      groups.set(field.id, { kind, index: fromId, source: 'field-name' });
+      continue;
+    }
+
+    const repeats = field.groupSignature ? repeatedSignatures.has(field.groupSignature) : false;
+    if (repeats && field.groupOrdinal !== null && field.groupOrdinal !== undefined) {
       groups.set(field.id, { kind, index: field.groupOrdinal, source: 'structure' });
       continue;
     }

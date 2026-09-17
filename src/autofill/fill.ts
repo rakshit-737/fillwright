@@ -1,5 +1,6 @@
 import type { FillOutcome, FillPlanEntry } from '@/types/fields';
 import { isCombobox, selectInCombobox } from './combobox';
+import { ariaOptionValue } from '@/field-detection/harvest';
 
 /**
  * Writes values into form controls.
@@ -169,6 +170,14 @@ export function verify(elements: HTMLElement[], intended: string): Verdict {
       : { ok: false, reason: 'A different option ended up selected.' };
   }
 
+  if (isAriaRadio(first)) {
+    const checked = elements.find((element) => element.getAttribute('aria-checked') === 'true');
+    if (!checked) return { ok: false, reason: 'The page did not accept the selection.' };
+    return matches(ariaOptionValue(checked), intended)
+      ? { ok: true, reason: '' }
+      : { ok: false, reason: 'A different option ended up selected.' };
+  }
+
   if (first instanceof HTMLInputElement && first.type === 'checkbox') {
     const shouldCheck = /^(?:yes|true|on|1|checked)$/i.test(intended.trim());
     return first.checked === shouldCheck
@@ -232,6 +241,11 @@ function snapshot(fieldId: string, elements: HTMLElement[]): UndoRecord {
       previousCheckedValue: (checked as HTMLInputElement | undefined)?.value ?? '',
     };
   }
+  if (isAriaRadio(first)) {
+    const checked = elements.find((element) => element.getAttribute('aria-checked') === 'true');
+    const previous = checked ? ariaOptionValue(checked) : '';
+    return { fieldId, elements, previousValue: previous, previousCheckedValue: previous };
+  }
   return { fieldId, elements, previousValue: currentValue(first), previousCheckedValue: null };
 }
 
@@ -263,6 +277,9 @@ async function writeValue(elements: HTMLElement[], value: string): Promise<boole
 
   if (first instanceof HTMLInputElement && first.type === 'radio') {
     return setRadioGroup(elements as HTMLInputElement[], value);
+  }
+  if (isAriaRadio(first)) {
+    return setAriaRadioGroup(elements, value);
   }
   if (first instanceof HTMLInputElement && first.type === 'checkbox') {
     return setCheckbox(first, value);
@@ -324,6 +341,29 @@ function setSelect(element: HTMLSelectElement, value: string): boolean {
 
   dispatchInputEvents(element);
   element.blur();
+  return true;
+}
+
+function isAriaRadio(element: HTMLElement): boolean {
+  return (
+    !(element instanceof HTMLInputElement) &&
+    element.getAttribute('role') === 'radio' &&
+    element.closest('[role="radiogroup"]') !== null
+  );
+}
+
+/**
+ * Selects an option in a button-based radio group by pressing it, as a person
+ * would. Only elements with role="radio" inside a role="radiogroup" are ever
+ * pressed — never a generic button.
+ */
+function setAriaRadioGroup(members: HTMLElement[], value: string): boolean {
+  const target = members.find((member) => matches(ariaOptionValue(member), value));
+  if (!target || !isAriaRadio(target)) return false;
+  if (target.getAttribute('aria-checked') === 'true') return true;
+  target.focus({ preventScroll: true });
+  target.click();
+  target.blur();
   return true;
 }
 

@@ -207,6 +207,14 @@ async function runScan(quiet: boolean): Promise<void> {
   const visible = fields.filter((field) => field.visible && !field.disabled);
   const fieldMap = new Map(visible.map((field) => [field.id, field]));
 
+  // Nothing here, but the form is in a same-origin frame that has its own
+  // copy of this script (explicit activation injects into every frame): stay
+  // out of the way so the user sees one panel, where the fields are.
+  if (visible.length === 0 && window === window.top && hasReachableFormFrame()) {
+    teardown();
+    return;
+  }
+
   // Nothing to read here, but a cross-origin frame fills the page: the form
   // is almost certainly inside it, where this script cannot go.
   if (visible.length === 0 && hasUnreachableFormFrame()) {
@@ -692,6 +700,17 @@ const OPENABLE = new Set(['security', 'import', 'privacy', 'assistance']);
 function openExtensionPage(route: string): void {
   if (!OPENABLE.has(route)) return;
   notify({ type: 'content:open-page', route });
+}
+
+/** True when a same-origin iframe on this page contains form controls. */
+function hasReachableFormFrame(): boolean {
+  return Array.from(document.querySelectorAll('iframe')).some((frame) => {
+    try {
+      return Boolean(frame.contentDocument?.querySelector('input, select, textarea'));
+    } catch {
+      return false;
+    }
+  });
 }
 
 /**

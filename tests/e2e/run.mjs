@@ -10,6 +10,7 @@ import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { startServer } from './server.mjs';
 import { runV05Suite } from './suite-v05.mjs';
+import { runAtsSuite } from './suite-ats.mjs';
 import {
   launch,
   evalInWorker,
@@ -28,6 +29,13 @@ const failures = [];
 const notes = [];
 
 async function test(name, fn) {
+  if (
+    process.env.E2E_ONLY &&
+    !name.startsWith(process.env.E2E_ONLY) &&
+    !name.startsWith('the service worker')
+  ) {
+    return;
+  }
   try {
     await fn();
     passed++;
@@ -1135,6 +1143,19 @@ async function main() {
       scanPage,
       evalInWorker,
       foreign,
+    });
+
+    /* --- real-world ATS layouts ------------------------------------------ */
+
+    await runAtsSuite({
+      browser,
+      worker,
+      extensionId,
+      server,
+      test,
+      assert,
+      assertEqual,
+      evalInWorker,
     });
   } finally {
     await browser.close();

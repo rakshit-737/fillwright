@@ -146,17 +146,24 @@ interface Verdict {
  * mask that turns "9845012345" into "(984) 501-2345" has accepted the value,
  * while a control that silently reverted to empty has not.
  */
+/** What a combobox reported selecting, for the verification that follows. */
+const comboSelections = new WeakMap<HTMLElement, string[]>();
+
 export function verify(elements: HTMLElement[], intended: string): Verdict {
   const first = elements[0]!;
 
   // A combobox shows its selection as text somewhere in the control rather than
   // in a `value`, so the whole control is checked for it.
   if (!(first instanceof HTMLSelectElement) && isCombobox(first)) {
+    // Widgets show the choice beside the input (a chip, a single-value div),
+    // so the control and its immediate container are both read.
     const control = (first.closest('[role="combobox"], [aria-haspopup="listbox"]') ??
-      first.parentElement ??
       first) as HTMLElement;
-    const shown = `${currentValue(first)} ${control.textContent ?? ''}`;
-    return normalizeForCompare(shown).includes(normalizeForCompare(intended))
+    const shown = normalizeForCompare(
+      `${currentValue(first)} ${control.textContent ?? ''} ${control.parentElement?.textContent ?? ''}`,
+    );
+    const expected = comboSelections.get(first) ?? [intended];
+    return expected.every((label) => shown.includes(normalizeForCompare(label)))
       ? { ok: true, reason: '' }
       : { ok: false, reason: 'The dropdown did not keep the selection.' };
   }
@@ -272,6 +279,7 @@ async function writeValue(elements: HTMLElement[], value: string): Promise<boole
   if (!(first instanceof HTMLSelectElement) && isCombobox(first)) {
     const result = await selectInCombobox(first, value);
     if (!result.ok) throw new Error(result.reason);
+    comboSelections.set(first, result.selected);
     return true;
   }
 

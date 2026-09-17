@@ -207,6 +207,20 @@ export async function runAtsSuite(ctx) {
       Array.from(document.querySelectorAll('[data-automation-id="degree"]')).map((s) => s.value),
     );
     assertEqual(degrees.join(' | '), P.degree.join(' | '), 'degrees by block');
+    // The school prompt loads options only after typing: each block gets its
+    // own school, and Fillwright typed only short prefixes.
+    const schools = await page.evaluate(() =>
+      Array.from(document.querySelectorAll('[data-automation-id="selectedItem"]')).map(
+        (node) => node.textContent,
+      ),
+    );
+    assertEqual(schools.join(' | '), P.school.join(' | '), 'async school prompts by block');
+    const searches = await page.evaluate(() => window.__searches);
+    assert(searches.length > 0, 'no search was typed');
+    for (const query of searches) {
+      assert(query.length <= 6, `typed more than a short prefix: "${query}"`);
+      assert(!P.school.includes(query), `typed a whole school name: "${query}"`);
+    }
     assertEqual(await page.evaluate(() => window.__nextPresses), 1, 'only the test pressed Next');
   });
 
@@ -310,6 +324,30 @@ export async function runAtsSuite(ctx) {
       JSON.stringify({ next: 1, review: 0, submit: 0 }),
       'Fillwright pressed Review or Submit',
     );
+    await page.close();
+  });
+
+  /* --- virtualised list --------------------------------------------- */
+
+  await test('ats/virtual-list: an option outside the rendered window is found and chosen', async () => {
+    const page = await browser.newPage();
+    await page.goto(`${server.origin}/virtual-list.html`, { waitUntil: 'networkidle0' });
+    await activate(`${server.origin}/virtual-list.html`);
+    await waitForWidget(page, (s) => s.text.includes('application field'), 15_000);
+    const listed = await reviewItems(page);
+    const after = await fill(page);
+    const got = await page.evaluate(() => ({
+      country: document.getElementById('country').value,
+      rendered: window.__rendered,
+    }));
+    assertEqual(
+      got.country,
+      profile.address.country.value,
+      `virtualised country
+      ${dump(listed)}
+      ${after.text}`,
+    );
+    assert(got.rendered <= 10, 'the list rendered more than its window');
     await page.close();
   });
 

@@ -1,3 +1,4 @@
+import { containsWords, sameByAlias } from './aliases';
 import type { CanonicalField, DetectedField, FieldOption } from '@/types/fields';
 import type { Profile, TriState } from '@/types/profile';
 import { formatDate } from '@/parser/dates';
@@ -434,7 +435,16 @@ export function matchOption(value: string, options: FieldOption[]): OptionMatch 
     }
   }
 
-  // 2. Yes/No equivalence, which is how most compliance questions are shaped.
+  // 2. A known alias: "USA" for "United States of America", "B.Tech" for
+  //    "Bachelor of Technology", "Sep" for "September". Only if unique.
+  const aliased = usable.filter(
+    (option) => sameByAlias(option.label, target) || sameByAlias(option.value, target),
+  );
+  if (aliased.length === 1) {
+    return { option: aliased[0]!, confidence: 0.9, exact: true };
+  }
+
+  // 3. Yes/No equivalence, which is how most compliance questions are shaped.
   if (YES_RE.test(target) || NO_RE.test(target)) {
     const wantYes = YES_RE.test(target);
     for (const option of usable) {
@@ -445,12 +455,9 @@ export function matchOption(value: string, options: FieldOption[]): OptionMatch 
     }
   }
 
-  // 3. One option contains the value as a whole phrase ("India" in
+  // 4. One option contains the value as a whole phrase ("India" in
   //    "India (IN)"), or the value contains the option.
-  const contained = usable.filter((option) => {
-    const label = option.label.trim().toLowerCase();
-    return label.includes(target) || target.includes(label);
-  });
+  const contained = usable.filter((option) => containsWords(option.label, target));
   // Ambiguous containment is not a match: "Bachelor" matching both
   // "Bachelor of Arts" and "Bachelor of Science" must not silently pick one.
   if (contained.length === 1) {

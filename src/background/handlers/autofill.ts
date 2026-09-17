@@ -6,6 +6,8 @@ import { logApplication } from '@/storage/history';
 import { buildMappings, buildFillPlan } from '@/autofill/plan';
 import { originFromUrl, pageKeyFromUrl, sanitizeString } from '@/security/validate';
 import { validateScan } from '@/security/scan-guard';
+import { classifyField } from '@/field-detection/classify';
+import { scoreApplicationContext } from '@/field-detection/context';
 import { describeError, unsupportedPageCode } from '@/utils/errors';
 import { FIELD_CATALOG } from '@/field-detection/catalog';
 import type { CanonicalField, SavedMapping, ScanResult } from '@/types/fields';
@@ -228,6 +230,38 @@ export function registerAutofillHandlers(): void {
         settings.ui.showFloatingWidget && Boolean(origin) && Boolean(settings.activeProfileId),
       progress: sender.tab?.id !== undefined ? await readProgress(sender.tab.id, origin) : null,
     });
+  });
+
+  /**
+   * Scores a page for Assist/Smart. The fields go through the same guard as a
+   * scan; the page signals are capped here. Nothing is stored, and the reply
+   * is only a level.
+   */
+  handle('content:assess-page', async (request, sender) => {
+    const { fields, page } = request as Extract<ContentRequest, { type: 'content:assess-page' }>;
+    const settings = await getSettings();
+    if (settings.autofill.mode === 'manual') return err('Not in a proactive mode', 'EMANUAL');
+    const guard = validateScan({ fields });
+    if (!guard.ok) return err(guard.error, 'EBADSCAN');
+    const raw = (page ?? {}) as Record<string, unknown>;
+    const texts = (value: unknown, max: number) =>
+      Array.isArray(value) ? value.slice(0, max).map((item) => sanitizeString(item, 160)) : [];
+    let url = '';
+    try {
+      const parsed = new URL(sender.tab?.url ?? sender.url ?? '');
+      url = `${parsed.hostname}${parsed.pathname}`;
+    } catch {
+      url = '';
+    }
+    const verdict = scoreApplicationContext({
+      headings: texts(raw.headings, 12),
+      buttonLabels: texts(raw.buttonLabels, 60),
+      hasFileInput: raw.hasFileInput === true,
+      passwordFields: Math.max(0, Math.min(50, Math.trunc(Number(raw.passwordFields)) || 0)),
+      url,
+      fieldKinds: guard.scan.fields.map((field) => classifyField(field.signals).field),
+    });
+    return ok({ level: verdict.level });
   });
 
   handle('content:get-progress', async (_request, sender) => {

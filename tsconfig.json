@@ -16,7 +16,7 @@
     "esModuleInterop": true,
     "skipLibCheck": true,
     "noEmit": true,
-    "types": ["chrome", "vitest/globals"],
+    "types": ["chrome", "vitest/globals", "vite/client"],
     "baseUrl": ".",
     "paths": { "@/*": ["src/*"] }
   },

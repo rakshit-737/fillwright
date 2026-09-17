@@ -14,6 +14,7 @@ import { assignGroups, countBlocks, groupKindOf, type FieldGroup } from '@/field
 import { resolveForField } from './resolve';
 import { isSensitiveField, requiresExplicitConsent } from '@/security/sensitive';
 import { normalizeLabel } from '@/field-detection/normalize';
+export { STATUS_LABELS } from './status';
 
 /**
  * Turns detected fields into a reviewable plan.
@@ -328,13 +329,3 @@ export function displayLabel(field: DetectedField): string {
     'Unlabelled field';
   return raw.length > 80 ? `${raw.slice(0, 77)}…` : raw;
 }
-
-export const STATUS_LABELS: Record<MappingStatus, string> = {
-  ready: 'Ready to fill',
-  review: 'Check this one',
-  'needs-consent': 'Needs your answer',
-  'missing-value': 'Not in your profile',
-  'manual-required': 'You need to write this',
-  'skipped-existing': 'Already filled in',
-  unmapped: 'Not recognised',
-};

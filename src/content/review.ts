@@ -1,6 +1,6 @@
 import type { CanonicalField, FieldSignals, FillPlanEntry, MappingStatus } from '@/types/fields';
 import { FIELD_CATALOG, catalogGroups } from '@/field-detection/catalog';
-import { STATUS_LABELS } from '@/autofill/plan';
+import { STATUS_LABELS } from '@/autofill/status';
 
 /**
  * The review row.

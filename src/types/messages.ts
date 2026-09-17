@@ -86,6 +86,8 @@ export type ContentRequest =
     }
   /** Passive (Assist/Smart) boot: what should an uninvited script do here? */
   | { type: 'content:get-mode' }
+  /** Passive check: is this page an application? Signals only, no values. */
+  | { type: 'content:assess-page'; fields: unknown; page: unknown }
   /** Multi-step progress for this tab, kept in the worker's session storage. */
   | { type: 'content:step-progress'; filled: number; stepKey: string }
   | { type: 'content:get-progress' }

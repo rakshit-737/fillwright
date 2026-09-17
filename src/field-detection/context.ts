@@ -1,5 +1,6 @@
 import type { CanonicalField } from '@/types/fields';
 import { normalizeLabel } from './normalize';
+import { collectPageSignals } from '@/content/page-signals';
 
 /**
  * Is this page actually a job application?
@@ -132,25 +133,6 @@ export function scoreApplicationContext(input: ContextInput): ContextVerdict {
 
 /** Collects the context inputs from a live document. Reads text only. */
 export function collectContextInput(doc: Document, fieldKinds: CanonicalField[]): ContextInput {
-  const headings = [
-    doc.title,
-    ...Array.from(doc.querySelectorAll('h1, h2')).map((node) => node.textContent ?? ''),
-  ]
-    .map((text) => text.trim().slice(0, 160))
-    .filter(Boolean)
-    .slice(0, 12);
-
-  const buttonLabels = Array.from(
-    doc.querySelectorAll<HTMLElement>('button, input[type="submit"], [role="button"]'),
-  )
-    .slice(0, 60)
-    .map((node) =>
-      (node instanceof HTMLInputElement ? node.value : (node.textContent ?? ''))
-        .trim()
-        .slice(0, 60),
-    )
-    .filter(Boolean);
-
   let url = '';
   try {
     const parsed = new URL(doc.location?.href ?? '');
@@ -158,13 +140,5 @@ export function collectContextInput(doc: Document, fieldKinds: CanonicalField[])
   } catch {
     url = '';
   }
-
-  return {
-    headings,
-    url,
-    fieldKinds,
-    hasFileInput: doc.querySelector('input[type="file"]') !== null,
-    passwordFields: doc.querySelectorAll('input[type="password"]').length,
-    buttonLabels,
-  };
+  return { ...collectPageSignals(doc), url, fieldKinds };
 }

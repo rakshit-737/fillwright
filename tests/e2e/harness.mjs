@@ -4,7 +4,7 @@ import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
-export const DIST = resolve(root, 'dist-e2e');
+export const DIST = process.env.FW_DIST ? resolve(process.env.FW_DIST) : resolve(root, 'dist-e2e');
 
 /**
  * Resolves the browser to drive.

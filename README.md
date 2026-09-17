@@ -102,6 +102,23 @@ npm run test:e2e  # 49 end-to-end tests in real Chrome
 npm run check     # typecheck → lint → test → build → verify
 ```
 
+### Performance budget
+
+`npm run perf` builds the test extension and measures it in Chrome for Testing,
+failing if any figure is over budget. Measured on Chrome for Testing 131 (median
+runs, one Windows 11 laptop), comparing the v0.4.0 tag with this release:
+
+| Measurement | Budget | v0.4.0 | v0.5.0 |
+|---|---|---|---|
+| `content.js` size | ≤ 100 KB | 92.4 KB | 82.0 KB |
+| Inject `content.js`, 50-field form | < 50 ms | 32.4 ms | 21.8 ms |
+| Harvest + classify, `hard-mode.html` | < 120 ms | 8.5 ms | 9.5 ms |
+| MutationObserver callback, 2,000-node burst | < 2 ms | 9.8 ms | < 0.01 ms |
+
+Passive checks in Assist/Smart mode run at most once every 1.5 s and never
+while the page is scrolling (unit-tested in `tests/observe.test.ts`). Timings
+vary by machine; the budgets have wide margins on purpose.
+
 ### The end-to-end suite
 
 `npm run test:e2e` builds the extension, loads it into Chrome for Testing, and

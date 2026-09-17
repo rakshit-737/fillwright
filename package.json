@@ -21,7 +21,8 @@
     "test:e2e": "npm run build:e2e && node tests/e2e/run.mjs",
     "build:e2e": "npm run build && node scripts/build-e2e.mjs",
     "normalize-eol": "node scripts/normalize-eol.mjs",
-    "probe:ai": "npm run build:e2e && node scripts/probe-ai.mjs"
+    "probe:ai": "npm run build:e2e && node scripts/probe-ai.mjs",
+    "perf": "npm run build:e2e && node scripts/perf.mjs"
   },
   "dependencies": {
     "fflate": "^0.8.2",

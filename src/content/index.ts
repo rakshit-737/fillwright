@@ -1,6 +1,5 @@
 import { harvestFields } from '@/field-detection/harvest';
-import { classifyField } from '@/field-detection/classify';
-import { collectContextInput, scoreApplicationContext } from '@/field-detection/context';
+import { collectPageSignals } from './page-signals';
 import { fillFields, undoFill, type UndoRecord } from '@/autofill/fill';
 import { collectPostingText, type JobMatch } from '@/autofill/job-match';
 import { addEntries, findAddControls } from '@/autofill/repeat';
@@ -11,6 +10,7 @@ import type { CanonicalField, DetectedField, FillPlan, FillPlanEntry } from '@/t
 import type { AutofillMode } from '@/types/settings';
 import { describeError } from '@/utils/errors';
 import { request, notify } from './transport';
+import { controlSignature, createThrottle, mutationsMayAffectForm } from './observe';
 
 /**
  * Fillwright content script.
@@ -62,6 +62,17 @@ let pendingChange: number | undefined;
 let passiveChecks = 0;
 let draftAvailable: boolean | null = null;
 
+let lastSignature = '';
+
+/**
+ * Passive evaluation (Assist/Smart) runs at most once every 1.5 s, and not
+ * while the page is being scrolled.
+ */
+const passiveThrottle = createThrottle(() => evaluatePassive(), {
+  intervalMs: 1_500,
+  scrollQuietMs: 400,
+});
+
 /** Corrections for this page only, never saved. Keyed by field fingerprint. */
 const overrides = new Map<string, CanonicalField>();
 
@@ -110,6 +121,11 @@ function boot(): void {
 
   watchNavigation();
   watchForNewFields();
+  // Passive checks wait for scrolling to stop.
+  window.addEventListener('scroll', () => passiveThrottle.noteScroll(), {
+    passive: true,
+    capture: true,
+  });
 
   notify({ type: 'content:ready', url: location.href });
 
@@ -133,7 +149,8 @@ async function passiveBoot(): Promise<void> {
   mode = response.mode;
   if (mode === 'manual') return;
   await whenIdle();
-  await evaluatePassive();
+  lastSignature = `${location.href}#${controlSignature(document)}`;
+  passiveThrottle.schedule();
 }
 
 /**
@@ -150,8 +167,14 @@ async function evaluatePassive(): Promise<void> {
   const visible = fields.filter((field) => field.visible && !field.disabled);
   if (visible.length < 2) return;
 
-  const kinds = visible.map((field) => classifyField(field.signals).field);
-  const verdict = scoreApplicationContext(collectContextInput(document, kinds));
+  // Scored in the worker, which holds the classifier; the reply is a level.
+  const reply = await request<{ level: 'none' | 'possible' | 'likely' }>({
+    type: 'content:assess-page',
+    fields: visible,
+    page: collectPageSignals(document),
+  });
+  if (!reply.ok) return;
+  const verdict = reply.data;
 
   const worthy = verdict.level === 'likely' || (mode === 'smart' && verdict.level === 'possible');
   if (!worthy) return;
@@ -204,6 +227,7 @@ async function runScan(quiet: boolean): Promise<void> {
   if (adapter) await applyAdapter(adapter);
 
   const { fields, elements, truncated } = harvestFields(document);
+  lastSignature = `${location.href}#${controlSignature(document)}`;
   const visible = fields.filter((field) => field.visible && !field.disabled);
   const fieldMap = new Map(visible.map((field) => [field.id, field]));
 
@@ -547,19 +571,11 @@ async function applyDraft(entry: FillPlanEntry, text: string): Promise<void> {
 function watchForNewFields(): void {
   if (!('MutationObserver' in window)) return;
 
+  // The callback only looks at node types — no document queries — because in
+  // Assist/Smart mode it runs on every page's every render. Whether the form
+  // really changed is decided later, off the callback, in onFormChanged.
   const observer = new MutationObserver((records) => {
-    const changed = records.some((record) =>
-      [...Array.from(record.addedNodes), ...Array.from(record.removedNodes)].some((node) => {
-        if (!(node instanceof HTMLElement)) return false;
-        if (node.closest?.('[data-fillwright-ui]') || node.hasAttribute('data-fillwright-ui'))
-          return false;
-        return (
-          node.matches?.('input, select, textarea') ||
-          node.querySelector?.('input, select, textarea')
-        );
-      }),
-    );
-    if (changed) scheduleChange();
+    if (mutationsMayAffectForm(records)) scheduleChange();
   });
 
   observer.observe(document.body ?? document.documentElement, { childList: true, subtree: true });
@@ -602,8 +618,13 @@ async function onFormChanged(): Promise<void> {
     return;
   }
 
+  // A render that did not add, remove or replace a control is not a change.
+  const signature = `${location.href}#${controlSignature(document)}`;
+  if (signature === lastSignature) return;
+  lastSignature = signature;
+
   if (!engaged) {
-    await evaluatePassive();
+    passiveThrottle.schedule();
     return;
   }
   if (!widget || scanning) return;

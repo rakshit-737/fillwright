@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Fillwright — Practice application</title>
+  </head>
+  <body>
+    <main class="practice">
+      <p class="practice__banner" role="note">
+        Practice form — part of Fillwright, on this device. Nothing here is sent anywhere, and the
+        Submit button does nothing.
+      </p>
+      <h1>Software Engineer, Payments</h1>
+      <p class="practice__lead">
+        Press <strong>Fill</strong> in the Fillwright panel. Check what changed, then try
+        <strong>Undo</strong>.
+      </p>
+
+      <form id="application_form" novalidate>
+        <h2>Basic information</h2>
+        <label for="first_name">First Name</label>
+        <input id="first_name" name="job_application[first_name]" autocomplete="given-name" />
+        <label for="last_name">Last Name</label>
+        <input id="last_name" name="job_application[last_name]" autocomplete="family-name" />
+        <label for="email">Email</label>
+        <input id="email" type="email" name="job_application[email]" autocomplete="email" />
+        <label for="phone">Phone</label>
+        <input id="phone" type="tel" name="job_application[phone]" autocomplete="tel" />
+        <label for="location">Location (City)</label>
+        <input id="location" name="job_application[location]" />
+
+        <h2>Education</h2>
+        <label for="school">School</label>
+        <input id="school" name="job_application[educations][0][school_name]" />
+        <label for="degree">Degree</label>
+        <input id="degree" name="job_application[educations][0][degree]" />
+
+        <h2>Links</h2>
+        <label for="linkedin">LinkedIn Profile</label>
+        <input id="linkedin" name="job_application[answers][0]" />
+        <label for="github">GitHub URL</label>
+        <input id="github" name="job_application[answers][1]" />
+
+        <h2>A question only you can answer</h2>
+        <label for="why">Why do you want to work here?</label>
+        <textarea id="why" name="job_application[answers][2]" rows="4"></textarea>
+
+        <p><button type="submit" id="submit">Submit application</button></p>
+      </form>
+    </main>
+    <script type="module" src="/src/practice/main.ts"></script>
+  </body>
+</html>

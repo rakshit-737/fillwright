@@ -37,6 +37,7 @@ export default defineConfig({
       input: {
         popup: resolve(root, 'popup.html'),
         options: resolve(root, 'options.html'),
+        practice: resolve(root, 'practice.html'),
         background: resolve(root, 'src/background/index.ts'),
       },
       output: {

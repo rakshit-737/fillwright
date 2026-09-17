@@ -12,6 +12,7 @@ import { startServer } from './server.mjs';
 import { runV05Suite } from './suite-v05.mjs';
 import { runAtsSuite } from './suite-ats.mjs';
 import { runA11ySuite } from './suite-a11y.mjs';
+import { runOnboardingSuite } from './suite-onboarding.mjs';
 import {
   launch,
   evalInWorker,
@@ -395,7 +396,7 @@ async function main() {
         ['privacy', 'Privacy Center'],
         ['permissions', 'Permissions'],
         ['settings', 'Settings'],
-        ['welcome', 'Welcome to Fillwright'],
+        ['welcome', 'Welcome'],
       ];
 
       for (const [route, heading] of routes) {
@@ -1162,6 +1163,10 @@ async function main() {
     /* --- accessibility ---------------------------------------------------- */
 
     await runA11ySuite({ browser, worker, extensionId, server, test, assert, evalInWorker });
+
+    /* --- first run --------------------------------------------------------- */
+
+    await runOnboardingSuite({ browser, extensionId, test, assert, assertEqual });
   } finally {
     await browser.close();
     await server.close();

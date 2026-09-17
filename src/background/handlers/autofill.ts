@@ -202,6 +202,36 @@ export function registerAutofillHandlers(): void {
     return ok(saved);
   });
 
+  /**
+   * The practice form in onboarding is an extension page, so it cannot use
+   * the content-script path. Same guard, same planner; no site rules apply.
+   * Only Fillwright's own pages can send `ui:*` messages (see router).
+   */
+  handle('ui:practice-plan', async (request) => {
+    const { fields } = request as Extract<UiRequest, { type: 'ui:practice-plan' }>;
+    const guard = validateScan({ fields });
+    if (!guard.ok) return err(guard.error, 'EBADSCAN');
+    const settings = await getSettings();
+    if (!settings.activeProfileId) return fail('ENOPROFILE');
+    const profile = await getProfile(settings.activeProfileId);
+    if (!profile) return fail('ENOPROFILE');
+    const scan: ScanResult = {
+      url: '',
+      pageKey: 'practice',
+      adapterId: null,
+      scannedAt: new Date().toISOString(),
+      fields: guard.scan.fields,
+      mappings: buildMappings(guard.scan.fields, profile, settings, []),
+    };
+    return ok({
+      plan: buildFillPlan(scan, `${Date.now()}`, {
+        education: profile.education.length,
+        experience: profile.experience.length,
+      }),
+      profileName: profile.name,
+    });
+  });
+
   /** Optional, off by default, and metadata only. */
   handle('content:log-application', async (request, sender) => {
     const payload = request as Extract<ContentRequest, { type: 'content:log-application' }>;

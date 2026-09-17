@@ -47,6 +47,26 @@ export function App() {
     });
   }, [attempt]);
 
+  // Settings change in other tabs too (the practice form marks onboarding
+  // progress); follow them so every pane stays current.
+  useEffect(() => {
+    const onChange = (changes: Record<string, chrome.storage.StorageChange>, area: string) => {
+      if (area === 'local' && changes.settings) setAttempt((n) => n + 1);
+    };
+    chrome.storage.onChanged.addListener(onChange);
+    return () => chrome.storage.onChanged.removeListener(onChange);
+  }, []);
+
+  // Opening Fillwright's settings with no particular page resumes unfinished
+  // setup. A deep link (#/profile, #/security) is always honoured.
+  const [openedBare] = useState(() => location.hash.replace(/^#\/?/, '') === '');
+  useEffect(() => {
+    if (openedBare && settings && !settings.onboardingCompleted && route !== 'welcome') {
+      navigate('welcome');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openedBare, settings?.onboardingCompleted]);
+
   // Honour the user's theme choice on the options page chrome itself.
   useEffect(() => {
     if (!settings) return;
@@ -65,7 +85,22 @@ export function App() {
   }
 
   if (route === 'welcome') {
-    return <Welcome onDone={() => navigate('import')} />;
+    // Setup resumes at the saved step, so it waits for settings to load.
+    if (!settings) {
+      return (
+        <div className="fw-pane" role="status">
+          <span className="fw-spinner" aria-hidden="true" />{' '}
+          <span className="fw-muted">Loading…</span>
+        </div>
+      );
+    }
+    return (
+      <Welcome
+        settings={settings}
+        onSettingsChange={setSettings}
+        onDone={() => navigate('profile')}
+      />
+    );
   }
 
   return (

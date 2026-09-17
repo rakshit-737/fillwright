@@ -1232,3 +1232,69 @@
   font-size: var(--fw-text-sm);
   margin: 0;
 }
+
+/* ------------------------------------------------------- onboarding v2 */
+
+.fw-check__mark--warn {
+  background: var(--fw-caution-soft);
+  color: var(--fw-caution);
+}
+
+.fw-welcome__progress {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--fw-space-3);
+}
+
+.fw-welcome__count {
+  margin: 0;
+  font-size: var(--fw-text-xs);
+  color: var(--fw-ink-muted);
+}
+
+.fw-welcome__list {
+  margin: 0 0 var(--fw-space-4);
+  padding-left: var(--fw-space-5);
+  color: var(--fw-ink-muted);
+}
+
+.fw-welcome__list li + li {
+  margin-top: var(--fw-space-2);
+}
+
+.fw-welcome__facts {
+  display: grid;
+  gap: var(--fw-space-2);
+  margin: 0 0 var(--fw-space-4);
+}
+
+.fw-welcome__fact {
+  display: grid;
+  grid-template-columns: 8rem minmax(0, 1fr);
+  gap: var(--fw-space-3);
+  padding: var(--fw-space-2) 0;
+  border-bottom: 1px solid var(--fw-line);
+}
+
+.fw-welcome__fact dt {
+  color: var(--fw-ink-muted);
+  font-size: var(--fw-text-sm);
+}
+
+.fw-welcome__fact dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.fw-embedded .fw-drop,
+.fw-embedded .fw-section {
+  margin-top: var(--fw-space-3);
+}
+
+@media (max-width: 560px) {
+  .fw-welcome__fact {
+    grid-template-columns: 1fr;
+    gap: 0;
+  }
+}

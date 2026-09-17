@@ -35,7 +35,16 @@ interface SourceInfo {
  * extension's own message bus — they go straight from the file input to
  * IndexedDB on this device.
  */
-export function ImportResume({ settings }: { settings: Settings | null }) {
+export function ImportResume({
+  settings,
+  embedded = false,
+  onSaved,
+}: {
+  settings: Settings | null;
+  /** Inside onboarding: no page header, and completion is reported upward. */
+  embedded?: boolean;
+  onSaved?: () => void;
+}) {
   const [stage, setStage] = useState<Stage>({ name: 'idle' });
   const [dragging, setDragging] = useState(false);
   const [pasted, setPasted] = useState('');
@@ -65,6 +74,11 @@ export function ImportResume({ settings }: { settings: Settings | null }) {
       cancelled = true;
     };
   }, [profileId, stage.name]);
+
+  // Onboarding moves on once the profile is saved.
+  useEffect(() => {
+    if (stage.name === 'done') onSaved?.();
+  }, [stage.name, onSaved]);
 
   const handleText = useCallback((text: string, source: SourceInfo) => {
     try {
@@ -180,14 +194,16 @@ export function ImportResume({ settings }: { settings: Settings | null }) {
   }
 
   return (
-    <div className="fw-pane">
-      <header className="fw-pane__header">
-        <h1 className="fw-pane__title">Resume</h1>
-        <p className="fw-pane__subtitle">
-          Fillwright reads your resume on this device and turns it into a profile you can edit. The
-          file is not uploaded anywhere.
-        </p>
-      </header>
+    <div className={embedded ? 'fw-embedded' : 'fw-pane'}>
+      {!embedded && (
+        <header className="fw-pane__header">
+          <h1 className="fw-pane__title">Resume</h1>
+          <p className="fw-pane__subtitle">
+            Fillwright reads your resume on this device and turns it into a profile you can edit.
+            The file is not uploaded anywhere.
+          </p>
+        </header>
+      )}
 
       {existingResume && stage.name === 'idle' && (
         <div className="fw-notice" role="status">
@@ -299,7 +315,7 @@ export function ImportResume({ settings }: { settings: Settings | null }) {
         </div>
       )}
 
-      {stage.name === 'done' && (
+      {stage.name === 'done' && !embedded && (
         <div className="fw-notice" role="status">
           <strong>Profile updated.</strong> {stage.changeCount} field
           {stage.changeCount === 1 ? '' : 's'} written. Review everything on the Profile page —

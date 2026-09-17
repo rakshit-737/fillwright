@@ -275,6 +275,11 @@ export function App() {
             <button className="fw-btn" onClick={() => openOptions('#/profile')}>
               Open profile
             </button>
+            {!state.settings.onboardingCompleted && (
+              <button className="fw-btn" onClick={() => openOptions('#/welcome')}>
+                Finish setting up
+              </button>
+            )}
             {!hasResume && (
               <button className="fw-btn" onClick={() => openOptions('#/import')}>
                 Import resume

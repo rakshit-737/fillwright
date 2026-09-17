@@ -57,6 +57,8 @@ export type UiRequest =
   | { type: 'ui:vault-change-passphrase'; current: string; next: string }
   | { type: 'ui:vault-disable'; passphrase: string }
   | { type: 'ui:scan-active-tab' }
+  /** The onboarding practice page asks for a plan for its own fields. */
+  | { type: 'ui:practice-plan'; fields: unknown }
   | { type: 'ui:request-fill'; entries: FillPlanEntry[] }
   | { type: 'ui:undo-fill' };
 

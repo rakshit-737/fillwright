@@ -61,8 +61,6 @@ Optional, requested at runtime and only if you enable the feature:
   dynamically; switching back to Manual, or revoking access in Chrome,
   unregisters it immediately (`src/background/auto-detect.ts`). Manual mode —
   the default — needs no host access at all.
-- **`tabs`** — only to read a page title when logging an application to local
-  history, which is off by default.
 
 `host_permissions` is empty in the manifest. `verify-build.mjs` fails the build
 if it ever stops being empty, or if `<all_urls>` appears anywhere.

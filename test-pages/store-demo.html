@@ -1,0 +1,209 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <!-- Store screenshot page: fictional company, no test notes. -->
+    <title>Job Application for Software Engineer, Payments at Example Corp</title>
+    <link rel="stylesheet" href="./shared.css" />
+    <style>
+      .select__control { position: relative; border: 1px solid #ccc; border-radius: 4px; padding: 6px; }
+      .select__menu { position: absolute; left: 0; right: 0; top: 100%; background: #fff; border: 1px solid #ccc; z-index: 5; }
+      .select__option { padding: 6px; cursor: pointer; }
+      .select__option--is-focused { background: #eef; }
+      .select__single-value { position: absolute; left: 8px; top: 6px; pointer-events: none; }
+    </style>
+  </head>
+  <body>
+    <div id="app_body">
+      <div id="header">
+        <h1 class="app-title">Software Engineer, Payments</h1>
+        <span class="company-name">at Example Corp</span>
+        <div class="location">Remote — US</div>
+      </div>
+      <div id="content">
+        <h2>Requirements</h2>
+        <div class="job-description">
+          <p>Requirements: 3+ years of experience with Python or Go, React, and PostgreSQL.</p>
+        </div>
+      </div>
+
+      <form id="application_form" action="/submit" method="post">
+        <div id="main_fields">
+          <div class="field">
+            <label for="first_name">First Name<span class="asterisk">*</span></label>
+            <input type="text" id="first_name" name="job_application[first_name]" aria-required="true" />
+          </div>
+          <div class="field">
+            <label for="last_name">Last Name<span class="asterisk">*</span></label>
+            <input type="text" id="last_name" name="job_application[last_name]" aria-required="true" />
+          </div>
+          <div class="field">
+            <label for="email">Email<span class="asterisk">*</span></label>
+            <input type="text" id="email" name="job_application[email]" aria-required="true" />
+          </div>
+          <div class="field">
+            <label for="phone">Phone</label>
+            <input type="text" id="phone" name="job_application[phone]" />
+          </div>
+          <div class="field">
+            <label for="job_application_location">Location (City)</label>
+            <input type="text" id="job_application_location" name="job_application[location]" autocomplete="off" />
+          </div>
+        </div>
+
+        <div id="education_section">
+          <h3>Education</h3>
+          <div class="field">
+            <label id="school-label" for="school--0">School</label>
+            <div class="select__control" data-rs="school">
+              <input id="school--0" role="combobox" aria-expanded="false" aria-autocomplete="list"
+                aria-labelledby="school-label" aria-controls="school-listbox" class="select__input" />
+            </div>
+            <input type="hidden" name="job_application[educations][][school_name_id]" />
+          </div>
+          <div class="field">
+            <label id="degree-label" for="degree--0">Degree</label>
+            <div class="select__control" data-rs="degree">
+              <input id="degree--0" role="combobox" aria-expanded="false" aria-autocomplete="list"
+                aria-labelledby="degree-label" aria-controls="degree-listbox" class="select__input" />
+            </div>
+            <input type="hidden" name="job_application[educations][][degree_id]" />
+          </div>
+        </div>
+
+        <div id="custom_fields">
+          <div class="field">
+            <label for="job_application_answers_attributes_0_text_value">LinkedIn Profile</label>
+            <input type="text" id="job_application_answers_attributes_0_text_value"
+              name="job_application[answers_attributes][0][text_value]" />
+          </div>
+          <div class="field">
+            <label for="job_application_answers_attributes_1_text_value">Website</label>
+            <input type="text" id="job_application_answers_attributes_1_text_value"
+              name="job_application[answers_attributes][1][text_value]" />
+          </div>
+          <div class="field">
+            <label for="job_application_answers_attributes_2_boolean_value">Will you now or in the future require sponsorship for employment visa status?</label>
+            <select id="job_application_answers_attributes_2_boolean_value"
+              name="job_application[answers_attributes][2][boolean_value]">
+              <option value="">Please select</option>
+              <option value="0">No</option>
+              <option value="1">Yes</option>
+            </select>
+          </div>
+        </div>
+
+        <div id="eeoc_fields">
+          <h3>U.S. Equal Employment Opportunity Information</h3>
+          <p>Completion is voluntary and will not subject you to adverse treatment.</p>
+          <div class="field">
+            <label for="job_application_gender">Gender</label>
+            <select id="job_application_gender" name="job_application[gender]">
+              <option value="">Please select</option>
+              <option value="1">Male</option>
+              <option value="2">Female</option>
+              <option value="3">Decline To Self Identify</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="job_application_race">Are you Hispanic/Latino?</label>
+            <select id="job_application_race" name="job_application[hispanic_ethnicity]">
+              <option value="">Please select</option>
+              <option value="Yes">Yes</option>
+              <option value="No">No</option>
+              <option value="Decline To Self Identify">Decline To Self Identify</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="job_application_veteran_status">Veteran Status</label>
+            <select id="job_application_veteran_status" name="job_application[veteran_status]">
+              <option value="">Please select</option>
+              <option value="1">I am not a protected veteran</option>
+              <option value="2">I identify as one or more of the classifications of a protected veteran</option>
+              <option value="3">I don't wish to answer</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="job_application_disability_status">Disability Status</label>
+            <select id="job_application_disability_status" name="job_application[disability_status]">
+              <option value="">Please select</option>
+              <option value="1">Yes, I have a disability, or have had one in the past</option>
+              <option value="2">No, I do not have a disability and have not had one in the past</option>
+              <option value="3">I do not want to answer</option>
+            </select>
+          </div>
+        </div>
+
+        <div id="submit_buttons">
+          <input type="submit" id="submit_app" value="Submit Application" />
+        </div>
+      </form>
+    </div>
+
+    <script>
+      // A small stand-in for React-Select: the menu is rendered into a portal at
+      // the end of <body>, options appear only while open, and choosing one
+      // writes the hidden input and a visible single-value.
+      const OPTIONS = {
+        school: ['Delhi Public School', 'Open University', 'Vellore Institute of Technology', 'VIT Bhopal University'],
+        degree: ["Associate's Degree", "Bachelor's Degree", 'B.Tech', 'High School', "Master's Degree"],
+      };
+      document.querySelectorAll('.select__control').forEach((control) => {
+        const key = control.dataset.rs;
+        const input = control.querySelector('input');
+        const hidden = control.parentElement.querySelector('input[type=hidden]');
+        let menu = null;
+        const close = () => {
+          menu?.remove();
+          menu = null;
+          input.setAttribute('aria-expanded', 'false');
+        };
+        const open = () => {
+          if (menu) return;
+          menu = document.createElement('div');
+          menu.className = 'select__menu';
+          menu.id = `${key}-listbox`;
+          menu.setAttribute('role', 'listbox');
+          const filter = input.value.toLowerCase();
+          for (const label of OPTIONS[key].filter((o) => o.toLowerCase().includes(filter))) {
+            const option = document.createElement('div');
+            option.className = 'select__option';
+            option.setAttribute('role', 'option');
+            option.textContent = label;
+            option.addEventListener('mousedown', (event) => event.preventDefault());
+            option.addEventListener('click', () => {
+              hidden.value = label;
+              input.value = '';
+              let shown = control.querySelector('.select__single-value');
+              if (!shown) {
+                shown = document.createElement('div');
+                shown.className = 'select__single-value';
+                control.appendChild(shown);
+              }
+              shown.textContent = label;
+              input.setAttribute('data-selected', label);
+              close();
+            });
+            menu.appendChild(option);
+          }
+          const rect = control.getBoundingClientRect();
+          menu.style.cssText = `position:absolute;left:${rect.left + scrollX}px;top:${rect.bottom + scrollY}px;width:${rect.width}px;background:#fff;border:1px solid #ccc;z-index:5`;
+          document.body.appendChild(menu);
+          input.setAttribute('aria-expanded', 'true');
+        };
+        input.addEventListener('mousedown', open);
+        input.addEventListener('focus', open);
+        input.addEventListener('keydown', (event) => {
+          if (event.key === 'ArrowDown') open();
+          if (event.key === 'Escape') close();
+        });
+        input.addEventListener('input', () => {
+          close();
+          open();
+        });
+        input.addEventListener('blur', () => setTimeout(close, 150));
+      });
+    </script>
+    <script src="./shared.js"></script>
+  </body>
+</html>

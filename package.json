@@ -1,7 +1,7 @@
 {
   "name": "fillwright",
   "private": true,
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Fillwright — privacy-first, local-only resume autofill for job applications.",
   "type": "module",
   "scripts": {
@@ -22,7 +22,9 @@
     "build:e2e": "npm run build && node scripts/build-e2e.mjs",
     "normalize-eol": "node scripts/normalize-eol.mjs",
     "probe:ai": "npm run build:e2e && node scripts/probe-ai.mjs",
-    "perf": "npm run build:e2e && node scripts/perf.mjs"
+    "perf": "npm run build:e2e && node scripts/perf.mjs",
+    "presubmit": "node scripts/presubmit.mjs",
+    "screenshots": "npm run build:e2e && node scripts/screenshots.mjs"
   },
   "dependencies": {
     "fflate": "^0.8.2",

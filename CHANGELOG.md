@@ -297,9 +297,6 @@ Notable changes, newest first. Versions follow semantic versioning.
   `normalizeLabel` and `matchOption` never throw and return bounded output.
 - New dev-only dependencies: `@vitest/coverage-v8`, `fast-check`. Nothing
   shipped changes.
-
-### Tests
-
 - New hostile fixture `test-pages/clickjack.html` and Chrome case: a synthetic
   click and a click through a pointer-events:none overlay both leave the form
   untouched; a normal click after the arming delay fills it.

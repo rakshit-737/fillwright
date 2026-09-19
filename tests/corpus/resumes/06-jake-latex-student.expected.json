@@ -1,0 +1,32 @@
+{
+  "layout": "LaTeX Jake's resume",
+  "firstName": "Jordan",
+  "lastName": "Pellegrini",
+  "email": "jordan.pellegrini@example.com",
+  "phone": "555-201-0147",
+  "education": [
+    {
+      "institution": "Carnegie Mellon University",
+      "degree": "Bachelor of Science",
+      "gpa": ""
+    }
+  ],
+  "experience": [
+    {
+      "company": "Northwind Robotics",
+      "title": "Software Engineering Intern"
+    },
+    {
+      "company": "Carnegie Mellon University",
+      "title": "Undergraduate Teaching Assistant"
+    }
+  ],
+  "skills": [
+    "Rust",
+    "C",
+    "Python",
+    "Java",
+    "Git",
+    "Docker"
+  ]
+}

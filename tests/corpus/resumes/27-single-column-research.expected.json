@@ -1,0 +1,26 @@
+{
+  "layout": "single column",
+  "firstName": "Ayesha",
+  "lastName": "Siddiqui",
+  "email": "ayesha.siddiqui@example.com",
+  "phone": "+92 300 555 7788",
+  "education": [
+    {
+      "institution": "Lahore University of Management Sciences",
+      "degree": "PhD",
+      "gpa": ""
+    }
+  ],
+  "experience": [
+    {
+      "company": "Indus Institute of Computing",
+      "title": "Postdoctoral Researcher"
+    }
+  ],
+  "skills": [
+    "Python",
+    "PyTorch",
+    "LaTeX",
+    "Statistics"
+  ]
+}

@@ -1,0 +1,26 @@
+{
+  "layout": "surname first",
+  "firstName": "Minji",
+  "lastName": "Kim",
+  "email": "minji.kim@example.com",
+  "phone": "+82 10 5555 7788",
+  "education": [
+    {
+      "institution": "Seoul National University",
+      "degree": "Bachelor of Science",
+      "gpa": ""
+    }
+  ],
+  "experience": [
+    {
+      "company": "Hangang Analytics",
+      "title": "Data Scientist"
+    }
+  ],
+  "skills": [
+    "R",
+    "Python",
+    "SQL",
+    "Spark"
+  ]
+}

@@ -1,0 +1,26 @@
+{
+  "layout": "single column",
+  "firstName": "Maria",
+  "lastName": "Fernandes",
+  "email": "maria.fernandes@example.com",
+  "phone": "+55 11 95555 1234",
+  "education": [
+    {
+      "institution": "Universidade de São Paulo",
+      "degree": "Bachelor of Science",
+      "gpa": ""
+    }
+  ],
+  "experience": [
+    {
+      "company": "Ipê Soluções Ltda",
+      "title": "Cloud Architect"
+    }
+  ],
+  "skills": [
+    "Azure",
+    "Terraform",
+    "C#",
+    ".NET"
+  ]
+}

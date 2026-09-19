@@ -1,0 +1,30 @@
+{
+  "layout": "single column",
+  "firstName": "Noah",
+  "lastName": "Petrakis",
+  "email": "noah.petrakis@example.com",
+  "phone": "+61 412 555 019",
+  "education": [
+    {
+      "institution": "University of Melbourne",
+      "degree": "Bachelor of Arts",
+      "gpa": ""
+    }
+  ],
+  "experience": [
+    {
+      "company": "Wattle Software Pty Ltd",
+      "title": "Junior Developer"
+    },
+    {
+      "company": "Brunswick Secondary College",
+      "title": "High School Teacher"
+    }
+  ],
+  "skills": [
+    "JavaScript",
+    "Node.js",
+    "Vue",
+    "Teaching"
+  ]
+}

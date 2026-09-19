@@ -1,0 +1,18 @@
+KWAME ASANTE
+Accra, Ghana | kwame.asante@example.com | +233 24 555 0199
+linkedin.com/in/kwameasante
+
+EXPERIENCE
+Site Reliability Engineer, Brightpath Cloud
+Remote | April 2020 - Present
+- Cut incident response time by 40% with runbook automation
+
+Systems Administrator, Volta Networks
+Accra | August 2016 - March 2020
+
+EDUCATION
+Kwame Nkrumah University of Science and Technology
+BSc Computer Engineering | 2012 - 2016
+
+SKILLS
+Kubernetes, Terraform, AWS, Bash, Prometheus

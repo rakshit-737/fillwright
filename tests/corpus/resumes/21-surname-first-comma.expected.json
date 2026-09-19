@@ -1,0 +1,26 @@
+{
+  "layout": "surname first",
+  "firstName": "Hiroshi",
+  "lastName": "Nakamura",
+  "email": "hiroshi.nakamura@example.com",
+  "phone": "+81 90 5555 1234",
+  "education": [
+    {
+      "institution": "University of Tokyo",
+      "degree": "Master of Engineering",
+      "gpa": ""
+    }
+  ],
+  "experience": [
+    {
+      "company": "Sakura Grid KK",
+      "title": "Infrastructure Engineer"
+    }
+  ],
+  "skills": [
+    "Linux",
+    "Ansible",
+    "Python",
+    "Networking"
+  ]
+}

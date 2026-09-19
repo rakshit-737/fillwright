@@ -1,0 +1,26 @@
+{
+  "layout": "Europass",
+  "firstName": "Katarzyna",
+  "lastName": "Nowicka",
+  "email": "katarzyna.nowicka@example.com",
+  "phone": "+48 601 555 234",
+  "education": [
+    {
+      "institution": "AGH University of Science and Technology",
+      "degree": "Master of Science",
+      "gpa": ""
+    }
+  ],
+  "experience": [
+    {
+      "company": "Wisła Software Sp. z o.o.",
+      "title": "Quality Assurance Engineer"
+    }
+  ],
+  "skills": [
+    "Selenium",
+    "Java",
+    "Jenkins",
+    "Cypress"
+  ]
+}

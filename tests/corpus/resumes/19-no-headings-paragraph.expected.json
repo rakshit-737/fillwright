@@ -1,0 +1,26 @@
+{
+  "layout": "no headings",
+  "firstName": "Hannah",
+  "lastName": "Lindqvist",
+  "email": "hannah.lindqvist@example.com",
+  "phone": "+46 70 555 12 34",
+  "education": [
+    {
+      "institution": "KTH Royal Institute of Technology",
+      "degree": "",
+      "gpa": ""
+    }
+  ],
+  "experience": [
+    {
+      "company": "Fjordline Apps AB",
+      "title": "iOS Developer"
+    }
+  ],
+  "skills": [
+    "Swift",
+    "SwiftUI",
+    "Objective-C",
+    "Xcode"
+  ]
+}

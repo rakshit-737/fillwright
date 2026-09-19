@@ -1,0 +1,32 @@
+{
+  "layout": "LaTeX Jake's resume",
+  "firstName": "Meera",
+  "lastName": "Kulkarni",
+  "email": "meera.kulkarni@example.com",
+  "phone": "+1 (412) 555-0190",
+  "education": [
+    {
+      "institution": "University of Michigan",
+      "degree": "Master of Science",
+      "gpa": ""
+    },
+    {
+      "institution": "University of Pune",
+      "degree": "Bachelor of Engineering",
+      "gpa": ""
+    }
+  ],
+  "experience": [
+    {
+      "company": "Larkspur AI",
+      "title": "Machine Learning Engineer"
+    }
+  ],
+  "skills": [
+    "Python",
+    "C++",
+    "MATLAB",
+    "PyTorch",
+    "JAX"
+  ]
+}

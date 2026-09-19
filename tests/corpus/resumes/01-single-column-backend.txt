@@ -1,0 +1,19 @@
+PRIYA NATARAJAN
+Chennai, India | priya.natarajan@example.com | +91 98401 22334
+linkedin.com/in/priya-natarajan-dev
+
+SUMMARY
+Backend developer with three years of experience in payments.
+
+EXPERIENCE
+Software Engineer, Kestrel Fintech Pvt Ltd
+Chennai | July 2022 - Present
+- Built a reconciliation service in Java handling 2M records a day
+
+EDUCATION
+Anna University
+B.E. in Electronics and Communication Engineering | 2018 - 2022
+CGPA: 8.1/10
+
+SKILLS
+Java, Spring Boot, PostgreSQL, Redis, Docker

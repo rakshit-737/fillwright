@@ -1,0 +1,34 @@
+{
+  "layout": "single column",
+  "firstName": "Olivia",
+  "lastName": "Hart",
+  "email": "olivia.hart@example.com",
+  "phone": "312-555-0177",
+  "education": [
+    {
+      "institution": "University of Illinois Urbana-Champaign",
+      "degree": "Bachelor of Science",
+      "gpa": ""
+    }
+  ],
+  "experience": [
+    {
+      "company": "Prairie Freight Inc.",
+      "title": "Engineering Manager"
+    },
+    {
+      "company": "Prairie Freight Inc.",
+      "title": "Senior Software Engineer"
+    },
+    {
+      "company": "Lakeshore Systems",
+      "title": "Software Engineer"
+    }
+  ],
+  "skills": [
+    "Java",
+    "Leadership",
+    "Hiring",
+    "System Design"
+  ]
+}

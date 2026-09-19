@@ -1,0 +1,26 @@
+{
+  "layout": "two-column, sidebar first",
+  "firstName": "Lena",
+  "lastName": "Vogel",
+  "email": "lena.vogel@example.com",
+  "phone": "+49 151 5550 1234",
+  "education": [
+    {
+      "institution": "Technische Universität Berlin",
+      "degree": "Bachelor of Science",
+      "gpa": ""
+    }
+  ],
+  "experience": [
+    {
+      "company": "Nordlicht Mobility GmbH",
+      "title": "Backend Engineer"
+    }
+  ],
+  "skills": [
+    "Go",
+    "Kotlin",
+    "gRPC",
+    "PostgreSQL"
+  ]
+}

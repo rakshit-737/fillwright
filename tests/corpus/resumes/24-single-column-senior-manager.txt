@@ -1,0 +1,20 @@
+OLIVIA HART
+Chicago, IL | olivia.hart@example.com | 312-555-0177
+
+PROFESSIONAL SUMMARY
+Engineering manager with twelve years in logistics software.
+
+EXPERIENCE
+Engineering Manager, Prairie Freight Inc.
+Chicago, IL | May 2019 - Present
+Senior Software Engineer, Prairie Freight Inc.
+Chicago, IL | June 2015 - April 2019
+Software Engineer, Lakeshore Systems
+Evanston, IL | July 2012 - May 2015
+
+EDUCATION
+University of Illinois Urbana-Champaign
+Bachelor of Science in Computer Engineering | 2008 - 2012
+
+SKILLS
+Java, Leadership, Hiring, System Design

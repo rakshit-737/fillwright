@@ -1,0 +1,27 @@
+{
+  "layout": "single column",
+  "firstName": "Fatima",
+  "lastName": "Al-Sayed",
+  "email": "fatima.alsayed@example.com",
+  "phone": "+971 50 123 4567",
+  "education": [
+    {
+      "institution": "American University of Sharjah",
+      "degree": "Bachelor of Science",
+      "gpa": "3.8"
+    }
+  ],
+  "experience": [
+    {
+      "company": "Sandline Logistics LLC",
+      "title": "Data Analyst"
+    }
+  ],
+  "skills": [
+    "Python",
+    "SQL",
+    "Power BI",
+    "Excel",
+    "Pandas"
+  ]
+}

@@ -1,0 +1,21 @@
+ROHAN VERMA
+B.Tech, Computer Science and Engineering
+Indian Institute of Technology (BHU), Varanasi
+rohan.verma@example.com | +91 94150 12398
+
+EDUCATION
+Examination | Institute | Year | CPI / %
+B.Tech (CSE) | Indian Institute of Technology (BHU), Varanasi | 2026 | 8.72
+Class XII (CBSE) | Kendriya Vidyalaya, Lucknow | 2022 | 94.2%
+Class X (CBSE) | Kendriya Vidyalaya, Lucknow | 2020 | 96.8%
+
+INTERNSHIPS
+Software Development Intern, Pinecone Commerce
+May 2025 - July 2025
+- Wrote a catalogue search service in Go
+
+TECHNICAL SKILLS
+C++, Go, Python, MySQL
+
+ACHIEVEMENTS
+- JEE Advanced 2022: All India Rank 2140

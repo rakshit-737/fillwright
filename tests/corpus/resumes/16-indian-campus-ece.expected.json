@@ -1,0 +1,26 @@
+{
+  "layout": "Indian campus, Class X / XII rows",
+  "firstName": "Ananya",
+  "lastName": "Iyer",
+  "email": "ananya.iyer@example.com",
+  "phone": "+91 90030 44512",
+  "education": [
+    {
+      "institution": "PSG College of Technology",
+      "degree": "B.E.",
+      "gpa": "9.05"
+    },
+    {
+      "institution": "Chinmaya Vidyalaya, Coimbatore",
+      "degree": "Class XII",
+      "gpa": ""
+    }
+  ],
+  "experience": [],
+  "skills": [
+    "Verilog",
+    "Embedded C",
+    "MATLAB",
+    "Python"
+  ]
+}

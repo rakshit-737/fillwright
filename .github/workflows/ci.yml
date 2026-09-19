@@ -32,8 +32,15 @@ jobs:
       - name: Dependency audit
         run: npm run audit
 
-      - name: Unit and integration tests
-        run: npm test
+      # Fails when coverage of src/autofill, src/field-detection, src/security
+      # or src/parser drops below the thresholds in vitest.config.ts.
+      - name: Unit and integration tests, with coverage
+        run: npm run test:coverage
+
+      # Fails when classifier or parser precision/recall on the invented corpus
+      # drops below tests/corpus/baseline.json.
+      - name: Accuracy evaluation
+        run: npm run eval
 
       - name: Build
         run: npm run build

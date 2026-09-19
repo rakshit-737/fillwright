@@ -1,0 +1,4 @@
+Hannah Lindqvist — hannah.lindqvist@example.com — +46 70 555 12 34 — Stockholm
+
+I am a mobile developer who has shipped four iOS apps. Since 2022 I have worked as an iOS Developer at Fjordline Apps AB. Before that I studied at KTH Royal Institute of Technology.
+Swift, SwiftUI, Objective-C, Xcode

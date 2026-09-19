@@ -14,7 +14,11 @@ module.exports = {
     'react-hooks/rules-of-hooks': 'error',
     'no-restricted-globals': [
       'error',
-      { name: 'fetch', message: 'Network access must go through src/security/network.ts.' },
+      {
+        name: 'fetch',
+        message:
+          "Fillwright makes no network requests; the CSP allows connect-src 'self' only. See SECURITY.md.",
+      },
     ],
   },
 };

@@ -47,22 +47,10 @@ export function SettingsPane({ settings, onChange }: Props) {
       <section className="fw-section">
         <h2 className="fw-section__title">Autofill</h2>
         <Toggle
-          label="Fill empty fields only"
-          hint="Leaves anything you already typed untouched."
-          checked={settings.autofill.fillEmptyFieldsOnly}
-          onChange={(value) => patch({ autofill: { fillEmptyFieldsOnly: value } })}
-        />
-        <Toggle
           label="Allow overwriting existing values"
-          hint="Off by default. When on, Fillwright still shows you every change first."
+          hint="Off by default, so anything you already typed is left alone. When on, Fillwright still shows you every change first."
           checked={settings.autofill.allowOverwrite}
           onChange={(value) => patch({ autofill: { allowOverwrite: value } })}
-        />
-        <Toggle
-          label="Show a preview before filling"
-          hint="Review every value Fillwright is about to write."
-          checked={settings.autofill.previewBeforeFill}
-          onChange={(value) => patch({ autofill: { previewBeforeFill: value } })}
         />
         <Toggle
           label="Highlight fields Fillwright changed"
@@ -111,8 +99,15 @@ export function SettingsPane({ settings, onChange }: Props) {
         />
         <Toggle
           label="Reduce motion"
+          hint="Also applies to the panel on job sites."
           checked={settings.ui.reducedMotion}
           onChange={(value) => patch({ ui: { reducedMotion: value } })}
+        />
+        <Toggle
+          label="Show the on-page prompt in Assist and Smart"
+          hint="When off, Fillwright only appears on a job site when you click its button or press the shortcut."
+          checked={settings.ui.showFloatingWidget}
+          onChange={(value) => patch({ ui: { showFloatingWidget: value } })}
         />
       </section>
     </div>

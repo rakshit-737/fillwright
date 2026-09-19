@@ -14,6 +14,7 @@ import { assignGroups, countBlocks, groupKindOf, type FieldGroup } from '@/field
 import { resolveForField } from './resolve';
 import { isSensitiveField, requiresExplicitConsent } from '@/security/sensitive';
 import { normalizeLabel } from '@/field-detection/normalize';
+import { CONSENT_REQUIRED_HINT_RE } from '@/field-detection/rules';
 export { STATUS_LABELS } from './status';
 
 /**
@@ -80,6 +81,7 @@ export function buildMappings(
       corrected: Boolean(saved),
       entryIndex: group.index,
     };
+    if (saved && !isOneOff(saved)) base.savedMappingId = saved.id;
 
     /* --- fields we refuse to touch ------------------------------------- */
 
@@ -97,6 +99,17 @@ export function buildMappings(
         canonical: 'unknown',
         status: 'unmapped',
         rationale: 'this asks about someone else, so Fillwright leaves it to you',
+      };
+    }
+
+    // A checkbox that certifies, agrees, consents or declares is the user's
+    // statement to make. It is never ticked, whatever it matched or was taught.
+    if (field.kind === 'checkbox' && isConsentStatement(field)) {
+      return {
+        ...base,
+        status: 'needs-consent',
+        proposedValue: '',
+        rationale: 'this box is a statement you make yourself, so Fillwright never ticks it',
       };
     }
 
@@ -226,6 +239,13 @@ function resolveLoneNameField(
   });
 }
 
+function isConsentStatement(field: DetectedField): boolean {
+  const text = normalizeLabel(
+    [field.signals.labelText, field.signals.ariaLabel].filter(Boolean).join(' '),
+  );
+  return CONSENT_REQUIRED_HINT_RE.test(text);
+}
+
 /** A correction made for the current form only; see `content:request-mappings`. */
 function isOneOff(mapping: SavedMapping | undefined): boolean {
   return Boolean(mapping?.id.startsWith('override-'));
@@ -271,6 +291,7 @@ export function buildFillPlan(
         selected: mapping.status === 'ready',
         fingerprint: fingerprintOf(field),
         remembered: mapping.fromSavedRule,
+        ...(mapping.savedMappingId ? { savedMappingId: mapping.savedMappingId } : {}),
         corrected: Boolean(mapping.corrected),
         required: field.signals.required,
       } satisfies FillPlanEntry;

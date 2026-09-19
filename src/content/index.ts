@@ -228,7 +228,12 @@ async function runScan(quiet: boolean): Promise<void> {
   const response = await request<{
     plan: FillPlan;
     profileName?: string;
-    settings?: { highlightFilledFields?: boolean; diagnostics?: boolean };
+    settings?: {
+      highlightFilledFields?: boolean;
+      diagnostics?: boolean;
+      theme?: 'system' | 'light' | 'dark';
+      reducedMotion?: boolean;
+    };
   }>({
     type: 'content:request-mappings',
     scan: {
@@ -262,6 +267,12 @@ async function runScan(quiet: boolean): Promise<void> {
     undo: session?.undo ?? [],
     highlight: Boolean(response.data.settings?.highlightFilledFields),
   };
+
+  const theme = response.data.settings?.theme;
+  widget.setAppearance({
+    theme: theme === 'light' || theme === 'dark' ? theme : 'system',
+    reducedMotion: Boolean(response.data.settings?.reducedMotion),
+  });
 
   // Diagnostics are read from the harvested fields, which stay in this page —
   // they are never sent to the worker and never persisted.
@@ -403,9 +414,17 @@ async function applyFill(entries: FillPlanEntry[]): Promise<FillSummary & { ok: 
   const manual = left.filter((entry) => entry.status === 'manual-required').length;
 
   // Counts only — no field values ever leave this page.
+  const mappingIds = [
+    ...new Set(
+      [...filledIds]
+        .map((id) => byId.get(id)?.savedMappingId)
+        .filter((id): id is string => Boolean(id)),
+    ),
+  ];
   notify({
     type: 'content:fill-complete',
     outcomes: outcomes.map(({ fieldId, ok }) => ({ fieldId, ok })),
+    ...(mappingIds.length ? { mappingIds } : {}),
   });
   if (filled > 0) {
     void send({ type: 'content:step-progress', filled, stepKey: stepKey() });

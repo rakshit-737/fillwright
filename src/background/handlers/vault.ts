@@ -1,5 +1,5 @@
 import { handle, ok, err } from '../router';
-import { getSettings, setSettings } from '@/storage/settings';
+import { getSettings } from '@/storage/settings';
 import { pruneOrphanResumes, rewriteAll } from '@/storage/profiles';
 import { deriveKey } from '@/security/crypto';
 import { changePassphrase, disable, enable, getMeta, lock, status, unlock } from '@/security/vault';
@@ -62,7 +62,6 @@ export function registerVaultHandlers(): void {
     });
     if (!result.ok) return err(result.error ?? 'Encryption could not be switched on.');
 
-    await setSettings({ privacy: { encryptionEnabled: true } });
     return ok({ enabled: true });
   });
 
@@ -106,7 +105,6 @@ export function registerVaultHandlers(): void {
     });
     if (!result.ok) return err(result.error ?? 'Encryption could not be switched off.');
 
-    await setSettings({ privacy: { encryptionEnabled: false } });
     return ok({ enabled: false });
   });
 }

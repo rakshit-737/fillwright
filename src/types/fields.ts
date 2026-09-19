@@ -182,6 +182,8 @@ export interface FieldMapping {
   rationale: string;
   /** True when this mapping came from a user-saved rule for this site. */
   fromSavedRule: boolean;
+  /** The id of that saved rule, so a fill can count its use. */
+  savedMappingId?: string;
   /** True when the user chose this mapping, saved or for this form only. */
   corrected?: boolean;
   /**
@@ -236,6 +238,8 @@ export interface FillPlanEntry {
   fingerprint: string;
   /** True when this mapping came from a correction the user already taught. */
   remembered: boolean;
+  /** The saved rule behind a remembered entry. An id, never a value. */
+  savedMappingId?: string;
   /** True when the user picked this mapping, saved or not. */
   corrected?: boolean;
   /** The form marks this field as required. */

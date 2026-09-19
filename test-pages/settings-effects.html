@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Apply — Support Engineer</title>
+    <link rel="stylesheet" href="./shared.css" />
+  </head>
+  <body>
+    <h1>Apply: Support Engineer</h1>
+    <p class="lead">
+      Expected: with the theme set to Dark and Reduce motion on, the Fillwright panel is dark and
+      does not animate, whatever the system prefers. The "I certify" box is listed as needing your
+      answer and is never ticked, even after Fill. "Portfolio handle" is not recognised; once a
+      remembered correction is filled, Settings → Learned fields counts one use of it.
+    </p>
+    <form>
+      <label for="s-first">First Name</label>
+      <input id="s-first" name="first_name" autocomplete="given-name" />
+      <label for="s-email">Email</label>
+      <input id="s-email" name="email" type="email" autocomplete="email" />
+      <label for="s-handle">Portfolio handle</label>
+      <input id="s-handle" name="zz_handle_42" />
+      <label>
+        <input id="s-certify" type="checkbox" name="certify" />
+        I certify that the information in this application is true and complete
+      </label>
+      <button type="submit">Submit application</button>
+    </form>
+    <script src="./shared.js"></script>
+  </body>
+</html>

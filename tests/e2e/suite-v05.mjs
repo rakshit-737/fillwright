@@ -802,5 +802,95 @@ export async function runV05Suite(ctx) {
     await popup.close();
   });
 
+  /* --- settings that change what the panel does ----------------------- */
+
+  await test('settings: theme and reduced motion reach the on-page panel', async () => {
+    await ui({ type: 'ui:set-settings', patch: { ui: { theme: 'dark', reducedMotion: true } } });
+    try {
+      const page = await openAndReview('settings-effects.html');
+      const look = await page.evaluate(() => {
+        const root = document.querySelector('[data-fillwright-widget]').shadowRoot;
+        const panel = root.querySelector('.fw-widget');
+        return {
+          theme: panel.getAttribute('data-theme'),
+          motion: panel.getAttribute('data-reduced-motion'),
+          css: root.querySelector('style').textContent,
+          animation: getComputedStyle(panel).animationName,
+          background: getComputedStyle(root.querySelector('.fw-card')).backgroundColor,
+        };
+      });
+      assertEqual(look.theme, 'dark', 'panel theme');
+      assertEqual(look.motion, 'true', 'panel reduced motion');
+      assertEqual(look.animation, 'none', 'the panel still animates');
+      assert(!look.css.includes('prefers-color-scheme'), 'dark rules still follow the system');
+      assertEqual(look.background, 'rgb(26, 25, 31)', 'the panel card is not dark');
+      await page.close();
+    } finally {
+      await ui({
+        type: 'ui:set-settings',
+        patch: { ui: { theme: 'system', reducedMotion: false } },
+      });
+    }
+  });
+
+  await test('settings: a certify checkbox needs you and is never ticked', async () => {
+    const page = await openAndReview('settings-effects.html');
+    const row = itemFor(await readWidget(page), 'I certify');
+    assert(row, 'the certify box is not listed');
+    assertEqual(row.badge, 'Needs your answer', 'certify box status');
+    assert(await clickWidgetButton(page, 'Fill'), 'no Fill button');
+    await waitForWidget(page, (s) => s.text.includes('updated'));
+    assertEqual(
+      await page.evaluate(() => document.getElementById('s-certify').checked),
+      false,
+      'the certify box was ticked',
+    );
+    await page.close();
+  });
+
+  await test('settings: filling a remembered field counts a use of it', async () => {
+    const page = await openAndReview('settings-effects.html');
+    assertEqual(await correct(page, 'Portfolio handle', 'links.github', true), 'ok', 'correction');
+    await waitForWidget(page, (s) => itemFor(s, 'Portfolio handle')?.value !== '');
+    await page.close();
+    const again = await openAndReview('settings-effects.html');
+    assert(await clickWidgetButton(again, 'Fill'), 'no Fill button');
+    await waitForWidget(again, (s) => s.text.includes('updated'));
+    assertEqual(
+      await again.evaluate(() => document.getElementById('s-handle').value),
+      'https://github.com/aditir',
+      'remembered field not filled',
+    );
+    await again.close();
+    let used = 0;
+    for (let tries = 0; tries < 20 && used === 0; tries += 1) {
+      const rules = await ui({ type: 'ui:list-saved-mappings', origin: server.origin });
+      used = rules.data.find((rule) => rule.label.startsWith('Portfolio handle'))?.useCount ?? 0;
+      if (used === 0) await sleep(150);
+    }
+    assertEqual(used, 1, 'use count after one fill');
+  });
+
+  await test('settings: the on-page prompt can be switched off in Assist', async () => {
+    await ui({
+      type: 'ui:set-settings',
+      patch: { autofill: { mode: 'assist' }, ui: { showFloatingWidget: false } },
+    });
+    await ui({ type: 'ui:sync-auto-detect' });
+    try {
+      const page = await browser.newPage();
+      await page.goto(url('greenhouse.html'), { waitUntil: 'domcontentloaded' });
+      await sleep(4_000);
+      assertEqual(await hasPanel(page), false, 'a prompt appeared with the prompt switched off');
+      await page.close();
+    } finally {
+      await ui({
+        type: 'ui:set-settings',
+        patch: { autofill: { mode: 'manual' }, ui: { showFloatingWidget: true } },
+      });
+      await ui({ type: 'ui:sync-auto-detect' });
+    }
+  });
+
   await control.close();
 }

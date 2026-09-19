@@ -3,6 +3,7 @@ import type { JobMatch } from '@/autofill/job-match';
 import type { RepeatKind } from '@/autofill/repeat';
 import { renderReviewList, type DraftView } from './review';
 import { WIDGET_CSS } from './styles';
+import { themedCss, type Theme } from './theme';
 import type { UserError } from '@/utils/errors';
 
 /**
@@ -94,6 +95,9 @@ export class FillwrightWidget {
   private host: HTMLElement;
   private root: ShadowRoot;
   private panel: HTMLElement;
+  private style: HTMLStyleElement;
+  /** The system's reduced-motion preference, which a setting can only add to. */
+  private systemReducedMotion: boolean;
   private live: HTMLElement;
 
   state: WidgetState = 'idle';
@@ -147,6 +151,8 @@ export class FillwrightWidget {
     const style = document.createElement('style');
     style.textContent = WIDGET_CSS;
     this.root.appendChild(style);
+    this.style = style;
+    this.systemReducedMotion = reducedMotion;
 
     const container = document.createElement('div');
     container.className = 'fw-widget';
@@ -175,6 +181,21 @@ export class FillwrightWidget {
   }
 
   /* ------------------------------------------------------------ inputs */
+
+  /**
+   * Applies the Appearance settings. Reduced motion is on when either the
+   * system or the setting asks for it; the theme swaps the stylesheet.
+   */
+  setAppearance({ theme, reducedMotion }: { theme: Theme; reducedMotion: boolean }): void {
+    this.style.textContent = themedCss(WIDGET_CSS, theme);
+    if (theme === 'system') this.panel.removeAttribute('data-theme');
+    else this.panel.setAttribute('data-theme', theme);
+    if (reducedMotion || this.systemReducedMotion) {
+      this.panel.setAttribute('data-reduced-motion', 'true');
+    } else {
+      this.panel.removeAttribute('data-reduced-motion');
+    }
+  }
 
   setDiagnostics(enabled: boolean, signals: Map<string, FieldSignals>): void {
     this.diagnostics = enabled;

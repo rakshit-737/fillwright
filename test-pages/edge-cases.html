@@ -87,7 +87,8 @@
       <h2>5. Work authorisation, two countries</h2>
       <p class="expect">
         Expect: each answered independently. An answer saved for the US must not fill the UK
-        question.
+        questions — including the one whose helper text says “tell us”, where “us” is a pronoun,
+        not the United States.
       </p>
       <fieldset>
         <legend>Are you legally authorized to work in the United States?</legend>
@@ -99,6 +100,13 @@
         <label><input type="radio" name="auth_uk" value="Yes" /> Yes</label>
         <label><input type="radio" name="auth_uk" value="No" /> No</label>
       </fieldset>
+      <p>Please tell us whether you have the right to work in the UK.</p>
+      <label for="e14">Right to work (UK)</label>
+      <select id="e14" name="auth_uk_tell_us">
+        <option value="">Select…</option>
+        <option value="Yes">Yes</option>
+        <option value="No">No</option>
+      </select>
 
       <h2>6. Always-confirm declarations</h2>
       <p class="expect">

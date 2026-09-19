@@ -2,7 +2,13 @@ import { beforeEach, describe, expect, it } from 'vitest';
 import { harvestFields } from '@/field-detection/harvest';
 import { buildMappings, buildFillPlan, fingerprintOf } from '@/autofill/plan';
 import { fillFields, undoFill } from '@/autofill/fill';
-import { matchOption, resolveValue, detectCountry, formatForDateInput } from '@/autofill/resolve';
+import {
+  matchOption,
+  resolveValue,
+  detectCountry,
+  detectCountries,
+  formatForDateInput,
+} from '@/autofill/resolve';
 import { createEmptyProfile, newId, provenance, tv } from '@/profile/factory';
 import { DEFAULT_SETTINGS } from '@/types/settings';
 import type { Profile } from '@/types/profile';
@@ -117,6 +123,108 @@ describe('work authorisation is answered per country', () => {
     expect(detectCountry('Are you legally authorized to work in the United States?')).toBe('US');
     expect(detectCountry('Do you have the right to work in the UK?')).toBe('GB');
     expect(detectCountry('Are you authorised to work?')).toBeNull();
+  });
+
+  // Real phrasings from application forms. The pronoun "us" is not a country.
+  const PHRASINGS: Array<[string, string | null]> = [
+    ['Let us know if you are authorised to work in India', 'IN'],
+    ['Please tell us whether you have the right to work in the UK', 'GB'],
+    ['Will you now or in the future require sponsorship to work for us in Canada?', 'CA'],
+    ['Are you legally authorized to work in the U.S.?', 'US'],
+    ['Are you legally authorized to work in the US?', 'US'],
+    ['Are you legally eligible to work in the USA?', 'US'],
+    ['Are you a U.S. citizen or permanent resident?', 'US'],
+    ['Are you an American citizen?', 'US'],
+    ['Are you authorized to work in the United States of America?', 'US'],
+    ['Do you have the right to work in the United Kingdom?', 'GB'],
+    ['Do you have the right to work in Great Britain?', 'GB'],
+    ['Do you have the right to work in the U.K.?', 'GB'],
+    ['Are you eligible to work in England without sponsorship?', 'GB'],
+    ['Are you an Indian citizen?', 'IN'],
+    ['Are you a Canadian citizen or permanent resident?', 'CA'],
+    ['Do you hold full working rights in Australia?', 'AU'],
+    ['Are you an Australian citizen or permanent resident?', 'AU'],
+    ['Do you have unrestricted work rights in New Zealand?', 'NZ'],
+    ['Do you have a valid work permit for Germany?', 'DE'],
+    ['Are you allowed to work in Ireland (Stamp 4 or EU citizen)?', 'IE'],
+    ['Do you require a visa to work in the Netherlands?', 'NL'],
+    ['Are you a Singapore Citizen or PR?', 'SG'],
+    ['Are you eligible to work in the UAE?', 'AE'],
+    ['Do you have the right to work in the United Arab Emirates?', 'AE'],
+    ['Are you authorised to work in France?', 'FR'],
+    ['Do you need sponsorship to work in Japan?', 'JP'],
+    ['Can you legally work in Switzerland?', 'CH'],
+    ['Are you legally allowed to work in Poland?', 'PL'],
+    ['Do you have the right to work in Sweden?', 'SE'],
+    ['Would you need a visa to work in Spain?', 'ES'],
+    ['Do you have work authorization for Brazil?', 'BR'],
+    ['Are you legally authorized to work in Mexico?', 'MX'],
+    ['Are you legally authorized to work in New Mexico?', 'US'],
+    ['Are you authorized to work in Indiana?', null],
+    ['Are you authorised to work?', null],
+    ['Please let us know about your work authorization.', null],
+    ['Do you require visa sponsorship to join us?', null],
+    ['ARE YOU AUTHORIZED TO WORK FOR US?', null],
+    ['Have you worked in Latin America or South America before?', null],
+  ];
+
+  it.each(PHRASINGS)('reads %j as %s', (text, expected) => {
+    expect(detectCountry(text)).toBe(expected);
+  });
+
+  it('returns every country a question names', () => {
+    expect(detectCountries('Are you authorized to work in the United States or Canada?')).toEqual([
+      'US',
+      'CA',
+    ]);
+    expect(detectCountries('Are you eligible to work in the UK, Ireland or the EU?')).toEqual([
+      'GB',
+      'IE',
+    ]);
+    expect(detectCountry('Are you authorized to work in the United States or Canada?')).toBeNull();
+    expect(detectCountries('Are you authorised to work?')).toEqual([]);
+  });
+
+  it('declines a question that names two countries and says which', () => {
+    document.body.innerHTML = `
+      <label for="a">Are you authorized to work in the United States or Canada?</label>
+      <input id="a">
+    `;
+    const profile = testProfile();
+    profile.sensitive.workAuthorization.authorizedIn = { US: 'yes', CA: 'no' };
+
+    const { plan } = scanOf(profile);
+    const entry = plan.entries[0]!;
+    expect(entry.status).toBe('needs-consent');
+    expect(entry.newValue).toBe('');
+    expect(entry.rationale).toContain('the United States and Canada');
+  });
+
+  it('does not read "let us know" as the United States', () => {
+    document.body.innerHTML = `
+      <p>Please tell us whether you have the right to work in the UK.</p>
+      <label for="a">Right to work</label>
+      <select id="a"><option value="">Select</option><option>Yes</option><option>No</option></select>
+    `;
+    const profile = testProfile();
+    profile.sensitive.workAuthorization.authorizedIn = { US: 'yes' };
+
+    const { plan } = scanOf(profile);
+    const entry = plan.entries.find((e) => e.canonical === 'sensitive.workAuthorization');
+    expect(entry?.newValue ?? '').toBe('');
+  });
+
+  it('does not assume the single saved country when the question names none', () => {
+    document.body.innerHTML = `
+      <label for="a">Are you authorised to work?</label>
+      <input id="a">
+    `;
+    const profile = testProfile();
+    profile.sensitive.workAuthorization.authorizedIn = { US: 'yes' };
+
+    const { plan } = scanOf(profile);
+    expect(plan.entries[0]?.status).toBe('needs-consent');
+    expect(plan.entries[0]?.newValue).toBe('');
   });
 
   it('does not apply a US answer to a UK question', () => {

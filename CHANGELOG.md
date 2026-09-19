@@ -2,6 +2,19 @@
 
 Notable changes, newest first. Versions follow semantic versioning.
 
+## Unreleased
+
+### Security
+
+- **Work-authorisation answers no longer go to the wrong country.** The
+  pronoun "us" ("let us know", "tell us", "work for us") was read as the
+  United States, so a saved US answer could be proposed for an India, UK or
+  Canada question. Countries now come from one table (also used for dropdown
+  aliases) where "US", "U.S." and "USA" match only case-sensitively as whole
+  tokens. A question naming several countries, or none, is never answered and
+  says what it found ("this question mentions the United States and Canada").
+  The table grew from ten countries to about fifty.
+
 ## 0.5.0
 
 From feature-complete to shippable: verified in a real browser against

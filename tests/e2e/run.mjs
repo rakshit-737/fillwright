@@ -254,7 +254,9 @@ async function seedProfile(browser, extensionId) {
       },
     ];
 
-    profile.sensitive.workAuthorization.authorizedIn = { IN: 'yes' };
+    // Only a US answer: the edge-case page asks two UK questions, one of them
+    // under "please tell us", and neither may borrow the US answer.
+    profile.sensitive.workAuthorization.authorizedIn = { US: 'yes' };
 
     const saved = await send({ type: 'ui:save-profile', profile });
     if (!saved.ok) return { ok: false, error: saved.error };
@@ -591,12 +593,18 @@ async function main() {
       assertEqual(prefilled.badge, 'Already filled in', 'a prefilled field was not protected');
     });
 
-    await test('a UK authorisation question is not answered from an India answer', async () => {
+    await test('a UK authorisation question is not answered from a US answer', async () => {
       const widget = await readWidget(edge);
       const uk = widget.items.find((item) => item.label.includes('United Kingdom'));
-      assert(uk || true, '');
       assert(uk, 'the UK question was not listed');
       assertEqual(uk.value, '', 'a UK question was answered from a different country');
+    });
+
+    await test('"please tell us" does not make a UK question a US one', async () => {
+      const widget = await readWidget(edge);
+      const tellUs = findItem(widget, 'Right to work status');
+      assert(tellUs, 'the "tell us" UK question was not listed');
+      assertEqual(tellUs.value, '', 'the "tell us" UK question got the US answer');
     });
 
     await test('a shadow-DOM field is detected', async () => {
@@ -617,7 +625,8 @@ async function main() {
     await test('prefilled values survive a fill', async () => {
       assert(await clickWidgetButton(edge, 'Fill'), 'the Fill button was not found');
       await waitForWidget(edge, (state) => state.text.includes('updated'));
-      const values = await readInputs(edge, ['e1', 'e2']);
+      const values = await readInputs(edge, ['e1', 'e2', 'e14']);
+      assertEqual(values.e14, '', 'the "tell us" UK question was filled from the US answer');
       assertEqual(values.e1, 'Alexandra', 'a prefilled value was overwritten');
       assertEqual(values.e2, 'alex@existing.example', 'a prefilled value was overwritten');
     });

@@ -69,7 +69,12 @@ export type ContentRequest =
        */
       overrides?: Array<{ fingerprint: string; canonical: CanonicalField; customKey?: string }>;
     }
-  | { type: 'content:fill-complete'; outcomes: FillOutcome[] }
+  | {
+      type: 'content:fill-complete';
+      outcomes: FillOutcome[];
+      /** Ids of remembered mappings that were written. Ids only, never values. */
+      mappingIds?: string[];
+    }
   | { type: 'content:save-mapping'; mapping: Omit<SavedMapping, 'id' | 'createdAt' | 'useCount'> }
   | {
       type: 'content:log-application';

@@ -1,7 +1,7 @@
 import { handle, ok, err } from '../router';
 import { getProfile } from '@/storage/profiles';
 import { getSettings } from '@/storage/settings';
-import { listMappings, saveMapping } from '@/storage/mappings';
+import { listMappings, recordMappingUse, saveMapping } from '@/storage/mappings';
 import { logApplication } from '@/storage/history';
 import { buildMappings, buildFillPlan } from '@/autofill/plan';
 import { originFromUrl, pageKeyFromUrl, sanitizeString } from '@/security/validate';
@@ -199,11 +199,10 @@ export function registerAutofillHandlers(): void {
       // The name only, so the panel can say which profile it is using.
       profileName: profile.name,
       settings: {
-        previewBeforeFill: settings.autofill.previewBeforeFill,
         highlightFilledFields: settings.autofill.highlightFilledFields,
-        reducedMotion: settings.ui.reducedMotion,
-        theme: settings.ui.theme,
         diagnostics: settings.advanced.diagnostics,
+        theme: settings.ui.theme,
+        reducedMotion: settings.ui.reducedMotion,
       },
     });
   });
@@ -352,10 +351,26 @@ export function registerAutofillHandlers(): void {
     return ok(next);
   });
 
-  handle('content:fill-complete', async (request) => {
-    const { outcomes } = request as Extract<ContentRequest, { type: 'content:fill-complete' }>;
+  handle('content:fill-complete', async (request, sender) => {
+    const { outcomes, mappingIds } = request as Extract<
+      ContentRequest,
+      { type: 'content:fill-complete' }
+    >;
     // Counts only. Field values are never recorded, here or anywhere else.
     const filled = Array.isArray(outcomes) ? outcomes.filter((outcome) => outcome?.ok).length : 0;
+
+    // Remembered mappings that were actually written, by id. Only ids of
+    // active rules saved for the sender's own site are counted, once each.
+    const origin = originFromUrl(sender.tab?.url ?? sender.url ?? '');
+    if (origin && Array.isArray(mappingIds) && mappingIds.length > 0) {
+      const wanted = new Set(
+        mappingIds.slice(0, 400).filter((id): id is string => typeof id === 'string'),
+      );
+      const owned = (await listMappings(origin)).filter(
+        (mapping) => !mapping.disabled && wanted.has(mapping.id),
+      );
+      for (const mapping of owned) await recordMappingUse(mapping.id);
+    }
     return ok({ filled });
   });
 }

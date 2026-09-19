@@ -29,7 +29,7 @@ describe('settings merge', () => {
     });
     expect(merged.autofill.allowOverwrite).toBe(true);
     // The sibling must survive — a shallow merge would wipe the whole branch.
-    expect(merged.autofill.fillEmptyFieldsOnly).toBe(true);
+    expect(merged.autofill.highlightFilledFields).toBe(true);
     expect(merged.privacy.keepApplicationHistory).toBe(false);
   });
 
@@ -43,8 +43,6 @@ describe('settings merge', () => {
 
   it('keeps the cautious defaults', () => {
     expect(DEFAULT_SETTINGS.autofill.allowOverwrite).toBe(false);
-    expect(DEFAULT_SETTINGS.autofill.fillEmptyFieldsOnly).toBe(true);
-    expect(DEFAULT_SETTINGS.autofill.previewBeforeFill).toBe(true);
     expect(DEFAULT_SETTINGS.privacy.keepApplicationHistory).toBe(false);
     expect(DEFAULT_SETTINGS.ai.enabled).toBe(false);
   });

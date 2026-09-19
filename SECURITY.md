@@ -370,6 +370,7 @@ These are enforced in code, not merely documented:
 | Give your expected salary to a current-CTC question, or convert pay units | `sensitive.currentSalary` is its own field with negative rules both ways; `src/autofill/resolve.ts` declines when the question's unit (lakhs, per month, per year) differs from the saved one |
 | Overwrite something you typed | Off by default; and your edits set `provenance.source = 'user'`, which the resume merge never overwrites or drops — per field and per list entry (education, experience, projects, skills, certifications, achievements, languages), with either merge strategy |
 | Consent to a background check or drug test unattended | `ALWAYS_CONFIRM` — re-confirmed on every application even with a saved answer |
+| Tick a box that certifies, agrees, consents or declares | `src/autofill/plan.ts` — a checkbox whose label matches `CONSENT_REQUIRED_HINT_RE` is always "needs your answer", whatever it matched or was taught |
 | Attach a file | Browsers forbid it, and Fillwright does not attempt workarounds |
 | Write plaintext while the vault is locked | Storage throws `ELOCKED` rather than falling back |
 | Store or log a passphrase | It is used to derive a key and then discarded |

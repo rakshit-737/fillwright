@@ -1,6 +1,6 @@
 import type { FillOutcome, FillPlanEntry } from '@/types/fields';
 import { isCombobox, selectInCombobox } from './combobox';
-import { ariaOptionValue } from '@/field-detection/harvest';
+import { ariaOptionValue, obscuredBy } from '@/field-detection/harvest';
 import { isPressSafe } from './press-guard';
 
 /**
@@ -74,6 +74,19 @@ export async function fillFields(
       continue;
     }
 
+    // The scan judged this field visible, but a page can still lay something
+    // over it. Only what a person would actually see there gets a value.
+    const covered = coveredReason(elements);
+    if (covered) {
+      outcomes.push({
+        fieldId: entry.fieldId,
+        ok: false,
+        previousValue: '',
+        error: `Not filled: this field is ${covered}. It may be a trap for bots.`,
+      });
+      continue;
+    }
+
     try {
       const record = snapshot(entry.fieldId, elements);
       const wrote = await writeValue(elements, entry.newValue);
@@ -122,7 +135,44 @@ export async function fillFields(
     }
   }
 
+  restoreScroll(scrolledFrom);
   return { outcomes, undo };
+}
+
+/** Page scroll before the presence check moved it, restored after the fill. */
+let scrolledFrom: { x: number; y: number } | null = null;
+
+function restoreScroll(from: { x: number; y: number } | null): void {
+  scrolledFrom = null;
+  if (from) window.scrollTo({ left: from.x, top: from.y, behavior: 'instant' });
+}
+
+/**
+ * Null when at least one of the field's elements (or its label) is what sits
+ * at its position; otherwise why not. A control outside the viewport is
+ * scrolled to first, because the hit test only sees the viewport.
+ */
+function coveredReason(elements: HTMLElement[]): string | null {
+  const doc = elements[0]?.ownerDocument;
+  if (!doc || typeof doc.elementsFromPoint !== 'function') return null;
+  let reason: string | null = null;
+  for (const element of elements) {
+    if (!element.isConnected) continue;
+    const rect = element.getBoundingClientRect();
+    // Nothing to test against (no layout); the scan already judged the box.
+    if (rect.width === 0 && rect.height === 0) return null;
+    const view = doc.defaultView ?? window;
+    const cx = rect.left + rect.width / 2;
+    const cy = rect.top + rect.height / 2;
+    if (cx < 0 || cy < 0 || cx > view.innerWidth || cy > view.innerHeight) {
+      scrolledFrom ??= { x: view.scrollX, y: view.scrollY };
+      element.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'instant' });
+    }
+    const found = obscuredBy(element);
+    if (!found) return null;
+    reason = found;
+  }
+  return reason;
 }
 
 /** Restores every value captured by the matching fill, and names what it could not. */

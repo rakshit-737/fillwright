@@ -26,6 +26,16 @@ Notable changes, newest first. Versions follow semantic versioning.
   saved.
 - A store left half-encrypted by an earlier version is detected and the
   Security page explains how to recover, instead of showing "locked" forever.
+- **Hidden fields and honeypots are no longer filled.** A field hidden with
+  `opacity: 0`, moved off-screen, clipped to 1 px, placed in a zero-size
+  container, or inside an `aria-hidden` or `inert` subtree used to count as
+  visible, could come back "ready" and be written by "Fill N ready". These are
+  now recognised as hidden, never sent for a value, and cannot be ticked. The
+  panel says "N hidden fields ignored" and lists why on request.
+- **Covered fields are refused at fill time.** Just before writing a ticked
+  field, Fillwright checks that the field (or its label) is what is actually at
+  its position on the page, so a control hidden under another element is not
+  written.
 
 ### Fixed
 
@@ -54,6 +64,11 @@ Notable changes, newest first. Versions follow semantic versioning.
 - **Undo names what it could not restore.** A custom dropdown that had no
   selection before the fill cannot be emptied from outside; undo now lists it
   in the panel instead of silently counting it.
+
+### Added
+
+- **"Show me" on every review row** scrolls to the field on the page and
+  outlines it for a moment, so you can see which field a row means.
 
 ## 0.5.0
 

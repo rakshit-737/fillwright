@@ -216,6 +216,62 @@ export async function runV05Suite(ctx) {
     await page.close();
   });
 
+  /* --- hidden fields and honeypots ------------------------------------ */
+
+  await test('hidden fields and honeypots are never filled; visible ones are', async () => {
+    const page = await openAndReview('hidden-fields.html');
+    const widget = await readWidget(page);
+    // Six style-hidden fields are counted; the covered one passes the scan
+    // and is refused at fill time instead.
+    assert(
+      /6 hidden fields ignored/.test(widget.text),
+      `no hidden-field note: ${widget.text.slice(0, 400)}`,
+    );
+    assert(
+      widget.buttons.filter((label) => label === 'Show me').length >= 2,
+      `no Show me on the rows: ${widget.buttons.join(', ')}`,
+    );
+    assert(await clickWidgetButton(page, 'Fill'), 'the Fill button was not found');
+    await waitForWidget(page, (s) => /updated|No fields were changed/.test(s.text));
+    const values = await page.evaluate(() =>
+      Object.fromEntries(
+        Array.from(document.querySelectorAll('input')).map((input) => [input.id, input.value]),
+      ),
+    );
+    assertEqual(values['h-first'], profile.personal.firstName.value, 'visible first name');
+    assertEqual(values['h-email'], PROFILE_EMAIL, 'visible email');
+    for (const id of [
+      'h-last',
+      'h-phone',
+      'h-linkedin',
+      'h-email2',
+      'h-first2',
+      'h-family',
+      'h-honeypot',
+    ]) {
+      assertEqual(values[id], '', `hidden field ${id} received a value`);
+    }
+    await page.close();
+  });
+
+  await test('Show me scrolls to and outlines the field a row refers to', async () => {
+    const page = await openAndReview('hidden-fields.html');
+    const outlined = await page.evaluate(() => {
+      const root = document.querySelector('[data-fillwright-widget]').shadowRoot;
+      const row = Array.from(root.querySelectorAll('.fw-item')).find((item) =>
+        item.querySelector('.fw-item__label')?.textContent.trim().startsWith('Email'),
+      );
+      const show = Array.from(row?.querySelectorAll('button') ?? []).find(
+        (button) => button.textContent.trim() === 'Show me',
+      );
+      if (!show) return 'no Show me';
+      show.click();
+      return document.getElementById('h-email').style.outline;
+    });
+    assert(/solid/.test(outlined), `the field was not outlined: ${outlined}`);
+    await page.close();
+  });
+
   /* --- one-off vs remembered corrections ------------------------------ */
 
   await test('a one-off correction fills now and is forgotten after reload', async () => {

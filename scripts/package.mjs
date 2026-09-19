@@ -14,7 +14,7 @@
  *
  *   node scripts/package.mjs [--out <dir>]
  */
-import { readFileSync, readdirSync, statSync, mkdirSync, existsSync, writeFileSync } from 'node:fs';
+import { readFileSync, readdirSync, mkdirSync, existsSync, writeFileSync } from 'node:fs';
 import { resolve, dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFileSync } from 'node:child_process';
@@ -40,9 +40,9 @@ const manifest = JSON.parse(readFileSync(resolve(dist, 'manifest.json'), 'utf8')
 const outName = `fillwright-${manifest.version}.zip`;
 
 function collect(dir, base = dir) {
-  return readdirSync(dir).flatMap((name) => {
-    const path = join(dir, name);
-    return statSync(path).isDirectory()
+  return readdirSync(dir, { withFileTypes: true }).flatMap((dirent) => {
+    const path = join(dir, dirent.name);
+    return dirent.isDirectory()
       ? collect(path, base)
       : [{ name: relative(base, path).replace(/\\/g, '/'), data: readFileSync(path) }];
   });

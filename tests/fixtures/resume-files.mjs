@@ -65,7 +65,15 @@ export function buildTwoColumnPdf() {
     [150, 728, 10, 'meera.krishnan@example.com | +91 98765 43210 | Pune, India'],
   ];
   // Sidebar: 12 pt leading, starting at the same height as the main column.
-  const sidebar = ['SKILLS', 'Python', 'Kubernetes', 'PostgreSQL', 'LANGUAGES', 'English', 'Marathi'];
+  const sidebar = [
+    'SKILLS',
+    'Python',
+    'Kubernetes',
+    'PostgreSQL',
+    'LANGUAGES',
+    'English',
+    'Marathi',
+  ];
   sidebar.forEach((text, i) => runs.push([40, 680 - i * 12, 10, text]));
   // Main column: 17 pt leading, so its baselines drift away from the sidebar's.
   const main = [
@@ -108,13 +116,7 @@ const W_NS =
 const para = (text) => `<w:p><w:r><w:t xml:space="preserve">${text}</w:t></w:r></w:p>`;
 
 export function buildTextBoxDocx() {
-  const box = [
-    'Sofía Ramírez',
-    'sofia.ramirez@example.com',
-    '+34 612 345 678',
-  ]
-    .map(para)
-    .join('');
+  const box = ['Sofía Ramírez', 'sofia.ramirez@example.com', '+34 612 345 678'].map(para).join('');
 
   const document =
     `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>` +

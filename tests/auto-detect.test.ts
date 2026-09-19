@@ -89,3 +89,11 @@ describe('site access origins', () => {
     }
   });
 });
+
+describe('isAtsHost looks at the host only', () => {
+  it('does not match an ATS name in the path or query', () => {
+    expect(isAtsHost('https://evil.example/?next=greenhouse.io')).toBe(false);
+    expect(isAtsHost('https://greenhouse.io.evil.example/')).toBe(false);
+    expect(isAtsHost('not a url')).toBe(false);
+  });
+});

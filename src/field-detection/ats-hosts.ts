@@ -23,10 +23,13 @@ export const ATS_DOMAINS: readonly string[] = [
   'personio.com',
 ];
 
-const ATS_HOST_PATTERN = new RegExp(
-  `(?:${ATS_DOMAINS.map((domain) => domain.replace(/\./g, '\\.')).join('|')})`,
-);
-
+/** True when the URL's host is one of the ATS domains or a subdomain of one. */
 export function isAtsHost(url: string): boolean {
-  return ATS_HOST_PATTERN.test(url);
+  let host: string;
+  try {
+    host = new URL(url).hostname.toLowerCase();
+  } catch {
+    return false;
+  }
+  return ATS_DOMAINS.some((domain) => host === domain || host.endsWith(`.${domain}`));
 }

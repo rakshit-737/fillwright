@@ -15,6 +15,7 @@ import { FIELD_CATALOG } from '@/field-detection/catalog';
 import { isPlainObject, originFromUrl, sanitizeString } from '@/security/validate';
 import { DEFAULT_SETTINGS, AUTOFILL_MODES, type Settings } from '@/types/settings';
 import type { ApplicationHistoryEntry, DeepPartial } from '@/types/messages';
+import { isRetentionChoice, sanitizeTrackerPatch } from '@/storage/history-model';
 import type { CanonicalField, SavedMapping } from '@/types/fields';
 import type { Profile } from '@/types/profile';
 
@@ -52,7 +53,10 @@ export interface ExportFile {
  * importing "encryption: on" without the key would lock the user out.
  */
 export type PortableSettings = Pick<Settings, 'autofill' | 'ui' | 'ai'> & {
-  privacy: Pick<Settings['privacy'], 'keepApplicationHistory' | 'autoLockMinutes'>;
+  privacy: Pick<
+    Settings['privacy'],
+    'keepApplicationHistory' | 'autoLockMinutes' | 'historyRetentionMonths'
+  >;
 };
 
 export function portableSettings(settings: Settings): PortableSettings {
@@ -63,6 +67,7 @@ export function portableSettings(settings: Settings): PortableSettings {
     privacy: {
       keepApplicationHistory: settings.privacy.keepApplicationHistory,
       autoLockMinutes: settings.privacy.autoLockMinutes,
+      historyRetentionMonths: settings.privacy.historyRetentionMonths,
     },
   };
 }
@@ -145,6 +150,7 @@ export function parseImport(input: unknown, existingNames: string[] = []): Impor
         origin: originFromUrl(raw.origin),
         appliedAt,
         fieldsFilled: Math.max(0, Math.min(500, Math.trunc(Number(raw.fieldsFilled)) || 0)),
+        ...importedTracker(raw),
       });
     }
   }
@@ -273,5 +279,26 @@ function conformSettings(raw: Record<string, unknown>): DeepPartial<Settings> {
   if (!['system', 'light', 'dark'].includes(shaped.ui.theme)) shaped.ui.theme = 'system';
   if (![0, 5, 15, 30, 60].includes(shaped.privacy.autoLockMinutes))
     shaped.privacy.autoLockMinutes = 30;
+  if (!isRetentionChoice(shaped.privacy.historyRetentionMonths))
+    shaped.privacy.historyRetentionMonths = 0;
   return shaped;
+}
+
+/**
+ * Tracker fields from an import, each rebuilt on its own so one bad value
+ * drops only itself. The profile link is not carried over: imported profiles
+ * get new ids, so an old one would point at nothing.
+ */
+function importedTracker(
+  raw: Record<string, unknown>,
+): Partial<Pick<ApplicationHistoryEntry, 'status' | 'notes' | 'followUpOn' | 'postingUrl'>> {
+  const out: Partial<
+    Pick<ApplicationHistoryEntry, 'status' | 'notes' | 'followUpOn' | 'postingUrl'>
+  > = {};
+  for (const key of ['status', 'notes', 'followUpOn', 'postingUrl'] as const) {
+    if (raw[key] === undefined || raw[key] === null) continue;
+    const clean = sanitizeTrackerPatch({ [key]: raw[key] });
+    if (clean?.[key]) Object.assign(out, { [key]: clean[key] });
+  }
+  return out;
 }

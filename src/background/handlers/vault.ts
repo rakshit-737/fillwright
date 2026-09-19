@@ -1,6 +1,7 @@
 import { handle, ok, err } from '../router';
 import { getSettings, setSettings } from '@/storage/settings';
 import { pruneOrphanResumes, rewriteAll } from '@/storage/profiles';
+import { rewriteHistory } from '@/storage/history';
 import { deriveKey } from '@/security/crypto';
 import { changePassphrase, disable, enable, getMeta, lock, status, unlock } from '@/security/vault';
 import type { ContentRequest, UiRequest } from '@/types/messages';
@@ -59,6 +60,7 @@ export function registerVaultHandlers(): void {
     const { passphrase } = request as Extract<UiRequest, { type: 'ui:vault-enable' }>;
     const result = await enable(passphrase, async (key) => {
       await rewriteAll(null, key);
+      await rewriteHistory(null, key);
     });
     if (!result.ok) return err(result.error ?? 'Encryption could not be switched on.');
 
@@ -86,6 +88,7 @@ export function registerVaultHandlers(): void {
     const { current, next } = request as Extract<UiRequest, { type: 'ui:vault-change-passphrase' }>;
     const result = await changePassphrase(current, next, async (from, to) => {
       await rewriteAll(from, to);
+      await rewriteHistory(from, to);
     });
     return result.ok
       ? ok({ changed: true })
@@ -103,6 +106,7 @@ export function registerVaultHandlers(): void {
       // path independent of whatever happens to be unlocked.
       const key = await deriveKey(passphrase, meta.kdf);
       await rewriteAll(key, null);
+      await rewriteHistory(key, null);
     });
     if (!result.ok) return err(result.error ?? 'Encryption could not be switched off.');
 

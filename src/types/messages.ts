@@ -21,6 +21,26 @@ export interface ApplicationHistoryEntry {
   fieldsFilled: number;
   /** Which of the user's profiles was used. */
   profileId?: string;
+  /* Tracker fields — only ever set by the user in the History pane. */
+  /** Missing on older records, which read as 'applied'. */
+  status?: ApplicationStatus;
+  notes?: string;
+  /** A calendar date, yyyy-mm-dd. */
+  followUpOn?: string;
+  /** Stored only when the user ticks it for this entry: origin + path, no query. */
+  postingUrl?: string;
+}
+
+export type ApplicationStatus =
+  'applied' | 'assessment' | 'interview' | 'offer' | 'rejected' | 'withdrawn';
+
+/** What the History pane may change on an entry. `null` clears a field. */
+export interface HistoryTrackerPatch {
+  status?: ApplicationStatus;
+  notes?: string;
+  followUpOn?: string | null;
+  profileId?: string | null;
+  postingUrl?: string | null;
 }
 
 /* ---------- popup / options → background ---------- */
@@ -37,6 +57,8 @@ export type UiRequest =
   | { type: 'ui:set-active-profile'; profileId: string }
   | { type: 'ui:list-history' }
   | { type: 'ui:clear-history' }
+  | { type: 'ui:update-history'; id: string; patch: HistoryTrackerPatch }
+  | { type: 'ui:delete-history-entry'; id: string }
   | { type: 'ui:list-saved-mappings'; origin?: string }
   | { type: 'ui:delete-saved-mapping'; id: string }
   | { type: 'ui:update-saved-mapping'; id: string; canonical?: CanonicalField; disabled?: boolean }

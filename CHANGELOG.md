@@ -2,6 +2,27 @@
 
 Notable changes, newest first. Versions follow semantic versioning.
 
+## Unreleased
+
+### Security
+
+- **Application history is encrypted with the vault.** Where you applied was
+  stored in plaintext even with encryption on. Records are now encrypted like
+  profiles (only the date stays outside, for retention), re-keyed with the
+  passphrase, and shown as "locked" rather than empty while locked. A fill that
+  finishes while locked is not recorded. Imported history is encrypted too; it
+  used to be written straight to the database.
+- History has a retention setting (6, 12 or 24 months, or until cleared) and a
+  hard cap of 2,000 entries.
+
+### Added
+
+- **History is a tracker.** Each entry takes a status (applied, assessment,
+  interview, offer, rejected, withdrawn), notes, a follow-up date and the
+  profile used. A posting link is kept only when ticked for that entry, as
+  origin + path with no query string.
+- **CSV export** of history, saved locally, with formula-injection protection.
+
 ## 0.5.0
 
 From feature-complete to shippable: verified in a real browser against

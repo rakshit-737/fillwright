@@ -3,6 +3,8 @@ import { getSettings, setSettings } from '@/storage/settings';
 import { listProfiles } from '@/storage/profiles';
 import { hasSiteAccess, syncAutoDetect } from '../auto-detect';
 import { AUTOFILL_MODES } from '@/types/settings';
+import { pruneHistory } from '@/storage/history';
+import { isRetentionChoice } from '@/storage/history-model';
 import type { UiRequest } from '@/types/messages';
 
 export function registerSettingsHandlers(): void {
@@ -14,7 +16,12 @@ export function registerSettingsHandlers(): void {
     if (mode !== undefined && !AUTOFILL_MODES.includes(mode)) {
       delete patch.autofill!.mode;
     }
+    const retention = patch.privacy?.historyRetentionMonths;
+    if (retention !== undefined && !isRetentionChoice(retention)) {
+      delete patch.privacy!.historyRetentionMonths;
+    }
     const next = await setSettings(patch);
+    if (retention !== undefined) await pruneHistory();
     if (mode !== undefined) await syncAutoDetect().catch(() => undefined);
     return ok(next);
   });

@@ -1379,3 +1379,17 @@
     align-items: stretch;
   }
 }
+
+/* --------------------------------------------------------- history tracker */
+
+.fw-history__tracker {
+  flex-basis: 100%;
+  display: grid;
+  gap: var(--fw-space-3);
+  padding-top: var(--fw-space-3);
+}
+
+.fw-history__status {
+  font-weight: 600;
+  color: var(--fw-ink-muted);
+}

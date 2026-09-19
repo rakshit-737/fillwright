@@ -250,8 +250,8 @@ export function Security({
                 that, and we will not claim it
               </Check>
               <Check ok={false}>
-                Encrypt your settings, application history or remembered field mappings — those hold
-                no resume content
+                Encrypt your settings or remembered field mappings — those hold no resume content —
+                or the date of each application-history entry (the rest of the entry is encrypted)
               </Check>
             </ul>
           </div>

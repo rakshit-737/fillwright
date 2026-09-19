@@ -22,7 +22,11 @@ export function extractDocx(bytes: ArrayBuffer): ExtractedText {
       filter: (file) => {
         if (!DOC_PARTS.test(file.name)) return false;
         declaredTotal += file.originalSize;
-        if (file.originalSize > MAX_PART_BYTES || declaredTotal > MAX_TOTAL_BYTES) {
+        // Deflate never grows data by more than a few bytes per block, so an
+        // entry whose compressed size exceeds its declared size is lying about
+        // it — and fflate would still inflate the whole stream to find out.
+        const lying = file.size > file.originalSize + (file.originalSize >> 6) + 1024;
+        if (lying || file.originalSize > MAX_PART_BYTES || declaredTotal > MAX_TOTAL_BYTES) {
           throw new ExtractionError(TOO_LARGE, 'ETOOLARGE');
         }
         return true;

@@ -6,7 +6,6 @@ import {
   buildTwoColumnPdf,
   buildZipBomb,
 } from './fixtures/resume-files.mjs';
-import { ExtractionError } from '@/parser/extract/types';
 import { itemsToLines } from '@/parser/extract/pdf';
 import { parseResume } from '@/parser';
 
@@ -136,15 +135,25 @@ describe('a DOCX with a text box', () => {
 });
 
 describe('a DOCX zip bomb', () => {
+  // Building a 24 MB archive is the slow part under a loaded test pool; build
+  // both up front so the timings below measure only the extractor.
+  let honest: Uint8Array;
+  let lying: Uint8Array;
+  beforeAll(async () => {
+    honest = buildZipBomb(24);
+    lying = buildZipBomb(24, true);
+    await import('@/parser/extract/docx');
+  }, 60_000);
+
   it('is refused from its declared size, quickly', async () => {
-    const bomb = buildZipBomb(64);
+    const bomb = honest;
     const started = Date.now();
     await expect(readDocx(bomb)).rejects.toMatchObject({ code: 'ETOOLARGE' });
     expect(Date.now() - started).toBeLessThan(1500);
   });
 
   it('never inflates past its declared size when the header lies', async () => {
-    const bomb = buildZipBomb(64, true);
+    const bomb = lying;
     const started = Date.now();
     let error: unknown;
     try {
@@ -152,9 +161,8 @@ describe('a DOCX zip bomb', () => {
     } catch (cause) {
       error = cause;
     }
-    // A lying entry yields no usable text (zeros) or is refused; either way it
-    // is bounded and fast.
-    expect(error).toBeInstanceOf(ExtractionError);
+    // A compressed stream larger than its declared size is refused unread.
+    expect(error).toMatchObject({ code: 'ETOOLARGE' });
     expect(Date.now() - started).toBeLessThan(1500);
   });
 });

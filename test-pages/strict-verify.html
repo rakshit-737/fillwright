@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Apply — Data Engineer (strict verification)</title>
+    <link rel="stylesheet" href="./shared.css" />
+  </head>
+  <body>
+    <h1>Apply: Data Engineer</h1>
+    <p class="lead">
+      Expected: the LinkedIn box accepts only 20 characters, so Fillwright moves it to review and
+      writes nothing there. The GitHub box silently cuts anything past 20 characters; Fillwright
+      reports "this field accepts 20 characters, so your value was cut" and leaves it empty. The
+      phone box reformats digits with a mask; that counts as accepted.
+    </p>
+    <form>
+      <label for="s-first">First Name</label>
+      <input id="s-first" name="first_name" autocomplete="given-name" />
+      <label for="s-linkedin">LinkedIn profile</label>
+      <input id="s-linkedin" name="linkedin" type="url" maxlength="20" />
+      <label for="s-github">GitHub profile</label>
+      <input id="s-github" name="github" type="url" />
+      <label for="s-phone">Phone</label>
+      <input id="s-phone" name="phone" type="tel" autocomplete="tel" />
+      <button type="submit">Submit application</button>
+    </form>
+    <script>
+      // A script-enforced limit, invisible to a maxlength check.
+      const code = document.getElementById('s-github');
+      code.addEventListener('input', () => {
+        if (code.value.length > 20) code.value = code.value.slice(0, 20);
+      });
+      // A mask: keep the last ten digits, shown as "(98450) 12345".
+      const phone = document.getElementById('s-phone');
+      phone.addEventListener('input', () => {
+        const digits = phone.value.replace(/\D/g, '').slice(-10);
+        phone.value = digits.length === 10 ? `(${digits.slice(0, 5)}) ${digits.slice(5)}` : digits;
+      });
+    </script>
+    <script src="./shared.js"></script>
+  </body>
+</html>

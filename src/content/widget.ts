@@ -110,6 +110,8 @@ export class FillwrightWidget {
   private stale = false;
   private minimized = false;
   private lastSummary: FillSummary | null = null;
+  /** Labels of fields the last undo could not restore. */
+  private notUndone: string[] = [];
   private lastError: UserError = { message: '', action: 'retry', actionLabel: 'Try again' };
   private detectedCount = 0;
   /** The page element focused before the panel took focus. */
@@ -236,8 +238,10 @@ export class FillwrightWidget {
     this.go(summary.failures.length > 0 || summary.remaining > 0 ? 'partial' : 'success');
   }
 
-  markUndone(restored: number): void {
+  /** @param notRestored labels of fields that could not be put back. */
+  markUndone(restored: number, notRestored: string[] = []): void {
     this.canUndo = false;
+    this.notUndone = notRestored;
     this.lastSummary = { filled: restored, failures: [], remaining: 0, manual: 0 };
     this.go('undo');
   }
@@ -675,6 +679,19 @@ export class FillwrightWidget {
         `Restored ${restored} field${restored === 1 ? '' : 's'} to how they were.`,
       ),
     );
+    if (this.notUndone.length > 0) {
+      body.appendChild(
+        el(
+          'p',
+          'fw-note',
+          `Fillwright couldn’t put ${this.notUndone.length === 1 ? 'this field' : 'these fields'} back — please change ${this.notUndone.length === 1 ? 'it' : 'them'} yourself:`,
+        ),
+      );
+      const list = el('ul', 'fw-undo-missed');
+      // Labels come from the page, so they are set as text, never markup.
+      for (const label of this.notUndone) list.appendChild(el('li', '', label));
+      body.appendChild(list);
+    }
     const actions = el('div', 'fw-actions');
     actions.appendChild(this.button('Close', 'ghost', () => this.callbacks.onClose()));
     actions.appendChild(this.button('Scan again', 'primary', () => this.callbacks.onRescan()));

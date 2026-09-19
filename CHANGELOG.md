@@ -42,6 +42,18 @@ Notable changes, newest first. Versions follow semantic versioning.
   anything in it.
 - The import review lists each entry as added, updated, kept (yours) or no
   longer on the resume, with a checkbox for every change.
+- **"Verified" now means the page holds your value.** A write used to pass
+  when the first six characters matched or the page kept only a prefix, so
+  one LinkedIn URL "verified" as another and a cut-off email passed. Values
+  are now compared by kind (email, URL, phone, number, date, text); only an
+  input mask's reformatting is tolerated.
+- **Truncation is a failure.** A field that cuts your value reports "this
+  field accepts N characters, so your value was cut" and is put back as it
+  was. A value longer than a field's `maxlength` is moved to review before
+  anything is written.
+- **Undo names what it could not restore.** A custom dropdown that had no
+  selection before the fill cannot be emptied from outside; undo now lists it
+  in the panel instead of silently counting it.
 
 ## 0.5.0
 

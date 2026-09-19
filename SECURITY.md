@@ -54,13 +54,24 @@ Fillwright requests three permissions, and notably does **not** request
 
 Optional, requested at runtime and only if you enable the feature:
 
-- **`https://*/*` host access** — only for the Assist and Smart modes, where
-  Fillwright offers help on application pages without a click. It is requested
-  from Settings, in response to your click, through Chrome's own prompt. With it
-  granted and a proactive mode chosen, the content script is registered
-  dynamically; switching back to Manual, or revoking access in Chrome,
-  unregisters it immediately (`src/background/auto-detect.ts`). Manual mode —
-  the default — needs no host access at all.
+- **Site access** — only for the Assist and Smart modes, where Fillwright
+  offers help on application pages without a click. The manifest declares
+  `https://*/*` as optional so that narrower origins can be requested at
+  runtime; what is actually requested, always in response to your click and
+  through Chrome's own prompt, is one of:
+  - **Job sites only** (the default when you pick Assist or Smart): the
+    applicant-tracking domains in `src/field-detection/ats-hosts.ts`
+    (`https://*.greenhouse.io/*`, `https://*.lever.co/*`, …).
+  - **This site**: the popup's "Turn on for this site" requests the current
+    tab's origin and nothing else.
+  - **All sites** (`https://*/*`): a separate, explicit step in Settings.
+
+  The content script is registered for exactly the origins
+  `chrome.permissions.getAll()` reports, never a fixed list. Settings →
+  Permissions lists every granted site with its own Revoke button; revoking one,
+  switching back to Manual, or revoking in Chrome unregisters it immediately
+  (`src/background/auto-detect.ts`). Manual mode — the default — needs no host
+  access at all.
 
 `host_permissions` is empty in the manifest. `verify-build.mjs` fails the build
 if it ever stops being empty, or if `<all_urls>` appears anywhere.
@@ -393,8 +404,10 @@ field-mapping defect that 173 jsdom tests had missed. See §6.6.
    dropdown loads options as you type. The value itself is what the form is
    about to receive anyway, but the site sees those characters while the fill
    is still in progress.
-8. **Assist and Smart read every https page you visit** — locally, and only
-   labels, headings and button text — to decide whether to offer help. Manual
+8. **Assist and Smart read every page on the sites you granted** — job sites
+   by default, sites you turned on one by one, or every https site if you chose
+   that — locally, and only labels, headings and button text, to decide
+   whether to offer help. Manual
    mode (the default) reads nothing until you click.
 9. **On-device drafting is not verified against a real model.** Chrome for
    Testing 153 exposes the API in the worker but has no model on the test

@@ -1,5 +1,6 @@
 import type { CanonicalField } from '@/types/fields';
 import { normalizeLabel } from './normalize';
+import { isAtsHost } from './ats-hosts';
 import { collectPageSignals } from '@/content/page-signals';
 
 /**
@@ -42,9 +43,6 @@ export interface ContextVerdict {
 
 const APPLICATION_WORDS =
   /\b(?:apply|application|applicant|candidate|career|careers|job|jobs|position|opening|vacanc(?:y|ies)|internship|recruit(?:ing|ment)?|hiring|resume|cv)\b/;
-
-const ATS_HOSTS =
-  /(?:greenhouse\.io|lever\.co|ashbyhq\.com|myworkdayjobs\.com|workday\.com|smartrecruiters\.com|icims\.com|taleo\.net|workable\.com|jobvite\.com|bamboohr\.com|recruitee\.com|breezy\.hr|jazzhr\.com|teamtailor\.com|personio\.)/;
 
 const URL_WORDS =
   /\/(?:apply|application|careers?|jobs?|positions?|openings?|vacancies|candidate)(?:\/|$|[-_])/;
@@ -107,7 +105,7 @@ export function scoreApplicationContext(input: ContextInput): ContextVerdict {
   }
 
   const url = input.url.toLowerCase();
-  if (ATS_HOSTS.test(url)) {
+  if (isAtsHost(url)) {
     score += 0.25;
     reasons.push('this is a known applicant-tracking site');
   } else if (URL_WORDS.test(url)) {

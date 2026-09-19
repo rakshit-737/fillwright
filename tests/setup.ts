@@ -46,6 +46,11 @@ const chromeMock = {
   permissions: {
     contains: vi.fn(async (_query?: { origins?: string[] }) => true),
     request: vi.fn(async () => true),
+    remove: vi.fn(async () => true),
+    getAll: vi.fn(async (): Promise<{ origins?: string[]; permissions?: string[] }> => ({
+      origins: ['https://*/*'],
+      permissions: [],
+    })),
   },
 };
 

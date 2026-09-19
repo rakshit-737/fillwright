@@ -79,8 +79,10 @@ declaration, screenshots and a checklist are in [`store/`](./store).
    its title) and minimised with `Esc`.
    Under **Settings → When Fillwright appears** you can choose Assist (it offers
    help on pages that clearly are applications) or Smart (it also prepares the
-   plan in advance). Both need site access, which Chrome asks you for. Neither
-   fills or submits anything without you.
+   plan in advance). Both need site access, which Chrome asks you for: job sites
+   only by default, a single site from the popup's "Turn on for this site", or
+   every https site as a separate step. Settings → Permissions lists and revokes
+   each one. Neither fills or submits anything without you.
 6. **Review, then Fill.** Every row shows what will change, how confident
    Fillwright is, and — behind "Why?" — what it matched on.
 7. **Correct anything it got wrong.** "Change" (or "Set what this is") lets you

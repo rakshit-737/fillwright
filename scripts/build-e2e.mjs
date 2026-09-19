@@ -3,7 +3,8 @@
  *
  * The end-to-end suite drives headless Chrome, which cannot accept the optional
  * site-access prompt — there is nobody to click it. So the fixture origin is
- * pre-granted in `host_permissions` here instead.
+ * pre-granted in `host_permissions` here instead, along with one https origin
+ * that stands in for a site turned on from the popup.
  *
  * This folder is NEVER shipped. `dist/` keeps `host_permissions` empty, and
  * `verify-build.mjs` fails the release build if that ever stops being true, so
@@ -33,7 +34,13 @@ const manifestPath = resolve(target, 'manifest.json');
 const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
 
 manifest.name = 'Fillwright (end-to-end test build)';
-manifest.host_permissions = ['http://127.0.0.1/*', 'http://localhost/*'];
+// A stand-in for one site the user turned on from the popup; the site-access
+// e2e case revokes it from the Permissions pane.
+manifest.host_permissions = [
+  'http://127.0.0.1/*',
+  'http://localhost/*',
+  'https://fillwright-e2e.example/*',
+];
 
 writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
 

@@ -11,7 +11,7 @@
 import { mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { readWidget, clickWidgetButton, waitForWidget, sleep } from './harness.mjs';
+import { readWidget, clickWidgetButton, waitForWidget, sleep, evalInWorker } from './harness.mjs';
 
 export async function runV05Suite(ctx) {
   const { browser, extensionId, server, test, assert, assertEqual, scanPage, worker } = ctx;
@@ -183,6 +183,70 @@ export async function runV05Suite(ctx) {
     await sleep(3_000);
     assertEqual(await hasPanel(page), false, 'manual mode showed a panel without a click');
     await page.close();
+  });
+
+  /* --- per-site access (test-pages/site-access.html) -------------------- */
+
+  await test('site access: one granted origin registers there only; revoking unregisters', async () => {
+    const site = 'https://fillwright-e2e.example';
+    const pattern = `${site}/*`;
+    const registered = () =>
+      evalInWorker(
+        worker,
+        `chrome.scripting.getRegisteredContentScripts({ ids: ['fillwright-auto-detect'] })
+           .then((scripts) => (scripts[0] ? scripts[0].matches : []))`,
+      );
+    // Headless Chrome cannot accept a permission prompt, so the test build
+    // (scripts/build-e2e.mjs) grants this one origin at install instead.
+    await ui({ type: 'ui:set-settings', patch: { autofill: { mode: 'assist' } } });
+    try {
+      await ui({ type: 'ui:sync-auto-detect' });
+      const matches = await registered();
+      assert(matches.includes(pattern), `not registered for the granted site: ${matches}`);
+      assert(!matches.includes('https://*/*'), `registered for every https site: ${matches}`);
+      assert(
+        matches.every((m) => m === pattern || /^http:\/\/(localhost|127\.0\.0\.1)\//.test(m)),
+        `registered beyond what was granted: ${matches}`,
+      );
+
+      // Revoke from the Permissions pane, the way a user does.
+      const pane = await browser.newPage();
+      await pane.goto(optionsUrl('#/permissions'), { waitUntil: 'domcontentloaded' });
+      await pane.waitForSelector('[data-testid="granted-sites"]', { timeout: 10_000 });
+      const clicked = await pane.evaluate((name) => {
+        const row = Array.from(document.querySelectorAll('[data-testid="granted-sites"] li')).find(
+          (li) => li.textContent.includes(name),
+        );
+        const button = row?.querySelector('button');
+        button?.click();
+        return Boolean(button);
+      }, 'fillwright-e2e.example');
+      assert(clicked, 'the granted site is not listed with a Revoke button');
+      const notice = await pane
+        .waitForFunction(
+          () => document.querySelector('.fw-section [role="status"]')?.textContent || false,
+          { timeout: 10_000 },
+        )
+        .then((handle) => handle.jsonValue());
+      let after = await registered();
+      for (let i = 0; i < 20 && after.includes(pattern); i += 1) {
+        await sleep(100);
+        after = await registered();
+      }
+      await pane.close();
+      if (/removed\.$/.test(notice)) {
+        assert(!after.includes(pattern), `still registered after revoke: ${after}`);
+      } else {
+        // Chrome refuses to remove an origin granted at install, which is how
+        // this headless build has to grant it. The pane must then say so
+        // rather than claim success, and nothing may change. The unregister
+        // path itself is covered in tests/auto-detect.test.ts.
+        assert(/didn’t remove/.test(notice), `unexpected revoke notice: ${notice}`);
+        assert(after.includes(pattern), `registration changed without a revoke: ${after}`);
+      }
+    } finally {
+      await ui({ type: 'ui:set-settings', patch: { autofill: { mode: 'manual' } } });
+    }
   });
 
   /* --- add another entry ---------------------------------------------- */

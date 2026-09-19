@@ -288,7 +288,6 @@ export function mergeResumeIntoProfile(
 
 /* ------------------------------------------------------------ list merge */
 
-
 interface ListContext {
   strategy: 'fill-gaps' | 'replace';
   skip: Set<string>;
@@ -475,8 +474,13 @@ function mergeList<K extends ListSection>(
 
     const next = { ...existing } as unknown as Record<string, unknown>;
     const fields: string[] = [];
-    for (const [key, value] of Object.entries(incoming as unknown as Record<string, unknown>)) {
-      if (key === 'id' || key === 'provenance' || isEmpty(value)) continue;
+    const fresh = incoming as unknown as Record<string, unknown>;
+    // A parsed end date makes `current: false` a real value, not a blank:
+    // 'replace' must clear the flag on a role that has since ended.
+    const ended = typeof fresh.endDate === 'string' && fresh.endDate.trim() !== '';
+    for (const [key, value] of Object.entries(fresh)) {
+      if (key === 'id' || key === 'provenance') continue;
+      if (isEmpty(value) && !(key === 'current' && value === false && ended)) continue;
       const old = next[key];
       if (sameValue(old, value)) continue;
       if (ctx.strategy === 'fill-gaps' && !isEmpty(old)) continue;

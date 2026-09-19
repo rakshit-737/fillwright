@@ -221,6 +221,17 @@ describe('list merge: strategy x user-edited x matched/unmatched', () => {
     expect(profile.experience).toHaveLength(2);
   });
 
+  it('replace clears current on a role the resume now shows as ended', () => {
+    const old = existing('Acme', 'Engineer', '2022-01', 'resume', { current: true, endDate: '' });
+    const parsed = resume([
+      role('Acme', 'Engineer', '2022-01', { current: false, endDate: '2024-03' }),
+    ]);
+    const replaced = mergeResumeIntoProfile(profileWith([old]), parsed, { strategy: 'replace' });
+    expect(replaced.profile.experience[0]).toMatchObject({ current: false, endDate: '2024-03' });
+    const filled = mergeResumeIntoProfile(profileWith([old]), parsed, { strategy: 'fill-gaps' });
+    expect(filled.profile.experience[0]).toMatchObject({ current: true, endDate: '2024-03' });
+  });
+
   it('does not pair two roles at one company with different start dates', () => {
     const old = existing('Acme', 'Engineer', '2020-01', 'user');
     const parsed = resume([role('Acme', 'Engineer', '2023-06')]);

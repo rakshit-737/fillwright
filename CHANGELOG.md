@@ -305,6 +305,11 @@ Notable changes, newest first. Versions follow semantic versioning.
 
 ### Release and CI
 
+- The content-script size budget (`npm run perf`) is raised from 100 KB to
+  128 KB. The 0.6.0 features that run on the page (six locale packs, the
+  country table, the click-jacking guard, saved answers, the review list's
+  groups, filter and editor) bring the minified script to about 121 KB.
+  Injection and scan timings are unchanged and within budget.
 - **Reproducible store package.** `scripts/package.mjs` now sorts zip entries,
   stamps every entry with one timestamp from `SOURCE_DATE_EPOCH` or the last
   commit (in UTC, never the wall clock), uses fixed deflate settings, prints

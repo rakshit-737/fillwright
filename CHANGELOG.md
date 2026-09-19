@@ -2,6 +2,25 @@
 
 Notable changes, newest first. Versions follow semantic versioning.
 
+## Unreleased
+
+### Added
+
+- **Custom fields and saved answers are used.** The "Set what this is"
+  picker offers "One of your custom fields…" and "One of your saved
+  answers…"; the choice is remembered for that site like any correction.
+  Written-question rows offer "Use a saved answer": titles ranked by how well
+  they match the question, none pre-selected, and the chosen answer is shown
+  for editing before anything is written.
+
+### Security
+
+- The content script sees only titles of custom fields and saved answers
+  (`content:answer-choices`); the text of one saved answer crosses only after
+  the user picks it (`content:saved-answer`).
+- `content:save-mapping` now validates the field a page asks to save. It
+  previously stored whatever canonical field the message named.
+
 ## 0.5.0
 
 From feature-complete to shippable: verified in a real browser against

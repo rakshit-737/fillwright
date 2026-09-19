@@ -229,7 +229,7 @@ repository.
 | Sender | Messages | What comes back |
 |---|---|---|
 | Fillwright's own pages (options, popup, practice form) | `ui:*` | Anything the UI needs, including the profile |
-| A content script (inside a web page) | `content:*` only — plus `ui:open-security`, which opens a page and returns nothing | A fill plan for the fields it reported; profile *names* for the switcher; skill names that already appear in the posting; a locked/unlocked flag; with drafting on, career facts the user ticks; a relevance level for Assist/Smart |
+| A content script (inside a web page) | `content:*` only — plus `ui:open-security`, which opens a page and returns nothing | A fill plan for the fields it reported; profile *names* for the switcher; skill names that already appear in the posting; a locked/unlocked flag; with drafting on, career facts the user ticks; titles of custom fields and saved answers, and the text of one saved answer the user picked; a relevance level for Assist/Smart |
 
 `senderMayCall` in `src/background/router.ts` enforces the split by the
 sender's URL, which the page cannot forge. The content script itself has no
@@ -240,6 +240,18 @@ field labels and names (the same signals an explicit scan sends, through the
 same validator) and its title, top headings and button captions to the worker,
 which answers only "likely / possible / none". Nothing from that exchange is
 stored.
+
+Custom fields and saved answers use the same split as drafting
+(`content:draft-facts` / `content:draft`):
+
+| Message | Sent when | What comes back |
+|---|---|---|
+| `content:answer-choices` | The panel loads, or the user presses "Use a saved answer" (with that question's label, for ranking) | Titles only: `{ id, label }` for each non-empty custom field and saved answer. Never a value or answer text |
+| `content:saved-answer` | The user picked one saved answer by title | The text of that one answer, shown in an editable box. Nothing is written until "Use this answer" |
+| `content:save-mapping` / `request-mappings` overrides | The user chose "One of your custom fields…" or "One of your saved answers…" in the picker | As before. The correction is now validated: only picker fields, or `custom` with a `field:<id>` / `answer:<id>` key, are accepted |
+
+A custom field's value reaches a page only through a fill plan, and only for a
+field the user mapped to it themselves.
 
 ### 3.4c Developer tooling
 

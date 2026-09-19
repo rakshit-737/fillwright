@@ -2,13 +2,7 @@ import 'fake-indexeddb/auto';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { resetStorage } from './setup';
 import { destroyDb, idb } from '@/storage/idb';
-import {
-  getProfile,
-  getResume,
-  prepareRewrite,
-  saveProfile,
-  saveResume,
-} from '@/storage/profiles';
+import { getProfile, getResume, prepareRewrite, saveProfile, saveResume } from '@/storage/profiles';
 import { changePassphrase, disable, enable, getMeta, lock, unlock } from '@/security/vault';
 import { createEmptyProfile } from '@/profile/factory';
 
@@ -329,9 +323,9 @@ describe('switching encryption is all-or-nothing', () => {
       const before = await snapshot();
 
       restore = failOnWrite(n);
-      const result = await changePassphrase(OLD, NEW, (from, to) =>
-        prepareRewrite(from, to),
-      ).catch((e) => e);
+      const result = await changePassphrase(OLD, NEW, (from, to) => prepareRewrite(from, to)).catch(
+        (e) => e,
+      );
       restore();
       restore = null;
 

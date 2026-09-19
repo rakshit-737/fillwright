@@ -124,7 +124,8 @@ export function registerVaultHandlers(): void {
       const key = await deriveKey(passphrase, meta.kdf);
       return prepareRewrite(key, null);
     });
-    if (!result.ok) return err(result.error ?? 'Encryption could not be switched off.', result.code);
+    if (!result.ok)
+      return err(result.error ?? 'Encryption could not be switched off.', result.code);
 
     await setSettings({ privacy: { encryptionEnabled: false } });
     return ok({ enabled: false });

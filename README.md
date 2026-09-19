@@ -248,6 +248,14 @@ as a person's name, or "Confirm Email" as your email address.
 Below the confidence threshold (70% by default, adjustable), Fillwright suggests
 rather than fills.
 
+**Languages.** Besides English, forms in German, French, Spanish, Portuguese,
+Dutch and Italian are recognised. Labels are folded to plain letters first
+("Prénom" → "prenom"). The control's `lang` attribute picks the vocabulary
+pack; words that are also English ("Note", "Via") count only when the page
+declares that language. Sensitive, third-party and company words are
+recognised in every supported language regardless, so a German gender question
+on a page marked English is still left for you.
+
 ### How privacy is achieved
 
 Summarised here; the full threat model is in [SECURITY.md](./SECURITY.md).
@@ -295,6 +303,10 @@ Summarised here; the full threat model is in [SECURITY.md](./SECURITY.md).
 8. **Exports are not encrypted.** The export warns about this before saving.
 9. **Step progress is per tab and per session.** It lives in memory-only
    session storage and resets when the browser closes.
+12. **Six languages besides English.** Other languages match only through the
+    `autocomplete` attribute and English `name` attributes. Work-authorisation
+    answers still detect the country from English wording only, so a
+    non-English authorisation question is always left for you.
 
 ---
 

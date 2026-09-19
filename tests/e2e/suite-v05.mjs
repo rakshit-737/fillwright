@@ -683,11 +683,45 @@ export async function runV05Suite(ctx) {
     const importFile = join(dir, 'to-import.json');
     writeFileSync(importFile, JSON.stringify(exported));
     const before = (await ui({ type: 'ui:list-profiles' })).data.length;
+    const settingsBefore = (await ui({ type: 'ui:get-settings' })).data;
     const input = await page.$('input[type="file"]');
     await input.uploadFile(importFile);
+    await page.waitForFunction(() => document.body.innerText.includes('Review this import'), {
+      timeout: 15_000,
+    });
+    // Nothing is stored until the user confirms, and only profiles start ticked.
+    assertEqual(
+      (await ui({ type: 'ui:list-profiles' })).data.length,
+      before,
+      'the import was applied before review',
+    );
+    const ticks = await page.evaluate(() =>
+      Array.from(document.querySelectorAll('input[data-import]')).map((box) => ({
+        kind: box.dataset.import,
+        checked: box.checked,
+      })),
+    );
+    assert(
+      ticks.some((t) => t.kind === 'profile' && t.checked),
+      `profiles should start ticked: ${JSON.stringify(ticks)}`,
+    );
+    assert(
+      ticks.filter((t) => t.kind !== 'profile').every((t) => !t.checked),
+      `settings and mappings must start unticked: ${JSON.stringify(ticks)}`,
+    );
+    await page.evaluate(() =>
+      Array.from(document.querySelectorAll('button'))
+        .find((b) => b.textContent.trim() === 'Import selected')
+        .click(),
+    );
     await page.waitForFunction(() => document.body.innerText.includes('Imported'), {
       timeout: 15_000,
     });
+    assertEqual(
+      JSON.stringify((await ui({ type: 'ui:get-settings' })).data.autofill),
+      JSON.stringify(settingsBefore.autofill),
+      'unticked settings were applied',
+    );
     const after = await ui({ type: 'ui:list-profiles' });
     assertEqual(after.data.length, before + exported.profiles.length, 'profiles were not added');
     assert(
@@ -695,6 +729,143 @@ export async function runV05Suite(ctx) {
       'an imported profile replaced an existing one',
     );
     await page.close();
+  });
+
+  await test('encrypted export: wrong passphrase refused, imported rule is review-only', async () => {
+    // Teach a rule, export with a passphrase, forget the rule, import it back.
+    const taught = await openAndReview('imported-mapping.html');
+    assertEqual(await correct(taught, 'Applicant Token', 'personal.email', true), 'ok', 'teach');
+    await waitForWidget(taught, (s) => itemFor(s, 'Applicant Token')?.value !== '');
+    await taught.close();
+
+    const dir = mkdtempSync(join(tmpdir(), 'fw-sealed-'));
+    const page = await browser.newPage();
+    const dialogs = [];
+    page.on('dialog', (dialog) => {
+      dialogs.push(dialog.message());
+      void dialog.accept();
+    });
+    const cdp = await page.createCDPSession();
+    await cdp.send('Browser.setDownloadBehavior', { behavior: 'allow', downloadPath: dir });
+    await page.goto(optionsUrl('#/privacy'), { waitUntil: 'networkidle0' });
+
+    const PASS = 'a long export passphrase 42';
+    const labelled = (text) =>
+      page.evaluateHandle(
+        (wanted) =>
+          Array.from(document.querySelectorAll('label')).find((l) =>
+            l.textContent.includes(wanted),
+          ),
+        text,
+      );
+    await (await labelled('Protect the export with a passphrase')).click();
+    await page.type('input[autocomplete="new-password"]', PASS);
+    const boxes = await page.$$('input[autocomplete="new-password"]');
+    await boxes[1].type(PASS);
+    await page.evaluate(() =>
+      Array.from(document.querySelectorAll('button'))
+        .find((b) => b.textContent.trim() === 'Export a local copy')
+        .click(),
+    );
+    const deadline = Date.now() + 30_000;
+    let file = '';
+    while (!file && Date.now() < deadline) {
+      file = readdirSync(dir).find((name) => name.endsWith('.json')) ?? '';
+      if (!file) await sleep(200);
+    }
+    assert(file, 'no sealed export was downloaded');
+    await sleep(300);
+    const raw = readFileSync(join(dir, file), 'utf8');
+    const sealed = JSON.parse(raw);
+    assertEqual(sealed.format, 'fillwright-export-encrypted', 'sealed format marker');
+    assert(!raw.includes(PROFILE_EMAIL), 'the sealed file holds readable profile data');
+    assert(!raw.includes('Applicant Token'), 'the sealed file holds a readable mapping');
+    assert(
+      !dialogs.some((m) => m.includes('It is not encrypted')),
+      'the plaintext warning was shown for a sealed export',
+    );
+
+    await ui({ type: 'ui:clear-saved-mappings' });
+    const input = await page.$('input[type="file"]');
+    await input.uploadFile(join(dir, file));
+    await page.waitForFunction(() => document.body.innerText.includes('This export is protected'), {
+      timeout: 15_000,
+    });
+    await page.type('input[autocomplete="off"]', 'not the passphrase');
+    await page.evaluate(() =>
+      Array.from(document.querySelectorAll('button'))
+        .find((b) => b.textContent.trim() === 'Open file')
+        .click(),
+    );
+    await page.waitForFunction(
+      () => document.querySelector('.fw-formerror')?.textContent.includes('passphrase'),
+      { timeout: 30_000 },
+    );
+    await page.evaluate(() => {
+      const box = document.querySelector('input[autocomplete="off"]');
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+      setter.call(box, '');
+      box.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await page.type('input[autocomplete="off"]', PASS);
+    await page.evaluate(() =>
+      Array.from(document.querySelectorAll('button'))
+        .find((b) => b.textContent.trim() === 'Open file')
+        .click(),
+    );
+    await page.waitForFunction(() => document.body.innerText.includes('Review this import'), {
+      timeout: 30_000,
+    });
+    // Keep only the learned rule for this site: untick profiles, tick the site.
+    await page.evaluate(() => {
+      for (const box of document.querySelectorAll('input[data-import="profile"]'))
+        if (box.checked) box.click();
+      const site = Array.from(document.querySelectorAll('.fw-import-site')).find((node) =>
+        node.textContent.includes('127.0.0.1'),
+      );
+      site.querySelector('input[data-import="site"]').click();
+    });
+    await page.evaluate(() =>
+      Array.from(document.querySelectorAll('button'))
+        .find((b) => b.textContent.trim() === 'Import selected')
+        .click(),
+    );
+    await page.waitForFunction(() => document.body.innerText.includes('Imported'), {
+      timeout: 15_000,
+    });
+    await page.close();
+
+    const stored = (await ui({ type: 'ui:list-saved-mappings', origin: server.origin })).data;
+    const rule = stored.find((m) => m.label.startsWith('Applicant Token'));
+    assert(rule?.imported === true, `imported rule not marked: ${JSON.stringify(stored)}`);
+
+    const form = await openAndReview('imported-mapping.html?imported');
+    const row = await form.evaluate(() => {
+      const root = document.querySelector('[data-fillwright-widget]').shadowRoot;
+      const item = Array.from(root.querySelectorAll('.fw-item')).find((node) =>
+        node.querySelector('.fw-item__label')?.textContent.trim().startsWith('Applicant Token'),
+      );
+      return item
+        ? {
+            chips: Array.from(item.querySelectorAll('.fw-chip')).map((c) => c.textContent),
+            checked: Boolean(item.querySelector('input.fw-check')?.checked),
+          }
+        : null;
+    });
+    assert(row, 'the imported rule was not applied at all');
+    assert(row.chips.includes('imported'), `no "imported" chip: ${row.chips.join(',')}`);
+    assertEqual(row.checked, false, 'an imported rule started ticked');
+
+    // Confirming it on the real form clears the mark.
+    assertEqual(await correct(form, 'Applicant Token', 'personal.email', true), 'ok', 'confirm');
+    await waitForWidget(form, (s) => itemFor(s, 'Applicant Token')?.value !== '');
+    await form.close();
+    const confirmed = (await ui({ type: 'ui:list-saved-mappings', origin: server.origin })).data;
+    assert(
+      !confirmed.find((m) => m.label.startsWith('Applicant Token'))?.imported,
+      'confirming on a real form did not clear the imported mark',
+    );
+    await ui({ type: 'ui:clear-saved-mappings' });
   });
 
   /* --- undo across two fills ------------------------------------------- */

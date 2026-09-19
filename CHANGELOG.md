@@ -87,6 +87,18 @@ Notable changes, newest first. Versions follow semantic versioning.
   origin. The content script is registered for exactly what Chrome reports as
   granted, and Settings → Permissions lists each granted site with a Revoke
   button that unregisters it at once. No manifest change.
+- **Exports can be protected with a passphrase.** The export is sealed with
+  the vault's scheme (PBKDF2-SHA256, 600k iterations, AES-256-GCM) in a
+  versioned envelope whose header is authenticated too; import recognises it
+  and asks for the passphrase. A wrong passphrase or an edited file is refused.
+- **Imports are reviewed before anything is saved.** A new review screen lists
+  profiles, learned fields by site, and each settings change as old → new, with
+  checkboxes. Settings and learned fields start unticked, so a crafted file can
+  no longer switch on overwriting or change the autofill mode by itself.
+- **Imported learned fields are never pre-ticked.** They carry an "imported"
+  chip and are proposed at review confidence until you choose one again on a
+  real form. Previously they were treated like fields you taught (0.99
+  confidence, pre-ticked) on any site the file named.
 
 ### Fixed
 

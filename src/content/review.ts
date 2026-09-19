@@ -274,6 +274,8 @@ function renderRow(
   labelRow.appendChild(label);
   if (edited) {
     labelRow.appendChild(el('span', 'fw-chip', 'your edit'));
+  } else if (entry.imported) {
+    labelRow.appendChild(el('span', 'fw-chip', 'imported'));
   } else if (entry.remembered) {
     labelRow.appendChild(el('span', 'fw-chip', 'remembered'));
   } else if (entry.corrected) {

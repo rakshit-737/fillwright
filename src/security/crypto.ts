@@ -75,10 +75,14 @@ export async function deriveKey(passphrase: string, params: KdfParams): Promise<
 }
 
 /** Encrypts any JSON-serialisable value. */
-export async function encryptJson(key: CryptoKey, value: unknown): Promise<EncryptedBlob> {
+export async function encryptJson(
+  key: CryptoKey,
+  value: unknown,
+  additionalData?: string,
+): Promise<EncryptedBlob> {
   const iv = crypto.getRandomValues(new Uint8Array(IV_BYTES));
   const plaintext = new TextEncoder().encode(JSON.stringify(value));
-  const ciphertext = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, key, plaintext);
+  const ciphertext = await crypto.subtle.encrypt(gcmParams(iv, additionalData), key, plaintext);
   return { v: 1, iv: toBase64(iv), ct: toBase64(new Uint8Array(ciphertext)) };
 }
 
@@ -89,13 +93,28 @@ export async function encryptJson(key: CryptoKey, value: unknown): Promise<Encry
  * throws rather than returning garbage. That is what makes the passphrase check
  * in `vault.ts` trustworthy.
  */
-export async function decryptJson<T>(key: CryptoKey, blob: EncryptedBlob): Promise<T> {
+export async function decryptJson<T>(
+  key: CryptoKey,
+  blob: EncryptedBlob,
+  additionalData?: string,
+): Promise<T> {
   const plaintext = await crypto.subtle.decrypt(
-    { name: 'AES-GCM', iv: fromBase64(blob.iv) },
+    gcmParams(fromBase64(blob.iv), additionalData),
     key,
     fromBase64(blob.ct),
   );
   return JSON.parse(new TextDecoder().decode(plaintext)) as T;
+}
+
+/**
+ * AES-GCM parameters. `additionalData` is authenticated but not encrypted:
+ * changing it after the fact makes decryption fail, which is how an export's
+ * plaintext header is bound to its ciphertext.
+ */
+function gcmParams(iv: Uint8Array<ArrayBuffer>, additionalData?: string): AesGcmParams {
+  return additionalData === undefined
+    ? { name: 'AES-GCM', iv }
+    : { name: 'AES-GCM', iv, additionalData: new TextEncoder().encode(additionalData) };
 }
 
 /** Encrypts raw bytes — used for the stored resume file. */

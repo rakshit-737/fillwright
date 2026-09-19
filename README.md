@@ -323,7 +323,13 @@ Summarised here; the full threat model is in [SECURITY.md](./SECURITY.md).
    extension pages, never on web pages) but reports it unavailable on machines
    without the model; 131 does not expose it at all. Generation with a real
    on-device model has not been verified — see `npm run probe:ai`.
-8. **Exports are not encrypted.** The export warns about this before saving.
+8. **Exports are plaintext unless you set a passphrase.** Tick "Protect the
+   export with a passphrase" to seal it (PBKDF2 600k + AES-GCM, as the vault);
+   forget the passphrase and the file cannot be opened. Without one, the file is
+   readable JSON and the page warns before saving it. Imports are shown for
+   review first; settings and learned fields from a file start unticked, and an
+   imported learned field is only proposed, never pre-ticked, until you confirm
+   it on a real form.
 9. **Step progress is per tab and per session.** It lives in memory-only
    session storage and resets when the browser closes.
 10. **ATS layouts change.** The `test-pages/ats/` fixtures reproduce each

@@ -176,6 +176,14 @@ export function SavedMappings() {
                         <span className="fw-mapping__label">
                           {mapping.label || 'Unlabelled field'}
                         </span>
+                        {mapping.imported && (
+                          <span
+                            className="fw-chip"
+                            title="From an import file. Choose it again on the form to confirm it."
+                          >
+                            imported
+                          </span>
+                        )}
                         {editing === mapping.id ? (
                           <FieldPicker
                             value={mapping.canonical}

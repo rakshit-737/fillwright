@@ -230,6 +230,27 @@ controlled by someone else.
   unlock. IndexedDB schema changes go through the step table in
   `src/storage/idb.ts`.
 
+  Nothing from a file is stored until you review it. The worker parses the file
+  into a preview (`ui:preview-import`); the Privacy Center shows its profiles,
+  its learned fields grouped by site, and each setting it would change as
+  old → new. Settings and learned fields start unticked; the worker applies only
+  the ticked indices and setting paths, re-parsing the file itself rather than
+  trusting a plan from the page. Imported learned fields are stored with
+  `imported: true`, shown with an "imported" chip, and proposed just below the
+  confidence threshold (so never pre-ticked) until you choose one again on a
+  real form. A file therefore cannot switch on overwriting, change the
+  autofill mode, or pre-tick fields on a site without your explicit yes.
+
+- **Exports.** An export is a file you save locally; nothing is uploaded. It can
+  be protected with a passphrase: the page derives a key with the vault's
+  scheme (PBKDF2-SHA256, 600,000 iterations, random salt) and seals the whole
+  export with AES-256-GCM. The readable header (format, version, date, KDF
+  parameters) is bound in as additional authenticated data, so editing any
+  byte of the file makes it refuse to open; a wrong passphrase and a tampered
+  file give the same error. A key-derivation cost read from a file is capped so
+  a crafted file cannot hang the page. The passphrase is never stored. An
+  unprotected export is plaintext JSON, and the page warns before saving one.
+
 ### 3.2 A malicious resume file
 
 A resume is an untrusted file from a third party (a template, an agency, an

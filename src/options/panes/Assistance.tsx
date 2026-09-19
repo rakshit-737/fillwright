@@ -43,6 +43,28 @@ export function Assistance({
     void check();
   }, [check]);
 
+  // Download progress, 0..1, while a download started here is running.
+  const [progress, setProgress] = useState<number | null>(null);
+  const [downloadError, setDownloadError] = useState('');
+
+  /**
+   * Chrome only downloads its model when create() is called from a user
+   * gesture, so this runs straight from the button's click.
+   */
+  const download = async () => {
+    if (!builtin.download) return;
+    setDownloadError('');
+    setProgress(0);
+    const result = await builtin.download((fraction) => setProgress(fraction));
+    setProgress(null);
+    if (!result.ok) {
+      setDownloadError(
+        `Chrome didn’t download the model. ${result.error ?? ''} Nothing else was changed.`.trim(),
+      );
+    }
+    await check();
+  };
+
   const patch = async (next: Partial<Settings['ai']>) => {
     const result = await send<Settings>({ type: 'ui:set-settings', patch: { ai: next } });
     if (result.ok) {
@@ -113,12 +135,35 @@ export function Assistance({
             {checking && 'Checking this browser…'}
             {!checking && availability?.state === 'ready' && 'Available on this computer'}
             {!checking && availability?.state === 'downloadable' && 'Needs a one-off download'}
+            {!checking && availability?.state === 'downloading' && 'Downloading the model'}
             {!checking && availability?.state === 'unavailable' && 'Not available in this browser'}
           </span>
           {!checking && availability && availability.state !== 'ready' && (
             <p className="fw-availability__reason">{availability.reason}</p>
           )}
-          {!checking && (
+          {progress !== null ? (
+            <div className="fw-availability__progress">
+              <label htmlFor="fw-model-progress">
+                Downloading the on-device model… {Math.round(progress * 100)}%
+              </label>
+              <progress id="fw-model-progress" max={1} value={progress} />
+            </div>
+          ) : (
+            !checking &&
+            (availability?.state === 'downloadable' || availability?.state === 'downloading') && (
+              <button className="fw-btn fw-btn--primary fw-btn--sm" onClick={() => void download()}>
+                {availability.state === 'downloading'
+                  ? 'Show download progress'
+                  : 'Download the on-device model'}
+              </button>
+            )
+          )}
+          {downloadError && (
+            <p className="fw-formerror" role="alert">
+              {downloadError}
+            </p>
+          )}
+          {!checking && progress === null && (
             <button className="fw-btn fw-btn--sm" onClick={() => void check()}>
               Check again
             </button>

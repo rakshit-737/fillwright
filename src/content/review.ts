@@ -24,6 +24,8 @@ export interface DraftFact {
   id: string;
   label: string;
   value: string;
+  /** Extra context (posting excerpt, saved answers): unticked until the user ticks it. */
+  optional?: boolean;
 }
 
 /**
@@ -32,7 +34,13 @@ export interface DraftFact {
  */
 export type DraftView =
   | { phase: 'loading' }
-  | { phase: 'facts' | 'generating'; facts: DraftFact[]; chosen: Set<string> }
+  | {
+      phase: 'facts' | 'generating';
+      facts: DraftFact[];
+      chosen: Set<string>;
+      /** Text streamed so far while generating. */
+      text?: string;
+    }
   | { phase: 'result'; text: string; facts: DraftFact[]; chosen: Set<string> }
   | { phase: 'error'; message: string };
 
@@ -778,6 +786,18 @@ function renderDraft(
       list.appendChild(row);
     }
     panel.appendChild(list);
+
+    if (busy && draft.text !== undefined) {
+      // Streamed text is shown as it arrives but cannot be edited or used
+      // until the draft is complete. Cancel stops the model.
+      const stream = document.createElement('textarea');
+      stream.className = 'fw-draft__text fw-draft__text--streaming';
+      stream.readOnly = true;
+      stream.rows = 6;
+      stream.value = draft.text;
+      stream.setAttribute('aria-label', `Draft being written for ${entry.label}`);
+      panel.appendChild(stream);
+    }
 
     actions.appendChild(cancel);
     const generate = button(

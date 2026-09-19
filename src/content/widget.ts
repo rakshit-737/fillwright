@@ -98,6 +98,8 @@ export interface WidgetCallbacks {
   onSavedAnswerStart?: (entry: FillPlanEntry) => void;
   onSavedAnswerPick?: (entry: FillPlanEntry, id: string) => void;
   onSavedAnswerUse?: (entry: FillPlanEntry, text: string) => void;
+  /** The draft panel was closed: stop any draft still being written. */
+  onDraftStop?: (entry: FillPlanEntry) => void;
 }
 
 /** A field on the page that a person could not see, so it was left alone. */
@@ -885,6 +887,7 @@ export class FillwrightWidget {
             onDraftUse: (entry, text) => this.callbacks.onDraftUse(entry, text),
             onDraftCancel: (entry) => {
               this.drafts.delete(entry.fieldId);
+              this.callbacks.onDraftStop?.(entry);
               this.draw();
             },
             onSetMany: (fieldIds, selected) => {

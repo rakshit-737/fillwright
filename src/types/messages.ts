@@ -127,7 +127,14 @@ export type ContentRequest =
   | { type: 'content:open-page'; route: string; field?: string }
   | { type: 'content:switch-profile'; profileId: string }
   | { type: 'content:draft-facts' }
-  | { type: 'content:draft'; question: string; factIds: string[]; maxCharacters?: number }
+  | {
+      type: 'content:draft';
+      question: string;
+      factIds: string[];
+      maxCharacters?: number;
+      /** Posting excerpt; used only when `factIds` includes 'posting'. */
+      posting?: string;
+    }
   /**
    * Titles of the user's custom fields and saved answers, for the picker and
    * the "Use a saved answer" list. Never values or answer text.

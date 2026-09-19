@@ -37,7 +37,17 @@ that trade-off should be a deliberate, visible decision, not a quiet one.
 One note on the AI path specifically: the question text handed to a model comes
 from a web page, so it is untrusted input. It is fenced in the prompt and the
 model is told explicitly to treat instructions inside it as text to answer
-rather than commands to follow. A test asserts that fencing is present.
+rather than commands to follow. The optional job-posting excerpt (only when the
+user ticks it, trimmed to 1,500 characters) is page text too and is fenced the
+same way; a `"""` inside page text is collapsed so it cannot close the fence.
+Saved answers are the user's own words and are included only when ticked. Tests
+assert the fencing for both the question and the posting excerpt.
+
+A draft streams from the service worker to the panel over a `fw-draft` port that
+only Fillwright's own contexts can open (the worker checks `sender.id`). Cancel
+or closing the panel aborts the model through an `AbortSignal`, and every draft
+stops after 60 seconds. The on-device model download is started only from a
+button on the Assistance page, never automatically.
 
 ---
 
@@ -175,7 +185,9 @@ controlled by someone else.
   `src/background/router.ts`). A content script gets the narrow `content:*`
   surface: a plan for the fields it reported, profile *names* for the switcher,
   skill names already present in the posting, and — only when answer drafting is
-  on — career facts the user explicitly ticks.
+  on — career facts the user explicitly ticks, and the *names* (not the text) of
+  saved answers, which the user can tick to include in the draft. The draft
+  itself streams back over the `fw-draft` port.
   `content:open-page` only opens one of a fixed list of Fillwright pages
   (`src/background/open-page.ts`). Its optional `field` — used by "Add it in
   your profile" — is accepted only for the profile page and only when it is
@@ -360,7 +372,7 @@ repository.
 | Sender | Messages | What comes back |
 |---|---|---|
 | Fillwright's own pages (options, popup, practice form) | `ui:*` | Anything the UI needs, including the profile |
-| A content script (inside a web page) | `content:*` only — plus `ui:open-security`, which opens a page and returns nothing | A fill plan for the fields it reported; profile *names* for the switcher; skill names that already appear in the posting; a locked/unlocked flag; with drafting on, career facts the user ticks; titles of custom fields and saved answers, and the text of one saved answer the user picked; a relevance level for Assist/Smart |
+| A content script (inside a web page) | `content:*` only — plus `ui:open-security`, which opens a page and returns nothing | A fill plan for the fields it reported; profile *names* for the switcher; skill names that already appear in the posting; a locked/unlocked flag; with drafting on, career facts the user ticks, saved-answer names, and the streamed draft (over the `fw-draft` port); titles of custom fields and saved answers, and the text of one saved answer the user picked; a relevance level for Assist/Smart |
 
 `senderMayCall` in `src/background/router.ts` enforces the split by the
 sender's URL, which the page cannot forge. The content script itself has no
@@ -577,7 +589,9 @@ field-mapping defect that 173 jsdom tests had missed. See §6.6.
    a click fill.
 10. **On-device drafting is not verified against a real model.** Chrome for
    Testing 153 exposes the API in the worker but has no model on the test
-   machine; the flow is tested with a stand-in model.
+   machine; download, streaming, cancel and timeout are tested with stand-in
+   models, and the option names follow the Prompt API as documented, not as
+   observed on real hardware.
 
 ---
 

@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { senderMayCall } from '@/background/router';
 import { parseImport, conformProfile } from '@/profile/portable';
-import { draftFacts } from '@/background/handlers/assist';
+import { draftFacts, draftRequestFor } from '@/background/handlers/assist';
 import { buildMappings, buildFillPlan, fingerprintOf } from '@/autofill/plan';
 import { harvestFields } from '@/field-detection/harvest';
 import { createEmptyProfile, tv } from '@/profile/factory';
@@ -178,6 +178,39 @@ describe('draft facts', () => {
     expect(text).not.toContain('secret@example.com');
     expect(text).not.toContain('555');
     expect(text).not.toContain('female');
+  });
+
+  it('offers saved answers as one optional item that names them without their text', () => {
+    const profile = createEmptyProfile('T');
+    profile.preferences.savedAnswers = [
+      { id: 'a', key: 'why', label: 'Why this company', text: 'I love rockets.', updatedAt: '' },
+    ];
+    const saved = draftFacts(profile).find((fact) => fact.id === 'saved-answers');
+    expect(saved).toMatchObject({ optional: true });
+    expect(saved!.value).toContain('Why this company');
+    expect(saved!.value).not.toContain('I love rockets.');
+  });
+
+  it('uses the posting and saved answers only when they were ticked', () => {
+    const profile = createEmptyProfile('T');
+    profile.summary = tv('Security analyst.', 'user', 1);
+    profile.preferences.savedAnswers = [
+      { id: 'a', key: 'why', label: 'Why this company', text: 'I love rockets.', updatedAt: '' },
+    ];
+    const base = { question: 'Why us?', posting: 'We build rockets.' };
+
+    const plain = draftRequestFor(profile, { ...base, factIds: ['summary'] });
+    expect(plain.context).toEqual(['Summary: Security analyst.']);
+    expect(plain.posting).toBeUndefined();
+    expect(plain.savedAnswers).toBeUndefined();
+
+    const full = draftRequestFor(profile, {
+      ...base,
+      factIds: ['summary', 'posting', 'saved-answers'],
+    });
+    expect(full.posting).toBe('We build rockets.');
+    expect(full.savedAnswers).toEqual(['Why this company: I love rockets.']);
+    expect(full.context).toEqual(['Summary: Security analyst.']);
   });
 });
 

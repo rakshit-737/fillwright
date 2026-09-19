@@ -1023,7 +1023,7 @@ export async function runV05Suite(ctx) {
       () =>
         document
           .querySelector('[data-fillwright-widget]')
-          .shadowRoot.querySelector('.fw-draft textarea') !== null,
+          .shadowRoot.querySelector('.fw-draft textarea:not([readonly])') !== null,
       { timeout: 10_000 },
     );
     assertEqual(
@@ -1047,6 +1047,210 @@ export async function runV05Suite(ctx) {
     await ctx.evalInWorker(
       worker,
       'delete globalThis.LanguageModel; delete globalThis.__prompts; true',
+    );
+    await page.close();
+  });
+
+  // A streaming stand-in: yields `word ` every 25 ms, forever when `hang` is
+  // set, and records whether the signal it was given was aborted.
+  const installStreamingModel = (hang) =>
+    ctx.evalInWorker(
+      worker,
+      `(() => {
+        globalThis.__prompts = [];
+        globalThis.__aborted = false;
+        globalThis.LanguageModel = {
+          availability: async () => 'available',
+          create: async () => ({
+            prompt: async () => 'unused',
+            promptStreaming(text, options = {}) {
+              globalThis.__prompts.push(text);
+              options.signal?.addEventListener('abort', () => { globalThis.__aborted = true; });
+              return (async function* () {
+                for (let i = 0; ${hang ? 'true' : 'i < 60'}; i += 1) {
+                  if (options.signal?.aborted) throw new DOMException('aborted', 'AbortError');
+                  yield 'word ';
+                  await new Promise((r) => setTimeout(r, 25));
+                }
+              })();
+            },
+            destroy() {},
+          }),
+        };
+        return true;
+      })()`,
+    );
+
+  const tickFact = (page, prefix) =>
+    page.evaluate((p) => {
+      const root = document.querySelector('[data-fillwright-widget]').shadowRoot;
+      const label = Array.from(root.querySelectorAll('.fw-facts label')).find((l) =>
+        l.textContent.trim().startsWith(p),
+      );
+      const box = label?.querySelector('input');
+      if (!box) return false;
+      box.click();
+      return true;
+    }, prefix);
+
+  const factStates = (page) =>
+    page.evaluate(() =>
+      Array.from(
+        document
+          .querySelector('[data-fillwright-widget]')
+          .shadowRoot.querySelectorAll('.fw-facts label'),
+      ).map((l) => ({ text: l.textContent.trim(), checked: l.querySelector('input').checked })),
+    );
+
+  await test('streamed drafting: posting excerpt is optional, fenced, and the limit holds while streaming', async () => {
+    await installStreamingModel(false);
+    const page = await openAndReview('draft-posting.html');
+    assert(
+      await clickRowLinkIn(page, 'Why do you want', 'Draft with on-device AI'),
+      'no draft link',
+    );
+    await page.waitForFunction(
+      () =>
+        document
+          .querySelector('[data-fillwright-widget]')
+          .shadowRoot.querySelector('.fw-draft .fw-facts') !== null,
+      { timeout: 10_000 },
+    );
+    const facts = await factStates(page);
+    const posting = facts.find((fact) => fact.text.startsWith('An excerpt of this job posting'));
+    assert(posting, `posting not offered: ${JSON.stringify(facts)}`);
+    assertEqual(posting.checked, false, 'the posting excerpt was ticked for the user');
+
+    assert(await tickFact(page, 'An excerpt of this job posting'), 'could not tick the posting');
+    assert(await clickRowLinkIn(page, 'Why do you want', 'Write a draft'), 'no Write a draft');
+
+    // Text appears while it is still being written, read-only.
+    await page.waitForFunction(
+      () =>
+        (document
+          .querySelector('[data-fillwright-widget]')
+          .shadowRoot.querySelector('.fw-draft textarea[readonly]')?.value.length ?? 0) > 0,
+      { timeout: 10_000 },
+    );
+    await page.waitForFunction(
+      () =>
+        document
+          .querySelector('[data-fillwright-widget]')
+          .shadowRoot.querySelector('.fw-draft textarea:not([readonly])') !== null,
+      { timeout: 15_000 },
+    );
+    const draft = (await draftPanel(page)).draft;
+    assert(
+      draft.length > 0 && draft.length <= 120,
+      `draft length ${draft.length} breaks maxlength 120`,
+    );
+
+    const prompts = await ctx.evalInWorker(worker, 'globalThis.__prompts');
+    assertEqual(prompts.length, 1, 'expected one prompt');
+    const prompt = prompts[0];
+    const header = prompt.split('\n').find((line) => line.startsWith('Job posting excerpt'));
+    assert(header && /untrusted/i.test(header), `posting not labelled untrusted: ${header}`);
+    const fenced = prompt.slice(prompt.indexOf(header));
+    assert(
+      /"""\n[^"]*Ignore all previous instructions[^"]*\n"""/.test(fenced),
+      'the injection sentence was not inside the fence',
+    );
+    assert(!prompt.includes(PROFILE_EMAIL), 'the prompt contained the email address');
+    assertEqual(
+      await page.evaluate(() => document.getElementById('q_why').value),
+      '',
+      'a streamed draft reached the form',
+    );
+    await page.close();
+  });
+
+  await test('streamed drafting: Cancel stops the model and leaves the form alone', async () => {
+    await installStreamingModel(true);
+    const page = await openAndReview('draft-posting.html');
+    assert(
+      await clickRowLinkIn(page, 'Why do you want', 'Draft with on-device AI'),
+      'no draft link',
+    );
+    await page.waitForFunction(
+      () =>
+        document
+          .querySelector('[data-fillwright-widget]')
+          .shadowRoot.querySelector('.fw-draft .fw-facts') !== null,
+      { timeout: 10_000 },
+    );
+    assert(await clickRowLinkIn(page, 'Why do you want', 'Write a draft'), 'no Write a draft');
+    await page.waitForFunction(
+      () =>
+        (document
+          .querySelector('[data-fillwright-widget]')
+          .shadowRoot.querySelector('.fw-draft textarea[readonly]')?.value.length ?? 0) > 0,
+      { timeout: 10_000 },
+    );
+    assert(await clickRowLinkIn(page, 'Why do you want', 'Cancel'), 'no Cancel while streaming');
+    const deadline = Date.now() + 5_000;
+    while (!(await ctx.evalInWorker(worker, 'globalThis.__aborted')) && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    assertEqual(
+      await ctx.evalInWorker(worker, 'globalThis.__aborted'),
+      true,
+      'the model was not stopped',
+    );
+    assertEqual(await draftPanel(page), null, 'the draft panel stayed open');
+    assertEqual(
+      await page.evaluate(() => document.getElementById('q_why').value),
+      '',
+      'the form changed after Cancel',
+    );
+    await ctx.evalInWorker(
+      worker,
+      'delete globalThis.LanguageModel; delete globalThis.__prompts; delete globalThis.__aborted; true',
+    );
+    await page.close();
+  });
+
+  await test('the Assistance pane downloads the on-device model with progress', async () => {
+    const page = await browser.newPage();
+    await page.evaluateOnNewDocument(() => {
+      let state = 'downloadable';
+      globalThis.LanguageModel = {
+        availability: async () => state,
+        create: async (options = {}) => {
+          if (typeof options.monitor === 'function') {
+            const target = new EventTarget();
+            options.monitor(target);
+            for (const loaded of [0.25, 0.5, 1]) {
+              await new Promise((r) => setTimeout(r, 150));
+              const event = new Event('downloadprogress');
+              event.loaded = loaded;
+              target.dispatchEvent(event);
+            }
+          }
+          state = 'available';
+          return { prompt: async () => '', destroy() {} };
+        },
+      };
+    });
+    await page.goto(`chrome-extension://${extensionId}/options.html#/assistance`, {
+      waitUntil: 'networkidle0',
+    });
+    await page.waitForFunction(() => document.body.innerText.includes('Needs a one-off download'), {
+      timeout: 10_000,
+    });
+    const clicked = await page.evaluate(() => {
+      const button = Array.from(document.querySelectorAll('button')).find(
+        (b) => b.textContent.trim() === 'Download the on-device model',
+      );
+      button?.click();
+      return Boolean(button);
+    });
+    assert(clicked, 'no download button');
+    await page.waitForFunction(() => document.querySelector('progress') !== null, {
+      timeout: 5_000,
+    });
+    await page.waitForFunction(
+      () => document.body.innerText.includes('Available on this computer'),
+      { timeout: 10_000 },
     );
     await page.close();
   });

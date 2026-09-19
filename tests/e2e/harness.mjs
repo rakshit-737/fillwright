@@ -162,19 +162,61 @@ export async function readWidget(page) {
   });
 }
 
+/**
+ * Clicks elements with real (trusted) input: puppeteer moves the mouse and
+ * presses it through the DevTools protocol, exactly as a person would. The
+ * panel ignores `element.click()` from page script — `isTrusted` is false —
+ * so every test that drives the panel goes through here.
+ *
+ * `finder` runs in the page (or frame) and returns an element, an array of
+ * elements, or null. A panel button that is not armed yet (aria-disabled) is
+ * waited for first.
+ */
+export async function trustedClick(target, finder, ...args) {
+  const handle = await target.evaluateHandle(finder, ...args);
+  const list = [];
+  const single = handle.asElement();
+  if (single) list.push(single);
+  else {
+    const props = await handle.getProperties().catch(() => new Map());
+    for (const value of props.values()) {
+      const element = value.asElement();
+      if (element) list.push(element);
+    }
+  }
+  for (const element of list) {
+    await element
+      .evaluate(
+        (node) =>
+          new Promise((done) => {
+            const deadline = Date.now() + 5_000;
+            const tick = () => {
+              if (node.getAttribute('aria-disabled') !== 'true' || Date.now() > deadline) done();
+              else setTimeout(tick, 50);
+            };
+            tick();
+          }),
+      )
+      .catch(() => undefined);
+    await element.click();
+  }
+  return list.length > 0;
+}
+
 /** Clicks a button in the panel by its visible label. */
 export async function clickWidgetButton(page, label) {
-  return page.evaluate((wanted) => {
-    const host = document.querySelector('[data-fillwright-widget]');
-    if (!host || !host.shadowRoot) return false;
-    const buttons = Array.from(host.shadowRoot.querySelectorAll('button'));
-    const button = buttons.find((candidate) =>
-      (candidate.textContent || '').trim().startsWith(wanted),
-    );
-    if (!button) return false;
-    button.click();
-    return true;
-  }, label);
+  return trustedClick(
+    page,
+    (wanted) => {
+      const host = document.querySelector('[data-fillwright-widget]');
+      if (!host || !host.shadowRoot) return null;
+      const buttons = Array.from(host.shadowRoot.querySelectorAll('button'));
+      return (
+        buttons.find((candidate) => (candidate.textContent || '').trim().startsWith(wanted)) ?? null
+      );
+    },
+    label,
+  );
 }
 
 export async function waitForWidget(page, predicate, timeoutMs = 15_000) {

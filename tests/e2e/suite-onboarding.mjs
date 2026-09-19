@@ -97,6 +97,8 @@ export async function runOnboardingSuite(ctx) {
       () => document.activeElement?.hasAttribute('data-fillwright-widget'),
       { timeout: 15_000 },
     );
+    // Fill arms only after the panel has been visible for about 500 ms.
+    await sleep(1_000);
     await practice.keyboard.press('Enter');
     await practice.waitForFunction(() => document.getElementById('email').value !== '', {
       timeout: 15_000,

@@ -6,7 +6,7 @@
  * never loads it.
  */
 import { createRequire } from 'node:module';
-import { waitForWidget, clickWidgetButton, sleep } from './harness.mjs';
+import { waitForWidget, clickWidgetButton, trustedClick, sleep } from './harness.mjs';
 
 const require = createRequire(import.meta.url);
 const AXE = require.resolve('axe-core/axe.min.js');
@@ -116,17 +116,18 @@ export async function runA11ySuite(ctx) {
       await clickWidgetButton(page, 'Review');
       await waitForWidget(page, (s) => s.items.length > 0);
       // Open one explanation and one correction picker so their markup is checked too.
-      await page.evaluate(() => {
+      await trustedClick(page, () => {
         const root = document.querySelector('[data-fillwright-widget]').shadowRoot;
         const buttons = Array.from(root.querySelectorAll('button'));
-        buttons.find((b) => b.textContent === 'Why?')?.click();
+        return buttons.find((b) => b.textContent === 'Why?') ?? null;
       });
       await sleep(100);
-      await page.evaluate(() => {
+      await trustedClick(page, () => {
         const root = document.querySelector('[data-fillwright-widget]').shadowRoot;
-        Array.from(root.querySelectorAll('button'))
-          .find((b) => b.textContent === 'Change')
-          ?.click();
+        return (
+          Array.from(root.querySelectorAll('button')).find((b) => b.textContent === 'Change') ??
+          null
+        );
       });
       await sleep(200);
       const violations = await audit(page, [['[data-fillwright-widget]', '.fw-widget']]);

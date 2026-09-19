@@ -14,11 +14,13 @@ import { runAtsSuite } from './suite-ats.mjs';
 import { runA11ySuite } from './suite-a11y.mjs';
 import { runOnboardingSuite } from './suite-onboarding.mjs';
 import { runEditorSuite } from './suite-editor.mjs';
+import { runClickjackSuite } from './suite-clickjack.mjs';
 import {
   launch,
   evalInWorker,
   readWidget,
   clickWidgetButton,
+  trustedClick,
   waitForWidget,
   sleep,
 } from './harness.mjs';
@@ -75,22 +77,21 @@ function findItem(widget, prefix) {
 
 /** Clicks a per-row link ("Why?", "Set what this is") by row label. */
 async function clickRowLink(page, labelPrefix, linkText) {
-  return page.evaluate(
+  return trustedClick(
+    page,
     (prefix, text) => {
       const host = document.querySelector('[data-fillwright-widget]');
-      if (!host || !host.shadowRoot) return false;
+      if (!host || !host.shadowRoot) return null;
       const rows = Array.from(host.shadowRoot.querySelectorAll('.fw-item'));
       const row = rows.find((item) => {
         const label = item.querySelector('.fw-item__label');
         return label && label.textContent.trim().toLowerCase().startsWith(prefix.toLowerCase());
       });
-      if (!row) return false;
+      if (!row) return null;
       const link = Array.from(row.querySelectorAll('button')).find(
         (button) => (button.textContent || '').trim() === text,
       );
-      if (!link) return false;
-      link.click();
-      return true;
+      return link ?? null;
     },
     labelPrefix,
     linkText,
@@ -99,30 +100,52 @@ async function clickRowLink(page, labelPrefix, linkText) {
 
 /** Chooses a canonical field in an open correction picker and confirms it. */
 async function teachField(page, labelPrefix, canonical) {
-  return page.evaluate(
-    (prefix, field) => {
-      const host = document.querySelector('[data-fillwright-widget]');
-      if (!host || !host.shadowRoot) return false;
-      const rows = Array.from(host.shadowRoot.querySelectorAll('.fw-item'));
-      const row = rows.find((item) => {
-        const label = item.querySelector('.fw-item__label');
-        return label && label.textContent.trim().toLowerCase().startsWith(prefix.toLowerCase());
-      });
-      if (!row) return false;
-      const select = row.querySelector('.fw-teach__select');
-      if (!select) return false;
-      select.value = field;
-      select.dispatchEvent(new Event('change', { bubbles: true }));
-      const use = Array.from(row.querySelectorAll('button')).find(
-        (button) => (button.textContent || '').trim() === 'Use this',
-      );
-      if (!use) return false;
-      use.click();
-      return true;
-    },
-    labelPrefix,
-    canonical,
-  );
+  return page
+    .evaluate(
+      (prefix, field) => {
+        const host = document.querySelector('[data-fillwright-widget]');
+        if (!host || !host.shadowRoot) return false;
+        const rows = Array.from(host.shadowRoot.querySelectorAll('.fw-item'));
+        const row = rows.find((item) => {
+          const label = item.querySelector('.fw-item__label');
+          return label && label.textContent.trim().toLowerCase().startsWith(prefix.toLowerCase());
+        });
+        if (!row) return false;
+        const select = row.querySelector('.fw-teach__select');
+        if (!select) return false;
+        select.value = field;
+        return true;
+      },
+      labelPrefix,
+      canonical,
+    )
+    .then((picked) =>
+      picked
+        ? trustedClick(
+            page,
+            (prefix) => {
+              const rows = Array.from(
+                document
+                  .querySelector('[data-fillwright-widget]')
+                  .shadowRoot.querySelectorAll('.fw-item'),
+              );
+              const row = rows.find((item) =>
+                item
+                  .querySelector('.fw-item__label')
+                  ?.textContent.trim()
+                  .toLowerCase()
+                  .startsWith(prefix.toLowerCase()),
+              );
+              return (
+                Array.from(row?.querySelectorAll('button') ?? []).find(
+                  (button) => (button.textContent || '').trim() === 'Use this',
+                ) ?? null
+              );
+            },
+            labelPrefix,
+          )
+        : false,
+    );
 }
 
 function dumpItems(widget) {
@@ -1147,6 +1170,10 @@ async function main() {
       evalInWorker,
       foreign,
     });
+
+    /* --- click-jacking ------------------------------------------------------ */
+
+    await runClickjackSuite({ browser, worker, server, test, assert, assertEqual, scanPage });
 
     /* --- real-world ATS layouts ------------------------------------------ */
 

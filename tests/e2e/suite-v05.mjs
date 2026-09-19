@@ -11,7 +11,7 @@
 import { mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { readWidget, clickWidgetButton, waitForWidget, sleep } from './harness.mjs';
+import { readWidget, clickWidgetButton, trustedClick, waitForWidget, sleep } from './harness.mjs';
 
 export async function runV05Suite(ctx) {
   const { browser, extensionId, server, test, assert, assertEqual, scanPage, worker } = ctx;
@@ -44,18 +44,25 @@ export async function runV05Suite(ctx) {
 
   /** Clicks a row link, with the remember box set as asked, and confirms. */
   async function correct(page, label, field, remember) {
-    return page.evaluate(
-      (prefix, target, keep) => {
+    const opened = await trustedClick(
+      page,
+      (prefix) => {
         const root = document.querySelector('[data-fillwright-widget]').shadowRoot;
         const row = Array.from(root.querySelectorAll('.fw-item')).find((item) =>
           item.querySelector('.fw-item__label')?.textContent.trim().startsWith(prefix),
         );
-        if (!row) return 'no row';
-        const open = Array.from(row.querySelectorAll('button')).find((button) =>
-          ['Set what this is', 'Change'].includes(button.textContent.trim()),
+        return (
+          Array.from(row?.querySelectorAll('button') ?? []).find((button) =>
+            ['Set what this is', 'Change'].includes(button.textContent.trim()),
+          ) ?? null
         );
-        if (!open) return 'no change link';
-        open.click();
+      },
+      label,
+    );
+    if (!opened) return 'no change link';
+    const picked = await page.evaluate(
+      (prefix, target, keep) => {
+        const root = document.querySelector('[data-fillwright-widget]').shadowRoot;
         const fresh = Array.from(root.querySelectorAll('.fw-item')).find((item) =>
           item.querySelector('.fw-item__label')?.textContent.trim().startsWith(prefix),
         );
@@ -64,16 +71,29 @@ export async function runV05Suite(ctx) {
         if (!select || !box) return 'no picker';
         select.value = target;
         box.checked = keep;
-        const use = Array.from(fresh.querySelectorAll('button')).find(
-          (button) => button.textContent.trim() === 'Use this',
-        );
-        use.click();
         return 'ok';
       },
       label,
       field,
       remember,
     );
+    if (picked !== 'ok') return picked;
+    const used = await trustedClick(
+      page,
+      (prefix) => {
+        const root = document.querySelector('[data-fillwright-widget]').shadowRoot;
+        const row = Array.from(root.querySelectorAll('.fw-item')).find((item) =>
+          item.querySelector('.fw-item__label')?.textContent.trim().startsWith(prefix),
+        );
+        return (
+          Array.from(row?.querySelectorAll('button') ?? []).find(
+            (button) => button.textContent.trim() === 'Use this',
+          ) ?? null
+        );
+      },
+      label,
+    );
+    return used ? 'ok' : 'no Use this';
   }
 
   /* --- deterministic profile for this suite ------------------------- */
@@ -163,6 +183,21 @@ export async function runV05Suite(ctx) {
         null,
     );
     assertEqual(dialog, false, 'smart mode must not open the full panel uninvited');
+
+    // The prepared plan carries counts only. Opening the pill fetches values.
+    assert(
+      await trustedClick(page, () =>
+        document.querySelector('[data-fillwright-widget]').shadowRoot.querySelector('.fw-pill'),
+      ),
+      'no pill to open',
+    );
+    await waitForWidget(page, (s) => s.text.includes('application field'));
+    assert(await clickWidgetButton(page, 'Review'), 'no Review button');
+    const opened = await waitForWidget(page, (s) => s.items.some((item) => item.value !== ''));
+    assert(
+      opened.items.some((item) => item.value.includes('@')),
+      'opening the panel did not bring the values',
+    );
     await page.close();
   });
 
@@ -535,15 +570,12 @@ export async function runV05Suite(ctx) {
   await test('undo after two consecutive fills restores both', async () => {
     // A unique URL: other greenhouse tabs are still open from earlier tests.
     const page = await openAndReview('greenhouse.html?undo');
-    const unticked = await page.evaluate(() => {
+    const unticked = await trustedClick(page, () => {
       const root = document.querySelector('[data-fillwright-widget]').shadowRoot;
       const row = Array.from(root.querySelectorAll('.fw-item')).find((item) =>
         item.querySelector('.fw-item__label')?.textContent.trim().startsWith('Email'),
       );
-      const box = row?.querySelector('input.fw-check');
-      if (!box) return false;
-      box.click();
-      return true;
+      return row?.querySelector('input.fw-check') ?? null;
     });
     assert(unticked, 'could not untick the email row');
     assert(await clickWidgetButton(page, 'Fill'), 'no Fill button');
@@ -580,18 +612,18 @@ export async function runV05Suite(ctx) {
   /* --- on-device drafting --------------------------------------------- */
 
   const clickRowLinkIn = (page, prefix, text) =>
-    page.evaluate(
+    trustedClick(
+      page,
       (p, t) => {
         const root = document.querySelector('[data-fillwright-widget]').shadowRoot;
         const row = Array.from(root.querySelectorAll('.fw-item')).find((item) =>
           item.querySelector('.fw-item__label')?.textContent.trim().startsWith(p),
         );
-        const link = Array.from(row?.querySelectorAll('button') ?? []).find(
-          (b) => b.textContent.trim() === t,
+        return (
+          Array.from(row?.querySelectorAll('button') ?? []).find(
+            (b) => b.textContent.trim() === t,
+          ) ?? null
         );
-        if (!link) return false;
-        link.click();
-        return true;
       },
       prefix,
       text,

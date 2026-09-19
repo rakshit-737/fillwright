@@ -224,6 +224,7 @@ describe('on-page panel', () => {
     onUndo: () => undefined,
     onClose: () => undefined,
     onRescan: () => undefined,
+    onOpen: () => undefined,
     onTeach: () => undefined,
     onListProfiles: async () => [],
     onSwitchProfile: () => undefined,
@@ -244,7 +245,7 @@ describe('on-page panel', () => {
   });
 
   it('hides its contents from page scripts', () => {
-    const widget = new FillwrightWidget(noop, true);
+    const widget = new FillwrightWidget(noop, true, { trust: () => true });
     widget.renderPlan(plan);
     const host = document.querySelector('[data-fillwright-widget]') as HTMLElement;
     expect(host.shadowRoot).toBeNull();
@@ -253,7 +254,7 @@ describe('on-page panel', () => {
   });
 
   it('moves through states and minimises on Escape', () => {
-    const widget = new FillwrightWidget(noop, true);
+    const widget = new FillwrightWidget(noop, true, { trust: () => true });
     widget.renderAnalyzing();
     expect(widget.state).toBe('analyzing');
     widget.renderPlan(plan);
@@ -271,7 +272,7 @@ describe('on-page panel', () => {
   });
 
   it('offers Change on confident rows, not only doubtful ones', () => {
-    const widget = new FillwrightWidget(noop, true);
+    const widget = new FillwrightWidget(noop, true, { trust: () => true });
     widget.renderPlan(plan);
     const review = [...widget.shadow.querySelectorAll('button')].find(
       (b) => b.textContent === 'Review',

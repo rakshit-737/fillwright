@@ -353,6 +353,23 @@ describe('visibility assessment', () => {
     expect(assessVisibility(control()).visible).toBe(true);
   });
 
+  it('rejects a field pushed far past the right edge', () => {
+    render('<input id="f" style="position:absolute;left:10000px">');
+    Object.defineProperty(document.documentElement, 'scrollWidth', {
+      configurable: true,
+      value: 10300,
+    });
+    box(control(), { left: 10000, top: 10, width: 200, height: 30 });
+    expect(assessVisibility(control())).toMatchObject({
+      visible: false,
+      reason: expect.stringMatching(/off-screen/),
+    });
+    Object.defineProperty(document.documentElement, 'scrollWidth', {
+      configurable: true,
+      value: 0,
+    });
+  });
+
   it('rejects a field moved off-screen', () => {
     render('<input id="f" style="position:absolute;left:-9999px">');
     box(control(), { left: -9999, top: 10, width: 200, height: 30 });

@@ -685,8 +685,10 @@ function assessBox(element: HTMLElement): VisibilityAssessment {
   const view = element.ownerDocument.defaultView;
   const scrollX = view?.scrollX ?? 0;
   const scrollY = view?.scrollY ?? 0;
+  // The viewport width, not the scroll width: a field parked at left:10000px
+  // widens the scroll width itself and would otherwise count as on the page.
   const pageWidth = Math.max(
-    element.ownerDocument.documentElement.scrollWidth,
+    element.ownerDocument.documentElement.clientWidth,
     view?.innerWidth ?? 0,
   );
   if (

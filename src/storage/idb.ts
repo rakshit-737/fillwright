@@ -50,6 +50,13 @@ export function openDb(): Promise<IDBDatabase> {
   return dbPromise;
 }
 
+/**
+ * Runs one request in its own transaction.
+ *
+ * Reads resolve on the request's success. Writes resolve only when the
+ * transaction completes: a write can still abort at commit time (a full disk,
+ * for one), and reporting it as saved before then would be false.
+ */
 function run<T>(
   store: StoreName,
   mode: IDBTransactionMode,
@@ -59,12 +66,69 @@ function run<T>(
     (db) =>
       new Promise<T>((resolve, reject) => {
         const tx = db.transaction(store, mode);
-        const request = fn(tx.objectStore(store));
-        request.onsuccess = () => resolve(request.result);
+        let request: IDBRequest<T>;
+        try {
+          request = fn(tx.objectStore(store));
+        } catch (cause) {
+          abortQuietly(tx);
+          reject(cause);
+          return;
+        }
+        request.onsuccess = () => {
+          if (mode === 'readonly') resolve(request.result);
+        };
         request.onerror = () => reject(request.error ?? new Error(`IndexedDB ${mode} failed`));
+        tx.oncomplete = () => resolve(request.result);
         tx.onabort = () => reject(tx.error ?? new Error('IndexedDB transaction aborted'));
       }),
   );
+}
+
+/** One write inside an atomic batch. */
+export type WriteOp =
+  | { store: StoreName; op: 'put'; value: unknown }
+  | { store: StoreName; op: 'delete'; key: IDBValidKey };
+
+/**
+ * Applies several puts and deletes, across stores, in ONE readwrite
+ * transaction: either every write lands or none does.
+ *
+ * Everything must be computed before calling this. An IndexedDB transaction
+ * commits as soon as it has no pending requests, so awaiting anything else (a
+ * crypto call, say) part-way through would end it early.
+ */
+export function writeAtomic(ops: readonly WriteOp[]): Promise<void> {
+  if (ops.length === 0) return Promise.resolve();
+  const stores = [...new Set(ops.map((op) => op.store))];
+  return openDb().then(
+    (db) =>
+      new Promise<void>((resolve, reject) => {
+        const tx = db.transaction(stores, 'readwrite');
+        tx.oncomplete = () => resolve();
+        tx.onabort = () => reject(tx.error ?? new Error('IndexedDB transaction aborted'));
+        try {
+          for (const op of ops) {
+            const os = tx.objectStore(op.store);
+            if (op.op === 'put') os.put(op.value);
+            else os.delete(op.key);
+          }
+        } catch (cause) {
+          // A synchronous failure part-way (DataCloneError, a quota error
+          // raised by put): abort so the writes already queued are discarded.
+          tx.onabort = null;
+          abortQuietly(tx);
+          reject(cause);
+        }
+      }),
+  );
+}
+
+function abortQuietly(tx: IDBTransaction): void {
+  try {
+    tx.abort();
+  } catch {
+    // Already finished or aborted.
+  }
 }
 
 export const idb = {
@@ -88,6 +152,22 @@ export const idb = {
   },
   count(store: StoreName): Promise<number> {
     return run<number>(store, 'readonly', (os) => os.count());
+  },
+  /** Whether any record matches, walking a cursor rather than loading the store. */
+  some<T>(store: StoreName, predicate: (value: T) => boolean): Promise<boolean> {
+    return openDb().then(
+      (db) =>
+        new Promise<boolean>((resolve, reject) => {
+          const request = db.transaction(store, 'readonly').objectStore(store).openCursor();
+          request.onsuccess = () => {
+            const cursor = request.result;
+            if (!cursor) return resolve(false);
+            if (predicate(cursor.value as T)) return resolve(true);
+            cursor.continue();
+          };
+          request.onerror = () => reject(request.error ?? new Error('IndexedDB read failed'));
+        }),
+    );
   },
 };
 

@@ -9,6 +9,8 @@ interface VaultState {
   autoLockMinutes: number;
   createdAt: string | null;
   iterations: number | null;
+  /** A store left inconsistent by an older version, with how to recover. */
+  problem?: string | null;
 }
 
 type Mode = 'idle' | 'enabling' | 'unlocking' | 'changing' | 'disabling';
@@ -218,6 +220,11 @@ export function Security({
             </p>
           </div>
         </div>
+        {vault.problem && (
+          <p className="fw-formerror" role="alert" data-testid="vault-problem">
+            {vault.problem}
+          </p>
+        )}
       </section>
 
       {/* ------------------------------------------------- honest scope --- */}

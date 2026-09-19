@@ -14,6 +14,18 @@ Notable changes, newest first. Versions follow semantic versioning.
   tokens. A question naming several countries, or none, is never answered and
   says what it found ("this question mentions the United States and Canada").
   The table grew from ten countries to about fifty.
+- **Switching encryption can no longer lose data.** Enabling, disabling and
+  changing the passphrase used to write each record in its own transaction and
+  save the salt last; an interruption (for example running out of disk space
+  on a large resume) left ciphertext under a salt that was never stored, and a
+  retry failed too. All records and the meta record are now computed first and
+  written in one transaction, so a failure changes nothing. Free space is
+  checked beforehand (`EQUOTA`).
+- IndexedDB writes now resolve when their transaction completes, not when the
+  request succeeds, so a write that aborts at commit is no longer reported as
+  saved.
+- A store left half-encrypted by an earlier version is detected and the
+  Security page explains how to recover, instead of showing "locked" forever.
 
 ## 0.5.0
 

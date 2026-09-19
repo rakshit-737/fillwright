@@ -602,8 +602,9 @@ async function main() {
 
     await test('"please tell us" does not make a UK question a US one', async () => {
       const widget = await readWidget(edge);
-      const tellUs = findItem(widget, 'Right to work (UK)');
-      if (tellUs) assertEqual(tellUs.value, '', 'the "tell us" UK question got the US answer');
+      const tellUs = findItem(widget, 'Right to work status');
+      assert(tellUs, 'the "tell us" UK question was not listed');
+      assertEqual(tellUs.value, '', 'the "tell us" UK question got the US answer');
     });
 
     await test('a shadow-DOM field is detected', async () => {

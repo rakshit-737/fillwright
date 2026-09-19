@@ -9,8 +9,8 @@
  * for the wrong jurisdiction:
  * - `names` and `demonyms` match case-insensitively as whole words.
  * - `abbreviations` match case-SENSITIVELY as whole tokens. "US" is the United
- *   States; "us" in "let us know" is a pronoun. Bare "US" is also ignored in
- *   text with no lower-case letters at all, where "TELL US" is still a pronoun.
+ *   States; "us" in "let us know" is a pronoun. Bare "US" is also ignored
+ *   next to an all-caps word, where "TELL US" is still a pronoun.
  * - Names that are part of a larger place ("New Mexico", "South America",
  *   "Indiana") do not count as the country.
  */
@@ -204,6 +204,19 @@ for (const country of COUNTRIES) {
   }
 }
 
+/**
+ * True when bare "US" sits next to an all-caps word ("TELL US", "US KNOW"),
+ * where it is the pronoun shouted, not the country. Judged per occurrence, so
+ * a shouted helper line cannot turn a normal-case label into a US question.
+ */
+function inShoutedText(text: string, index: number, length: number): boolean {
+  const before = /(\p{L}+)[^\p{L}]*$/u.exec(text.slice(0, index))?.[1];
+  const after = /^[^\p{L}]*(\p{L}+)/u.exec(text.slice(index + length))?.[1];
+  const shouted = (w: string | undefined) => !!w && w.length > 1 && !/\p{Ll}/u.test(w);
+  if (!before && !after) return true;
+  return shouted(before) || shouted(after);
+}
+
 const BY_CODE = new Map(COUNTRIES.map((c) => [c.code, c]));
 
 /** How a rationale names a country: "the United States". Unknown codes pass through. */
@@ -220,13 +233,15 @@ export function detectCountries(text: string): string[] {
     const key = m.toLowerCase().replace(/\s+/g, ' ').replace(/ns?$/, '');
     return ` ${PLACES[key] ?? ''} `;
   });
-  const shouting = !/\p{Ll}/u.test(cleaned);
   const found: Array<[number, string]> = [];
   for (const matcher of MATCHERS) {
-    if (matcher.shoutSensitive && shouting) continue;
     matcher.re.lastIndex = 0;
-    const match = matcher.re.exec(cleaned);
-    if (match) found.push([match.index, matcher.code]);
+    let match: RegExpExecArray | null;
+    while ((match = matcher.re.exec(cleaned))) {
+      if (matcher.shoutSensitive && inShoutedText(cleaned, match.index, match[0].length)) continue;
+      found.push([match.index, matcher.code]);
+      break;
+    }
   }
   found.sort((a, b) => a[0] - b[0]);
   const codes: string[] = [];

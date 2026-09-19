@@ -165,6 +165,8 @@ describe('work authorisation is answered per country', () => {
     ['Please let us know about your work authorization.', null],
     ['Do you require visa sponsorship to join us?', null],
     ['ARE YOU AUTHORIZED TO WORK FOR US?', null],
+    ['LET US KNOW Right to work', null],
+    ['PLEASE TELL US: Are you authorized to work in India?', 'IN'],
     ['Have you worked in Latin America or South America before?', null],
   ];
 

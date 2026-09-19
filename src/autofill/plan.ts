@@ -47,10 +47,16 @@ export function buildMappings(
       saved
         ? {
             field: saved.canonical,
-            confidence: 0.99,
+            // An imported rule was not taught on this device: it is proposed,
+            // never pre-ticked, until the user confirms it on a real form.
+            confidence: saved.imported
+              ? Math.min(0.99, settings.autofill.confidenceThreshold) - 0.01
+              : 0.99,
             rationale: isOneOff(saved)
               ? 'you chose this for this form'
-              : 'you taught Fillwright this mapping on this website',
+              : saved.imported
+                ? 'imported from a file — check it, then choose it again to confirm'
+                : 'you taught Fillwright this mapping on this website',
             isOpenQuestion: false,
           }
         : classifyField(field.signals),
@@ -78,6 +84,7 @@ export function buildMappings(
       rationale: classification.rationale,
       fromSavedRule: Boolean(saved) && !isOneOff(saved),
       corrected: Boolean(saved),
+      ...(saved?.imported ? { imported: true } : {}),
       entryIndex: group.index,
     };
 
@@ -272,6 +279,7 @@ export function buildFillPlan(
         fingerprint: fingerprintOf(field),
         remembered: mapping.fromSavedRule,
         corrected: Boolean(mapping.corrected),
+        ...(mapping.imported ? { imported: true } : {}),
         required: field.signals.required,
       } satisfies FillPlanEntry;
     })

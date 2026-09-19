@@ -15,9 +15,12 @@ import { FIELD_CATALOG } from '@/field-detection/catalog';
 import {
   EXPORT_FORMAT,
   EXPORT_VERSION,
+  applyImportSelection,
   parseImport,
   portableSettings,
+  previewImport,
   type ExportFile,
+  type ImportPlan,
 } from '@/profile/portable';
 import { syncAutoDetect } from '../auto-detect';
 import type { CanonicalField } from '@/types/fields';
@@ -101,25 +104,27 @@ export function registerPrivacyHandlers(): void {
     return ok({ ...file, resumeCount: await idb.count('resumes') });
   });
 
+  /** Parses a file without storing anything, for the review screen. */
+  handle('ui:preview-import', async (request) => {
+    const { payload } = request as Extract<UiRequest, { type: 'ui:preview-import' }>;
+    const parsed = await parse(payload);
+    if (!parsed.ok) return parsed.result;
+    return ok(previewImport(parsed.plan, await getSettings()));
+  });
+
   /**
-   * Adds the contents of an export. Nothing already stored is replaced:
-   * profiles arrive with new ids, and mappings merge by fingerprint.
+   * Adds what the user ticked on the review screen. Nothing already stored is
+   * replaced: profiles arrive with new ids, and mappings merge by fingerprint
+   * (marked imported, so they are proposed but never pre-ticked).
    */
   handle('ui:import-data', async (request) => {
-    const { payload } = request as Extract<UiRequest, { type: 'ui:import-data' }>;
-    const existing = await listProfiles();
-    let plan;
-    try {
-      plan = parseImport(
-        payload,
-        existing.map((profile) => profile.name),
-      );
-    } catch (cause) {
-      return err(
-        cause instanceof Error ? cause.message : 'This file could not be read.',
-        'EBADIMPORT',
-      );
-    }
+    const { payload, selection } = request as Extract<UiRequest, { type: 'ui:import-data' }>;
+    const parsed = await parse(payload);
+    if (!parsed.ok) return parsed.result;
+    const plan = applyImportSelection(
+      parsed.plan,
+      selection ?? { profiles: [], mappings: [], settings: [] },
+    );
 
     // Written one by one: if the vault is locked, the first write throws and
     // the user is asked to unlock, rather than half the import landing.
@@ -146,4 +151,28 @@ export function registerPrivacyHandlers(): void {
       warnings: plan.warnings,
     });
   });
+}
+
+/** The file is parsed afresh for each step; the page never supplies a plan. */
+async function parse(
+  payload: unknown,
+): Promise<{ ok: true; plan: ImportPlan } | { ok: false; result: ReturnType<typeof err> }> {
+  const existing = await listProfiles();
+  try {
+    return {
+      ok: true,
+      plan: parseImport(
+        payload,
+        existing.map((profile) => profile.name),
+      ),
+    };
+  } catch (cause) {
+    return {
+      ok: false,
+      result: err(
+        cause instanceof Error ? cause.message : 'This file could not be read.',
+        'EBADIMPORT',
+      ),
+    };
+  }
 }

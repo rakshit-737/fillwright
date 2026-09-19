@@ -94,7 +94,9 @@ function renderRow(
   const label = el('label', 'fw-item__label', entry.label);
   if (fillable) label.setAttribute('for', `fw-check-${entry.fieldId}`);
   labelRow.appendChild(label);
-  if (entry.remembered) {
+  if (entry.imported) {
+    labelRow.appendChild(el('span', 'fw-chip', 'imported'));
+  } else if (entry.remembered) {
     labelRow.appendChild(el('span', 'fw-chip', 'remembered'));
   } else if (entry.corrected) {
     labelRow.appendChild(el('span', 'fw-chip', 'your choice'));

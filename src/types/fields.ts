@@ -184,6 +184,8 @@ export interface FieldMapping {
   fromSavedRule: boolean;
   /** True when the user chose this mapping, saved or for this form only. */
   corrected?: boolean;
+  /** True when the saved rule came from an import file and is unconfirmed. */
+  imported?: boolean;
   /**
    * Which repeated block this field belongs to, and therefore which profile
    * entry it draws from. 0 for non-repeating fields.
@@ -238,6 +240,8 @@ export interface FillPlanEntry {
   remembered: boolean;
   /** True when the user picked this mapping, saved or not. */
   corrected?: boolean;
+  /** True when the remembered rule came from an import and is unconfirmed. */
+  imported?: boolean;
   /** The form marks this field as required. */
   required?: boolean;
 }
@@ -266,4 +270,9 @@ export interface SavedMapping {
   useCount: number;
   /** A paused rule is kept but not applied. */
   disabled?: boolean;
+  /**
+   * Came from an import file and has not yet been confirmed on a real form.
+   * Such a rule is proposed at review confidence and starts unticked.
+   */
+  imported?: boolean;
 }

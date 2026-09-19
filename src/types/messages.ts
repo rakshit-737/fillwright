@@ -1,3 +1,4 @@
+import type { ImportSelection } from '@/profile/portable';
 import type { CanonicalField, FillOutcome, ScanResult, SavedMapping } from './fields';
 import type { Profile } from './profile';
 import type { Settings } from './settings';
@@ -43,7 +44,8 @@ export type UiRequest =
   | { type: 'ui:clear-saved-mappings'; origin?: string }
   | { type: 'ui:erase-all-data' }
   | { type: 'ui:export-data'; includeHistory?: boolean }
-  | { type: 'ui:import-data'; payload: unknown }
+  | { type: 'ui:preview-import'; payload: unknown }
+  | { type: 'ui:import-data'; payload: unknown; selection: ImportSelection }
   | { type: 'ui:sync-auto-detect' }
   | { type: 'ui:vault-status' }
   | { type: 'ui:vault-enable'; passphrase: string }

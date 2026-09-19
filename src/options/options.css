@@ -400,3 +400,42 @@ code {
     padding: var(--fw-space-6) var(--fw-space-4) var(--fw-space-12);
   }
 }
+
+/* Import review ------------------------------------------------------------ */
+
+.fw-chip {
+  display: inline-block;
+  margin-left: var(--fw-space-2);
+  padding: 0 var(--fw-space-2);
+  border-radius: var(--fw-radius-sm);
+  background: var(--fw-accent-soft);
+  color: var(--fw-accent);
+  font-size: var(--fw-text-2xs);
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  vertical-align: middle;
+}
+
+.fw-import-group {
+  margin: var(--fw-space-4) 0 0;
+  padding: 0;
+  border: 0;
+}
+
+.fw-import-site {
+  margin-top: var(--fw-space-3);
+}
+
+.fw-import-list {
+  margin: 0;
+  padding-left: var(--fw-space-6);
+  list-style: none;
+}
+
+.fw-export-pass {
+  display: grid;
+  gap: var(--fw-space-3);
+  max-width: 28rem;
+  margin-top: var(--fw-space-3);
+}

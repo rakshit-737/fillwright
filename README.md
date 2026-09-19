@@ -292,7 +292,13 @@ Summarised here; the full threat model is in [SECURITY.md](./SECURITY.md).
 11. **Searchable dropdowns see a short prefix.** To find an option in a list
     that loads as you type, Fillwright types up to six characters of the value
     into the site's search box, which the site can observe.
-8. **Exports are not encrypted.** The export warns about this before saving.
+8. **Exports are plaintext unless you set a passphrase.** Tick "Protect the
+   export with a passphrase" to seal it (PBKDF2 600k + AES-GCM, as the vault);
+   forget the passphrase and the file cannot be opened. Without one, the file is
+   readable JSON and the page warns before saving it. Imports are shown for
+   review first; settings and learned fields from a file start unticked, and an
+   imported learned field is only proposed, never pre-ticked, until you confirm
+   it on a real form.
 9. **Step progress is per tab and per session.** It lives in memory-only
    session storage and resets when the browser closes.
 

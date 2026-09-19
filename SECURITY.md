@@ -224,6 +224,17 @@ router (hand-rolled, ~25 lines), a zip writer for packaging, an archiver, an
 image library for icons. Everything that touches the profile is code in this
 repository.
 
+**The package itself is checkable.** The store zip is reproducible: entries are
+sorted, every entry carries one fixed timestamp (the tagged commit's time, or
+`SOURCE_DATE_EPOCH`), and deflate settings are fixed
+([`scripts/lib/zip.mjs`](./scripts/lib/zip.mjs)). Releases are built in CI from
+a `v*` tag by [`release.yml`](./.github/workflows/release.yml), which builds the
+package twice, fails unless both are byte-identical, and publishes the zip with
+`SHA256SUMS` and a signed build provenance attestation. Anyone can rebuild the
+tag and compare hashes (README, "Verify the store package yourself"). CI runs
+with read-only token permissions, pins every action by commit SHA, and is kept
+current by Dependabot; CodeQL scans the JavaScript/TypeScript on every PR.
+
 ### 3.4b What each extension surface can ask the worker
 
 | Sender | Messages | What comes back |

@@ -59,6 +59,39 @@ To produce a Web Store zip: `npm run presubmit` (runs every check, builds
 not ship). Listing copy, permission justifications, the privacy-practices
 declaration, screenshots and a checklist are in [`store/`](./store).
 
+### Verify the store package yourself
+
+Every release zip is built by CI from a version tag and is reproducible byte
+for byte, so you do not have to take it on trust. To check one:
+
+1. Download `fillwright-<version>.zip` and `SHA256SUMS` from the
+   [GitHub release](https://github.com/rakshit-737/fillwright/releases).
+2. Check the download: `sha256sum -c SHA256SUMS` (PowerShell:
+   `Get-FileHash fillwright-<version>.zip -Algorithm SHA256`).
+3. Optionally check where it came from:
+   `gh attestation verify fillwright-<version>.zip --repo rakshit-737/fillwright`.
+4. Rebuild it from source, with Node 22:
+
+   ```bash
+   git clone https://github.com/rakshit-737/fillwright.git
+   cd fillwright
+   git checkout v<version>
+   npm ci
+   export SOURCE_DATE_EPOCH=$(git log -1 --format=%ct)   # optional: this is the default
+   npm run build
+   node scripts/package.mjs --out rebuilt
+   cat rebuilt/SHA256SUMS
+   ```
+
+5. The hash printed by the last step must equal the one in the release's
+   `SHA256SUMS`. If it does not, please open an issue.
+
+The zip's entries are sorted, stamped with the tagged commit's time, and
+compressed with fixed settings (see `scripts/lib/zip.mjs`). Clone with git
+(not a source-archive download) so line endings follow `.gitattributes`, and
+use the same major Node version as CI, since deflate output can change with
+zlib.
+
 ---
 
 ## Using it
@@ -104,7 +137,7 @@ declaration, screenshots and a checklist are in [`store/`](./store).
 ## Testing it
 
 ```bash
-npm test             # 326 unit and integration tests (jsdom)
+npm test             # 330 unit and integration tests (jsdom)
 npm run test:e2e     # 96 end-to-end tests in real Chrome, including axe-core
 npm run perf         # performance budget in Chrome for Testing
 npm run check        # typecheck → lint → audit → test → build → verify

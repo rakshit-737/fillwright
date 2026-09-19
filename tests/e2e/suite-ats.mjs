@@ -552,11 +552,8 @@ export async function runAtsSuite(ctx) {
       );
       // The user opens the panel from the pill: adapters may run now, and still must not
       // press a dropdown or a navigation menu.
-      await page.evaluate(() =>
-        document
-          .querySelector('[data-fillwright-widget]')
-          .shadowRoot.querySelector('.fw-pill')
-          .click(),
+      await trustedClick(page, () =>
+        document.querySelector('[data-fillwright-widget]').shadowRoot.querySelector('.fw-pill'),
       );
       await waitForWidget(page, (s) => s.text.includes('application field'), 15_000);
       assertEqual(

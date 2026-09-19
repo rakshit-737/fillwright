@@ -367,18 +367,19 @@ export async function runV05Suite(ctx) {
 
   await test('Show me scrolls to and outlines the field a row refers to', async () => {
     const page = await openAndReview('hidden-fields.html');
-    const outlined = await page.evaluate(() => {
+    const found = await trustedClick(page, () => {
       const root = document.querySelector('[data-fillwright-widget]').shadowRoot;
       const row = Array.from(root.querySelectorAll('.fw-item')).find((item) =>
         item.querySelector('.fw-item__label')?.textContent.trim().startsWith('Email'),
       );
-      const show = Array.from(row?.querySelectorAll('button') ?? []).find(
-        (button) => button.textContent.trim() === 'Show me',
+      return (
+        Array.from(row?.querySelectorAll('button') ?? []).find(
+          (button) => button.textContent.trim() === 'Show me',
+        ) ?? null
       );
-      if (!show) return 'no Show me';
-      show.click();
-      return document.getElementById('h-email').style.outline;
     });
+    assert(found, 'no Show me');
+    const outlined = await page.evaluate(() => document.getElementById('h-email').style.outline);
     assert(/solid/.test(outlined), `the field was not outlined: ${outlined}`);
     await page.close();
   });
@@ -1082,16 +1083,17 @@ export async function runV05Suite(ctx) {
     );
 
   const tickFact = (page, prefix) =>
-    page.evaluate((p) => {
-      const root = document.querySelector('[data-fillwright-widget]').shadowRoot;
-      const label = Array.from(root.querySelectorAll('.fw-facts label')).find((l) =>
-        l.textContent.trim().startsWith(p),
-      );
-      const box = label?.querySelector('input');
-      if (!box) return false;
-      box.click();
-      return true;
-    }, prefix);
+    trustedClick(
+      page,
+      (p) => {
+        const root = document.querySelector('[data-fillwright-widget]').shadowRoot;
+        const label = Array.from(root.querySelectorAll('.fw-facts label')).find((l) =>
+          l.textContent.trim().startsWith(p),
+        );
+        return label?.querySelector('input') ?? null;
+      },
+      prefix,
+    );
 
   const factStates = (page) =>
     page.evaluate(() =>
@@ -1300,19 +1302,18 @@ export async function runV05Suite(ctx) {
       'Not recognised',
       'the fixture field should start unrecognised',
     );
-    const result = await page.evaluate(() => {
-      const root = document.querySelector('[data-fillwright-widget]').shadowRoot;
-      const rowFor = () =>
-        Array.from(root.querySelectorAll('.fw-item')).find((item) =>
-          item.querySelector('.fw-item__label')?.textContent.trim().startsWith('Badge reference'),
-        );
-      const open = Array.from(rowFor().querySelectorAll('button')).find(
-        (b) => b.textContent.trim() === 'Set what this is',
-      );
-      if (!open) return 'no Set what this is';
-      open.click();
-      const row = rowFor();
-      const select = row.querySelector('.fw-teach__select');
+    const rowSel = (sel) =>
+      `(() => { const root = document.querySelector('[data-fillwright-widget]').shadowRoot;
+        const row = Array.from(root.querySelectorAll('.fw-item')).find((item) =>
+          item.querySelector('.fw-item__label')?.textContent.trim().startsWith('Badge reference'));
+        return row ? row.querySelector(${JSON.stringify(sel)}) : null; })()`;
+    assert(
+      await clickRowLinkIn(page, 'Badge reference', 'Set what this is'),
+      'no Set what this is',
+    );
+    const checked = await page.evaluate((expr) => {
+      const select = eval(expr);
+      if (!select) return 'no picker';
       const own = Array.from(select.options).find((o) =>
         o.textContent.startsWith('One of your custom fields'),
       );
@@ -1323,19 +1324,26 @@ export async function runV05Suite(ctx) {
         )
       )
         return 'no saved-answer choice';
-      select.value = own.value;
-      select.dispatchEvent(new Event('change'));
-      const second = row.querySelector('.fw-teach__own');
+      return 'ok';
+    }, rowSel('.fw-teach__select'));
+    assertEqual(checked, 'ok', 'the picker choices');
+    // The panel ignores synthetic events, so choose with the real keyboard.
+    const picker = await page.evaluateHandle((expr) => eval(expr), rowSel('.fw-teach__select'));
+    await picker.asElement().focus();
+    await page.keyboard.type('One of your custom');
+    await sleep(300);
+    const result = await page.evaluate((expr) => {
+      const second = eval(expr);
       if (!second || second.hidden) return 'no second list';
       const labels = Array.from(second.options).map((o) => o.textContent);
       if (!labels.includes('Employee badge')) return `second list: ${labels.join(',')}`;
       if (labels.some((l) => l.includes('EMP-4471'))) return 'a value leaked into the list';
       second.value = 'e2e-cf-1';
-      Array.from(row.querySelectorAll('button'))
-        .find((b) => b.textContent.trim() === 'Use this')
-        .click();
       return 'ok';
-    });
+    }, rowSel('.fw-teach__own'));
+    if (result === 'ok') {
+      assert(await clickRowLinkIn(page, 'Badge reference', 'Use this'), 'no Use this');
+    }
     assertEqual(result, 'ok', 'teaching a custom field');
     const after = await waitForWidget(
       page,
@@ -1414,13 +1422,18 @@ export async function runV05Suite(ctx) {
       '',
       'the saved answer reached the form before "Use this answer"',
     );
-    await page.evaluate(() => {
-      const area = document
+    // The panel ignores synthetic input, so edit with the real keyboard.
+    const area = await page.evaluateHandle(() =>
+      document
         .querySelector('[data-fillwright-widget]')
-        .shadowRoot.querySelector('.fw-saved textarea');
-      area.value = `${area.value} Edited.`;
-      area.dispatchEvent(new Event('input'));
-    });
+        .shadowRoot.querySelector('.fw-saved textarea'),
+    );
+    await area.asElement().focus();
+    await page.evaluate(
+      (node) => node.setSelectionRange(node.value.length, node.value.length),
+      area,
+    );
+    await page.keyboard.type(' Edited.');
     assert(await clickRowLinkIn(page, 'Why do you want', 'Use this answer'), 'no Use this answer');
     await page.waitForFunction(() => document.getElementById('s-why').value.length > 0, {
       timeout: 10_000,

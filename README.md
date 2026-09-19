@@ -27,6 +27,9 @@ It never submits an application. That click is always yours.
 - **Verifies every write** and reports what did not take, with a one-click retry.
 - **Learns from your corrections.** Tell it what an unrecognised field means and
   it remembers, for that site, on this device only.
+- **Reuses what you wrote.** Point a field at one of your custom fields or
+  saved answers, and on a written question pick a saved answer (ranked by how
+  well it matches) to edit and use. Never chosen for you.
 - **Explains itself.** Every row in the review list has a "Why?" that says what
   matched and where, and a "Show me" that points at the field on the page.
 - **Leaves hidden fields alone.** Fields a person cannot see — honeypots,
@@ -186,6 +189,7 @@ npx serve test-pages     # then open http://localhost:3000
 | `ats/linkedin.html` | LinkedIn Easy Apply: a modal with Next / Review / Submit that must never be pressed |
 | `virtual-list.html` | A 600-entry virtualised dropdown |
 | `spa-steps.html`, `add-another.html`, `one-off.html`, `rejecting.html`, `frame-host.html` | Router navigation, adding blocks, one-off corrections, a form that rejects every write, a form in someone else's frame |
+| `saved-answers.html` | A field taught as one of your custom fields; a written question answered from a saved answer only after you confirm |
 | `newsletter.html`, `login.html` | Pages that are *not* applications, where proactive modes must stay silent |
 | `hostile-roles.html` | Submit buttons and links disguised as dropdowns, options and radios |
 | `hidden-fields.html` | Honeypots and six hiding techniques (opacity, off-screen, 1 px clip, `aria-hidden`, `inert`, covered); none may be filled |

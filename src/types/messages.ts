@@ -67,7 +67,7 @@ export type ContentRequest =
        * Corrections the user made for this fill only, without asking Fillwright
        * to remember them. Applied like saved mappings, never persisted.
        */
-      overrides?: Array<{ fingerprint: string; canonical: CanonicalField }>;
+      overrides?: Array<{ fingerprint: string; canonical: CanonicalField; customKey?: string }>;
     }
   | { type: 'content:fill-complete'; outcomes: FillOutcome[] }
   | { type: 'content:save-mapping'; mapping: Omit<SavedMapping, 'id' | 'createdAt' | 'useCount'> }
@@ -93,7 +93,14 @@ export type ContentRequest =
   | { type: 'content:open-page'; route: string }
   | { type: 'content:switch-profile'; profileId: string }
   | { type: 'content:draft-facts' }
-  | { type: 'content:draft'; question: string; factIds: string[]; maxCharacters?: number };
+  | { type: 'content:draft'; question: string; factIds: string[]; maxCharacters?: number }
+  /**
+   * Titles of the user's custom fields and saved answers, for the picker and
+   * the "Use a saved answer" list. Never values or answer text.
+   */
+  | { type: 'content:answer-choices'; question?: string }
+  /** The text of ONE saved answer, after the user picked it by title. */
+  | { type: 'content:saved-answer'; id: string };
 
 export type AnyRequest = UiRequest | ContentRequest;
 

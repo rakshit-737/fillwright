@@ -17,6 +17,8 @@ export async function saveMapping(
   const mapping: SavedMapping = existing
     ? { ...existing, ...input, useCount: existing.useCount }
     : { ...input, id: newId('map'), createdAt: now(), useCount: 0 };
+  // Re-teaching a field as an ordinary one must not keep a stale custom key.
+  if (!input.customKey) delete mapping.customKey;
   await idb.put('mappings', mapping);
   return mapping;
 }

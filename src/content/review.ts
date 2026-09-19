@@ -1,6 +1,7 @@
 import type { CanonicalField, FieldSignals, FillPlanEntry, MappingStatus } from '@/types/fields';
 import { FIELD_CATALOG, catalogGroups } from '@/field-detection/catalog';
 import { STATUS_LABELS } from '@/autofill/status';
+import { customKeyFor, type AnswerChoice, type AnswerChoices } from '@/autofill/saved-answers';
 
 /**
  * The review row.
@@ -30,7 +31,25 @@ export type DraftView =
   | { phase: 'result'; text: string; facts: DraftFact[]; chosen: Set<string> }
   | { phase: 'error'; message: string };
 
+/**
+ * "Use a saved answer" for one written question. Titles first; the text of
+ * the chosen answer arrives only after the user picks it, and is shown for
+ * editing before anything is written.
+ */
+export type SavedAnswerView =
+  | { phase: 'loading' }
+  | { phase: 'choose'; answers: AnswerChoice[]; busy?: boolean }
+  | { phase: 'result'; text: string; answers: AnswerChoice[] }
+  | { phase: 'error'; message: string };
+
 export interface ReviewCallbacks {
+  /** Titles of the user's custom fields and saved answers, for the picker. */
+  choices?: AnswerChoices | null;
+  savedAnswers?: Map<string, SavedAnswerView>;
+  onSavedAnswerStart?: (entry: FillPlanEntry) => void;
+  onSavedAnswerPick?: (entry: FillPlanEntry, id: string) => void;
+  onSavedAnswerUse?: (entry: FillPlanEntry, text: string) => void;
+  onSavedAnswerCancel?: (entry: FillPlanEntry) => void;
   /** Raw signals per field, when diagnostics are on. Null otherwise. */
   diagnostics?: Map<string, FieldSignals> | null;
   drafts?: Map<string, DraftView>;
@@ -41,7 +60,12 @@ export interface ReviewCallbacks {
   onDraftCancel?: (entry: FillPlanEntry) => void;
   onToggle: (fieldId: string, selected: boolean) => void;
   /** The user told Fillwright what an unrecognised field means. */
-  onTeach: (entry: FillPlanEntry, field: CanonicalField, remember: boolean) => void;
+  onTeach: (
+    entry: FillPlanEntry,
+    field: CanonicalField,
+    remember: boolean,
+    customKey?: string,
+  ) => void;
   onExplainToggle: () => void;
   /** Scroll the row's field into view and outline it on the page. */
   onShowField?: (fieldId: string) => void;
@@ -189,6 +213,18 @@ function renderRow(
     );
   }
 
+  if (
+    entry.status === 'manual-required' &&
+    entry.canonical !== 'documents.resume' &&
+    entry.canonical !== 'documents.coverLetter' &&
+    (callbacks.choices?.answers.length ?? 0) > 0 &&
+    !callbacks.savedAnswers?.has(entry.fieldId)
+  ) {
+    tools.appendChild(
+      button('Use a saved answer', 'fw-link', () => callbacks.onSavedAnswerStart?.(entry)),
+    );
+  }
+
   if (tools.childElementCount > 0) item.appendChild(tools);
 
   if (expanded.has(entry.fieldId)) {
@@ -204,6 +240,9 @@ function renderRow(
 
   const draft = callbacks.drafts?.get(entry.fieldId);
   if (draft) item.appendChild(renderDraft(entry, draft, callbacks));
+
+  const saved = callbacks.savedAnswers?.get(entry.fieldId);
+  if (saved) item.appendChild(renderSavedAnswer(entry, saved, callbacks));
 
   return item;
 }
@@ -242,7 +281,49 @@ function renderTeachPicker(entry: FillPlanEntry, callbacks: ReviewCallbacks): HT
     }
     select.appendChild(optgroup);
   }
+  // The user's own custom fields and saved answers, by title. Choosing one
+  // of these opens a second list naming the item.
+  const own = document.createElement('optgroup');
+  own.label = 'Your own';
+  const ownKinds: Array<[string, string, AnswerChoice[]]> = [
+    [OWN_FIELD, 'One of your custom fields…', callbacks.choices?.custom ?? []],
+    [OWN_ANSWER, 'One of your saved answers…', callbacks.choices?.answers ?? []],
+  ];
+  for (const [value, text, items] of ownKinds) {
+    const option = document.createElement('option');
+    option.value = value;
+    option.textContent = items.length ? text : `${text} (none yet)`;
+    option.disabled = items.length === 0;
+    own.appendChild(option);
+  }
+  select.appendChild(own);
   panel.appendChild(select);
+
+  const second = document.createElement('select');
+  second.className = 'fw-teach__select fw-teach__own';
+  second.hidden = true;
+  panel.appendChild(second);
+
+  select.addEventListener('change', () => {
+    const kind = ownKinds.find(([value]) => value === select.value);
+    second.replaceChildren();
+    second.hidden = !kind;
+    if (!kind) return;
+    second.setAttribute(
+      'aria-label',
+      kind[0] === OWN_FIELD ? 'Which custom field' : 'Which saved answer',
+    );
+    const blankOwn = document.createElement('option');
+    blankOwn.value = '';
+    blankOwn.textContent = 'Choose…';
+    second.appendChild(blankOwn);
+    for (const item of kind[2]) {
+      const option = document.createElement('option');
+      option.value = item.id;
+      option.textContent = item.label;
+      second.appendChild(option);
+    }
+  });
 
   const rememberRow = el('label', 'fw-teach__remember');
   const remember = document.createElement('input');
@@ -258,6 +339,12 @@ function renderTeachPicker(entry: FillPlanEntry, callbacks: ReviewCallbacks): HT
   actions.appendChild(
     button('Use this', 'fw-btn fw-btn--primary fw-btn--sm', () => {
       if (!select.value) return;
+      if (select.value === OWN_FIELD || select.value === OWN_ANSWER) {
+        if (!second.value) return;
+        const kind = select.value === OWN_FIELD ? 'field' : 'answer';
+        callbacks.onTeach(entry, 'custom', remember.checked, customKeyFor(kind, second.value));
+        return;
+      }
       callbacks.onTeach(entry, select.value as CanonicalField, remember.checked);
     }),
   );
@@ -271,6 +358,94 @@ function renderTeachPicker(entry: FillPlanEntry, callbacks: ReviewCallbacks): HT
     ),
   );
 
+  return panel;
+}
+
+const OWN_FIELD = '__own-field';
+const OWN_ANSWER = '__own-answer';
+
+/**
+ * "Use a saved answer" on a written question.
+ *
+ * Mirrors drafting: titles first (ranked by how well they match the question,
+ * with none chosen), then the text of the one answer picked, in an editable
+ * box. Nothing reaches the form until "Use this answer" is pressed.
+ */
+function renderSavedAnswer(
+  entry: FillPlanEntry,
+  view: SavedAnswerView,
+  callbacks: ReviewCallbacks,
+): HTMLElement {
+  const panel = el('div', 'fw-teach fw-saved');
+  panel.setAttribute(
+    'aria-busy',
+    String(view.phase === 'loading' || (view.phase === 'choose' && Boolean(view.busy))),
+  );
+  const actions = el('div', 'fw-teach__actions');
+  const cancel = button('Cancel', 'fw-btn fw-btn--ghost fw-btn--sm', () =>
+    callbacks.onSavedAnswerCancel?.(entry),
+  );
+
+  if (view.phase === 'loading') {
+    panel.appendChild(el('p', 'fw-note', 'Loading your saved answers…'));
+    return panel;
+  }
+
+  if (view.phase === 'error') {
+    panel.appendChild(el('p', 'fw-error', view.message));
+    cancel.textContent = 'Close';
+    actions.appendChild(cancel);
+    panel.appendChild(actions);
+    return panel;
+  }
+
+  if (view.phase === 'choose') {
+    panel.appendChild(el('p', 'fw-teach__lead', 'Which saved answer?'));
+    const select = document.createElement('select');
+    select.className = 'fw-teach__select fw-saved__select';
+    select.setAttribute('aria-label', `Saved answer for ${entry.label}`);
+    const blank = document.createElement('option');
+    blank.value = '';
+    blank.textContent = 'Choose…';
+    select.appendChild(blank);
+    for (const answer of view.answers) {
+      const option = document.createElement('option');
+      option.value = answer.id;
+      option.textContent = answer.label;
+      select.appendChild(option);
+    }
+    select.disabled = Boolean(view.busy);
+    panel.appendChild(select);
+    panel.appendChild(
+      el('p', 'fw-note', 'Closest matches are listed first. You can edit it before it is used.'),
+    );
+    actions.appendChild(cancel);
+    const show = button('Show this answer', 'fw-btn fw-btn--primary fw-btn--sm', () => {
+      if (select.value) callbacks.onSavedAnswerPick?.(entry, select.value);
+    });
+    show.disabled = Boolean(view.busy);
+    actions.appendChild(show);
+    panel.appendChild(actions);
+    return panel;
+  }
+
+  panel.appendChild(el('p', 'fw-teach__lead', 'Your saved answer — edit it before you use it'));
+  const area = document.createElement('textarea');
+  area.className = 'fw-draft__text';
+  area.value = view.text;
+  area.rows = 6;
+  area.setAttribute('aria-label', `Saved answer for ${entry.label}`);
+  area.addEventListener('input', () => {
+    view.text = area.value;
+  });
+  panel.appendChild(area);
+  actions.appendChild(cancel);
+  actions.appendChild(
+    button('Use this answer', 'fw-btn fw-btn--primary fw-btn--sm', () => {
+      if (area.value.trim()) callbacks.onSavedAnswerUse?.(entry, area.value.trim());
+    }),
+  );
+  panel.appendChild(actions);
   return panel;
 }
 

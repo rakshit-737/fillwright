@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Apply — Payments Engineer at Northwind</title>
+    <link rel="stylesheet" href="./shared.css" />
+  </head>
+  <body>
+    <h1>Apply: Payments Engineer</h1>
+    <p class="lead">
+      Expected: "Badge reference" is not recognised. Setting it to one of your custom fields (with
+      "Remember" ticked) fills that field's value, and after a reload it is still recognised on this
+      site. The written question is never filled by itself: its row offers "Use a saved answer",
+      lists titles with none pre-selected, shows the chosen answer for editing, and writes nothing
+      until "Use this answer" is pressed.
+    </p>
+    <form>
+      <label for="s-first">First Name</label>
+      <input id="s-first" name="first_name" autocomplete="given-name" />
+      <label for="s-email">Email</label>
+      <input id="s-email" name="email" type="email" autocomplete="email" />
+      <label for="s-badge">Badge reference</label>
+      <input id="s-badge" name="zz_badge_17" />
+      <label for="s-why">Why do you want to work at Northwind?</label>
+      <textarea id="s-why" name="q_why_northwind" rows="5"></textarea>
+      <button type="submit">Submit application</button>
+    </form>
+    <script src="./shared.js"></script>
+  </body>
+</html>

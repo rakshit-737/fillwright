@@ -774,6 +774,183 @@ export async function runV05Suite(ctx) {
 
   await ui({ type: 'ui:set-settings', patch: { ai: { enabled: false, provider: 'none' } } });
 
+  /* --- custom fields and saved answers --------------------------------- */
+
+  const SAVED_ANSWER_TEXT = 'I want to build payment systems people can trust.';
+  {
+    const current = (
+      await ui({ type: 'ui:get-profile', profileId: state.data.settings.activeProfileId })
+    ).data;
+    current.custom = [
+      {
+        id: 'e2e-cf-1',
+        key: 'custom1',
+        label: 'Employee badge',
+        value: 'EMP-4471',
+        provenance: prov,
+      },
+    ];
+    current.preferences.savedAnswers = [
+      {
+        id: 'e2e-sa-1',
+        key: 'answer-1',
+        label: 'Greatest strength',
+        text: 'Persistence.',
+        updatedAt: '',
+      },
+      {
+        id: 'e2e-sa-2',
+        key: 'answer-2',
+        label: 'Why do you want to work here',
+        text: SAVED_ANSWER_TEXT,
+        updatedAt: '',
+      },
+    ];
+    const stored = await ui({ type: 'ui:save-profile', profile: current });
+    assert(stored.ok, `could not seed custom fields: ${stored.error}`);
+  }
+
+  await test('a custom field taught once is remembered for that site', async () => {
+    const page = await openAndReview('saved-answers.html');
+    assertEqual(
+      itemFor(await readWidget(page), 'Badge reference')?.badge,
+      'Not recognised',
+      'the fixture field should start unrecognised',
+    );
+    const result = await page.evaluate(() => {
+      const root = document.querySelector('[data-fillwright-widget]').shadowRoot;
+      const rowFor = () =>
+        Array.from(root.querySelectorAll('.fw-item')).find((item) =>
+          item.querySelector('.fw-item__label')?.textContent.trim().startsWith('Badge reference'),
+        );
+      const open = Array.from(rowFor().querySelectorAll('button')).find(
+        (b) => b.textContent.trim() === 'Set what this is',
+      );
+      if (!open) return 'no Set what this is';
+      open.click();
+      const row = rowFor();
+      const select = row.querySelector('.fw-teach__select');
+      const own = Array.from(select.options).find((o) =>
+        o.textContent.startsWith('One of your custom fields'),
+      );
+      if (!own || own.disabled) return 'no custom-field choice';
+      if (
+        !Array.from(select.options).some((o) =>
+          o.textContent.startsWith('One of your saved answers'),
+        )
+      )
+        return 'no saved-answer choice';
+      select.value = own.value;
+      select.dispatchEvent(new Event('change'));
+      const second = row.querySelector('.fw-teach__own');
+      if (!second || second.hidden) return 'no second list';
+      const labels = Array.from(second.options).map((o) => o.textContent);
+      if (!labels.includes('Employee badge')) return `second list: ${labels.join(',')}`;
+      if (labels.some((l) => l.includes('EMP-4471'))) return 'a value leaked into the list';
+      second.value = 'e2e-cf-1';
+      Array.from(row.querySelectorAll('button'))
+        .find((b) => b.textContent.trim() === 'Use this')
+        .click();
+      return 'ok';
+    });
+    assertEqual(result, 'ok', 'teaching a custom field');
+    const after = await waitForWidget(
+      page,
+      (s) => itemFor(s, 'Badge reference')?.value === 'EMP-4471',
+    );
+    assert(after, 'the custom field value was not proposed');
+    assertEqual(
+      await page.evaluate(() => document.getElementById('s-badge').value),
+      '',
+      'the form changed before Fill',
+    );
+    await page.close();
+
+    const again = await openAndReview('saved-answers.html');
+    const remembered = await page2Item(again, 'Badge reference');
+    assertEqual(remembered?.value, 'EMP-4471', 'the custom field was not remembered after reload');
+    const chips = await again.evaluate(() =>
+      Array.from(
+        document.querySelector('[data-fillwright-widget]').shadowRoot.querySelectorAll('.fw-chip'),
+      ).map((node) => node.textContent),
+    );
+    assert(chips.includes('remembered'), `expected "remembered" chip, saw ${chips.join(',')}`);
+    await again.close();
+    await ui({ type: 'ui:clear-saved-mappings', origin: server.origin });
+  });
+
+  async function page2Item(page, prefix) {
+    return itemFor(await waitForWidget(page, (s) => Boolean(itemFor(s, prefix))), prefix);
+  }
+
+  await test('an essay row offers a saved answer, and nothing is filled until confirmed', async () => {
+    const page = await openAndReview('saved-answers.html');
+    assert(
+      await clickRowLinkIn(page, 'Why do you want', 'Use a saved answer'),
+      'no "Use a saved answer" on the essay row',
+    );
+    await page.waitForFunction(
+      () =>
+        document
+          .querySelector('[data-fillwright-widget]')
+          .shadowRoot.querySelector('.fw-saved .fw-saved__select') !== null,
+      { timeout: 10_000 },
+    );
+    const listed = await page.evaluate(() => {
+      const select = document
+        .querySelector('[data-fillwright-widget]')
+        .shadowRoot.querySelector('.fw-saved__select');
+      return { value: select.value, options: Array.from(select.options).map((o) => o.textContent) };
+    });
+    assertEqual(listed.value, '', 'a saved answer was pre-selected');
+    assertEqual(listed.options[1], 'Why do you want to work here', 'best match not listed first');
+    assert(
+      !listed.options.join('|').includes(SAVED_ANSWER_TEXT),
+      'answer text reached the page before it was picked',
+    );
+
+    await page.evaluate(() => {
+      const select = document
+        .querySelector('[data-fillwright-widget]')
+        .shadowRoot.querySelector('.fw-saved__select');
+      select.value = 'e2e-sa-2';
+    });
+    assert(
+      await clickRowLinkIn(page, 'Why do you want', 'Show this answer'),
+      'no Show this answer',
+    );
+    await page.waitForFunction(
+      () =>
+        document
+          .querySelector('[data-fillwright-widget]')
+          .shadowRoot.querySelector('.fw-saved textarea') !== null,
+      { timeout: 10_000 },
+    );
+    assertEqual(
+      await page.evaluate(() => document.getElementById('s-why').value),
+      '',
+      'the saved answer reached the form before "Use this answer"',
+    );
+    await page.evaluate(() => {
+      const area = document
+        .querySelector('[data-fillwright-widget]')
+        .shadowRoot.querySelector('.fw-saved textarea');
+      area.value = `${area.value} Edited.`;
+      area.dispatchEvent(new Event('input'));
+    });
+    assert(await clickRowLinkIn(page, 'Why do you want', 'Use this answer'), 'no Use this answer');
+    await page.waitForFunction(() => document.getElementById('s-why').value.length > 0, {
+      timeout: 10_000,
+    });
+    assertEqual(
+      await page.evaluate(() => document.getElementById('s-why').value),
+      `${SAVED_ANSWER_TEXT} Edited.`,
+      'the edited saved answer was not written',
+    );
+    assertEqual(await page.evaluate(() => window.__submitted ?? false), false, 'submitted');
+    await page.close();
+  });
+
   /* --- error recovery ------------------------------------------------- */
 
   await test('errors: a form that rejects every value gets one plain summary', async () => {

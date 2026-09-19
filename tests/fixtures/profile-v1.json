@@ -1,0 +1,26 @@
+{
+  "id": "prof_0123456789abcdef01234567",
+  "name": "Aditi (v1)",
+  "createdAt": "2025-01-10T09:00:00.000Z",
+  "updatedAt": "2025-02-01T09:00:00.000Z",
+  "schemaVersion": 1,
+  "personal": {
+    "firstName": { "value": "Aditi", "provenance": { "source": "resume", "confidence": 0.95, "updatedAt": "2025-01-10T09:00:00.000Z" } },
+    "lastName": { "value": "Rao", "provenance": { "source": "user", "confidence": 1, "updatedAt": "2025-01-10T09:00:00.000Z" } },
+    "email": { "value": "aditi@example.com", "provenance": { "source": "user", "confidence": 1, "updatedAt": "2025-01-10T09:00:00.000Z" } }
+  },
+  "address": {
+    "city": { "value": "Pune", "provenance": { "source": "user", "confidence": 1, "updatedAt": "2025-01-10T09:00:00.000Z" } }
+  },
+  "links": {},
+  "education": [],
+  "experience": [
+    { "id": "exp_aaaaaaaaaaaaaaaaaaaaaaaa", "company": { "value": "Acme", "provenance": { "source": "resume", "confidence": 0.9, "updatedAt": "2025-01-10T09:00:00.000Z" } } }
+  ],
+  "skills": [],
+  "summary": { "value": "Engineer.", "provenance": { "source": "user", "confidence": 1, "updatedAt": "2025-01-10T09:00:00.000Z" } },
+  "preferences": { "desiredTitles": ["Engineer"] },
+  "sensitive": { "workAuthorization": { "authorizedIn": { "IN": "yes" } } },
+  "custom": [],
+  "resumeIds": ["res_bbbbbbbbbbbbbbbbbbbbbbbb"]
+}

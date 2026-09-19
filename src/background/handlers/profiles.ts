@@ -8,6 +8,7 @@ import {
 } from '@/storage/profiles';
 import { getSettings, setSettings } from '@/storage/settings';
 import { sanitizeString } from '@/security/validate';
+import { validateProfilePayload } from '@/security/boundary';
 import type { UiRequest } from '@/types/messages';
 
 export function registerProfileHandlers(): void {
@@ -21,8 +22,9 @@ export function registerProfileHandlers(): void {
 
   handle('ui:save-profile', async (request) => {
     const { profile } = request as Extract<UiRequest, { type: 'ui:save-profile' }>;
-    if (!profile?.id) return err('Profile is missing an id', 'EBADPROFILE');
-    return ok(await saveProfile(profile));
+    const checked = validateProfilePayload(profile);
+    if (!checked.ok) return err(checked.error, checked.code);
+    return ok(await saveProfile(checked.value));
   });
 
   handle('ui:create-profile', async (request) => {

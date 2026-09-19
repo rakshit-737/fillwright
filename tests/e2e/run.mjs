@@ -19,6 +19,7 @@ import { runA11ySuite } from './suite-a11y.mjs';
 import { runOnboardingSuite } from './suite-onboarding.mjs';
 import { runEditorSuite } from './suite-editor.mjs';
 import { runClickjackSuite } from './suite-clickjack.mjs';
+import { runMigrationSuite } from './suite-migration.mjs';
 import {
   launch,
   evalInWorker,
@@ -1548,6 +1549,19 @@ async function main() {
       assertEqual,
       worker,
       evalInWorker,
+    });
+
+    /* --- older records and the handler boundary --------------------------- */
+
+    await runMigrationSuite({
+      browser,
+      extensionId,
+      server,
+      test,
+      assert,
+      assertEqual,
+      worker,
+      scanPage,
     });
 
     await runOnboardingSuite({ browser, extensionId, test, assert, assertEqual });

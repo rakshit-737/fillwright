@@ -4,10 +4,11 @@
  * Each fixture states its expected behaviour at the top of the page; these
  * tests assert exactly that. Trust note: drives the TEST build only.
  */
-import { readWidget, clickWidgetButton, waitForWidget, sleep } from './harness.mjs';
+import { readWidget, clickWidgetButton, waitForWidget, sleep, ATS_TEST_HOST } from './harness.mjs';
 
 export async function runAtsSuite(ctx) {
-  const { browser, extensionId, server, test, assert, assertEqual, worker, evalInWorker } = ctx;
+  const { secure, browser, extensionId, server, test, assert, assertEqual, worker, evalInWorker } =
+    ctx;
   const url = (name) => `${server.origin}/ats/${name}`;
 
   const control = await browser.newPage();
@@ -377,6 +378,63 @@ export async function runAtsSuite(ctx) {
     assertEqual(after.href, url, 'a disguised link was followed');
     assertEqual(after.first, P.first, 'ordinary fields should still fill');
     await page.close();
+  });
+
+  /* --- adapters stay out of passive scans ---------------------------- */
+
+  await test('ats/workday: Smart mode presses no page button until the user opens the panel', async () => {
+    if (!secure) {
+      console.log('    (skipped: openssl is unavailable, so the HTTPS fixture could not start)');
+      return;
+    }
+    const pageUrl = `https://${ATS_TEST_HOST}:${secure.port}/ats/workday.html`;
+    await ui({ type: 'ui:set-settings', patch: { autofill: { mode: 'smart' } } });
+    const sync = await ui({ type: 'ui:sync-auto-detect' });
+    assert(sync.data.registered, `passive script not registered: ${sync.data.reason}`);
+    const page = await browser.newPage();
+    try {
+      await page.goto(pageUrl, { waitUntil: 'domcontentloaded' });
+      // Smart mode prepares the plan on its own; wait until it has.
+      await page.waitForFunction(
+        () => {
+          const node = document
+            .querySelector('[data-fillwright-widget]')
+            ?.shadowRoot?.querySelector('.fw-pill');
+          return node && /\d+ ready/.test(node.textContent);
+        },
+        { timeout: 20_000 },
+      );
+      // A form change triggers another quiet scan; give it time to happen.
+      await page.evaluate(() => {
+        const extra = document.createElement('input');
+        extra.setAttribute('aria-label', 'Middle Name');
+        document.getElementById('page').appendChild(extra);
+      });
+      await sleep(2_500);
+      assertEqual(
+        await page.evaluate(() => window.__pagePresses),
+        0,
+        'a passive scan pressed a page button',
+      );
+      // The user opens the panel from the pill: adapters may run now, and still must not
+      // press a dropdown or a navigation menu.
+      await page.evaluate(() =>
+        document
+          .querySelector('[data-fillwright-widget]')
+          .shadowRoot.querySelector('.fw-pill')
+          .click(),
+      );
+      await waitForWidget(page, (s) => s.text.includes('application field'), 15_000);
+      assertEqual(
+        await page.evaluate(() => window.__pagePresses),
+        0,
+        'an explicit scan pressed a dropdown or nav menu',
+      );
+    } finally {
+      await page.close();
+      await ui({ type: 'ui:set-settings', patch: { autofill: { mode: 'manual' } } });
+      await ui({ type: 'ui:sync-auto-detect' });
+    }
   });
 
   await ctx.workdayPage?.close();

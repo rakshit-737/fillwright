@@ -110,14 +110,38 @@ export function detectAdapter(url: string): SiteAdapter | null {
 }
 
 /**
+ * Elements an adapter has already pressed on this page. A dropdown or an
+ * accordion goes back to aria-expanded="false" when it closes, so without this
+ * every rescan would press it again.
+ */
+let pressed = new WeakSet<HTMLElement>();
+
+/** For tests: forget what has been pressed, as a fresh page load would. */
+export function resetAdapterPresses(): void {
+  pressed = new WeakSet<HTMLElement>();
+}
+
+const CONTROLS =
+  'input, select, textarea, [contenteditable="true"], [role="combobox"], [role="textbox"]';
+
+function countControls(): number {
+  return document.querySelectorAll(CONTROLS).length;
+}
+
+/**
  * Runs an adapter's preparation step.
  *
- * Only elements that are visible, enabled, and explicitly collapsed are
- * clicked, and never anything that looks like a submit control — an expander
- * mislabelled in a selector must not be able to send an application.
+ * Callers must only invoke this on an explicit activation by the user — never
+ * from a quiet or passive scan. Only accordion-like elements that are visible,
+ * enabled and collapsed are pressed, each at most once per page, and never
+ * anything that looks like a submit control. If a press reveals no new form
+ * controls, the remaining matches of that selector are left alone: they are
+ * evidently not what the adapter was looking for.
  */
 export async function applyAdapter(adapter: SiteAdapter): Promise<void> {
   if (!adapter.expandSelectors?.length) return;
+  const wait = Math.min(adapter.settleMs ?? 0, 150);
+  let pressedAny = false;
 
   for (const selector of adapter.expandSelectors) {
     let candidates: NodeListOf<HTMLElement>;
@@ -128,27 +152,51 @@ export async function applyAdapter(adapter: SiteAdapter): Promise<void> {
     }
 
     for (const element of Array.from(candidates).slice(0, 20)) {
+      if (pressed.has(element) || !element.isConnected) continue;
       if (!isSafeToExpand(element)) continue;
+      pressed.add(element);
+      const before = countControls();
       try {
         element.click();
       } catch {
         /* A page may throw from its own handler; that is not our problem. */
       }
+      pressedAny = true;
+      if (wait) await new Promise((resolve) => setTimeout(resolve, wait));
+      if (countControls() <= before) break;
     }
   }
 
-  if (adapter.settleMs) {
+  if (pressedAny && adapter.settleMs) {
     await new Promise((resolve) => setTimeout(resolve, adapter.settleMs));
   }
 }
 
+/** Containers whose buttons are menus or navigation, never form sections. */
+const NOT_A_FORM_SECTION =
+  'nav, header, [role="navigation"], [role="banner"], [role="menu"], [role="menubar"], [role="toolbar"], [role="listbox"], [role="tablist"]';
+
 /**
- * The guard that makes adapters safe.
- *
- * Anything that could submit, apply, or navigate is refused outright, whatever
- * an adapter's selector matched.
+ * Accordion semantics: the element controls a region that exists on the page,
+ * or it is the disclosure button of a heading.
  */
-export function isSafeToExpand(element: HTMLElement): boolean {
+function isAccordion(element: HTMLElement): boolean {
+  const controls = (element.getAttribute('aria-controls') ?? '').trim();
+  if (controls) {
+    const ids = controls.split(/\s+/);
+    if (ids.some((id) => element.ownerDocument.getElementById(id) !== null)) return true;
+  }
+  const parent = element.parentElement;
+  if (!parent) return false;
+  return /^H[1-6]$/.test(parent.tagName) || parent.getAttribute('role') === 'heading';
+}
+
+/**
+ * The base press guard shared by adapters and the explicit "add another entry"
+ * action: visible, enabled, collapsed-or-plain, and nothing that could submit,
+ * apply, delete or navigate.
+ */
+export function isSafeToPress(element: HTMLElement): boolean {
   if (!isPressSafe(element)) return false;
   if (element.closest('[data-fillwright-ui]')) return false;
   // A <button> with no explicit type defaults to type="submit", so checking the
@@ -167,3 +215,29 @@ export function isSafeToExpand(element: HTMLElement): boolean {
     text,
   );
 }
+
+/**
+ * The guard that makes adapters safe.
+ *
+ * Everything isSafeToPress refuses, plus anything that is not plainly an
+ * accordion: dropdowns, menus, comboboxes and navigation also report
+ * aria-expanded="false", and pressing them is not ours to do.
+ */
+export function isSafeToExpand(element: HTMLElement): boolean {
+  const popup = (element.getAttribute('aria-haspopup') ?? '').trim().toLowerCase();
+  if (popup && popup !== 'false') return false;
+  const role = (element.getAttribute('role') ?? '').toLowerCase();
+  if (NOT_AN_EXPANDER_ROLES.includes(role)) return false;
+  if (element.closest(NOT_A_FORM_SECTION)) return false;
+  if (!isAccordion(element)) return false;
+  return isSafeToPress(element);
+}
+
+const NOT_AN_EXPANDER_ROLES = [
+  'combobox',
+  'menuitem',
+  'menuitemcheckbox',
+  'menuitemradio',
+  'option',
+  'tab',
+];

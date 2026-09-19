@@ -73,7 +73,7 @@ function sources(dir, out = []) {
   return out;
 }
 
-const escape = (text) => text.replace(/[\^$.*+?()[\]{}|]/g, '\$&');
+const escape = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 export function unusedKeys(keys, files) {
   return keys.filter((key) => {

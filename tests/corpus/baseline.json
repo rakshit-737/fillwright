@@ -1,6 +1,6 @@
 {
   "field:*accuracy": {
-    "precision": 0.9032,
+    "precision": 0.9059,
     "recall": 1
   },
   "field:address.city": {
@@ -43,13 +43,17 @@
     "precision": 1,
     "recall": 0
   },
+  "field:education.endYear": {
+    "precision": 1,
+    "recall": 1
+  },
   "field:education.gpa": {
     "precision": 1,
     "recall": 1
   },
   "field:education.graduationDate": {
     "precision": 1,
-    "recall": 0.8
+    "recall": 1
   },
   "field:education.institution": {
     "precision": 1,
@@ -140,6 +144,10 @@
     "recall": 1
   },
   "field:personal.phone": {
+    "precision": 1,
+    "recall": 1
+  },
+  "field:personal.phoneNational": {
     "precision": 1,
     "recall": 1
   },
@@ -236,7 +244,7 @@
     "recall": 1
   },
   "field:unknown": {
-    "precision": 0.5875,
+    "precision": 0.5949,
     "recall": 1
   },
   "resume:company": {
@@ -252,8 +260,8 @@
     "recall": 1
   },
   "resume:firstName": {
-    "precision": 0.75,
-    "recall": 0.6667
+    "precision": 0.8,
+    "recall": 0.7407
   },
   "resume:gpa": {
     "precision": 1,
@@ -264,8 +272,8 @@
     "recall": 0.5806
   },
   "resume:lastName": {
-    "precision": 0.75,
-    "recall": 0.6667
+    "precision": 0.8,
+    "recall": 0.7407
   },
   "resume:phone": {
     "precision": 1,

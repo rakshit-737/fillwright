@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { send } from '@/utils/messaging';
 import type { DeepPartial } from '@/types/messages';
 import type { AutofillMode, Settings } from '@/types/settings';
+import { ALL_SITES, ATS_ORIGINS, grantedSiteOrigins } from '@/utils/site-access';
 
 interface Props {
   settings: Settings | null;
@@ -198,8 +199,6 @@ function Radio({
   );
 }
 
-const SITE_ACCESS = { origins: ['https://*/*'] };
-
 const MODES: Array<[AutofillMode, string, string]> = [
   [
     'manual',
@@ -209,7 +208,7 @@ const MODES: Array<[AutofillMode, string, string]> = [
   [
     'assist',
     'Assist',
-    'Offers a small prompt on pages that clearly are job applications. Needs permission to read https pages.',
+    'Offers a small prompt on pages that clearly are job applications. Needs access to job sites (or to sites you turn on one by one).',
   ],
   [
     'smart',
@@ -244,18 +243,26 @@ function AutofillModeSection({
       .catch(() => undefined);
   }, []);
 
+  const [granted, setGranted] = useState<string[]>([]);
+  const refreshGranted = () => void grantedSiteOrigins().then(setGranted);
+  useEffect(refreshGranted, []);
+  const allSites = granted.includes(ALL_SITES);
+
   const choose = async (mode: AutofillMode) => {
     setNotice('');
     if (mode !== 'manual') {
-      let granted = false;
+      let ok = false;
       try {
-        granted =
-          (await chrome.permissions.contains(SITE_ACCESS)) ||
-          (await chrome.permissions.request(SITE_ACCESS));
+        // Any https site already granted is enough (localhost alone is not); otherwise ask for the job-site
+        // tier only. Every https site is a separate, explicit step below.
+        ok =
+          (await grantedSiteOrigins()).some((o) => o.startsWith('https://')) ||
+          (await chrome.permissions.request({ origins: [...ATS_ORIGINS] }));
       } catch {
-        granted = false;
+        ok = false;
       }
-      if (!granted) {
+      refreshGranted();
+      if (!ok) {
         setNotice('Site access was not granted, so Fillwright stays in Manual mode.');
         return;
       }
@@ -266,15 +273,28 @@ function AutofillModeSection({
       setNotice(`The mode wasn’t changed. ${result.error}`);
       return;
     }
-    if (mode === 'manual' && (await chrome.permissions.contains(SITE_ACCESS).catch(() => false))) {
+    if (mode === 'manual' && (await grantedSiteOrigins()).length > 0) {
       setNotice(
         'Manual mode is on. Fillwright still holds site access — remove it below if you no longer need it.',
       );
     }
   };
 
+  const allowAllSites = async () => {
+    setNotice('');
+    const ok = await chrome.permissions.request({ origins: [ALL_SITES] }).catch(() => false);
+    refreshGranted();
+    await send({ type: 'ui:sync-auto-detect' });
+    setNotice(
+      ok ? 'Fillwright can now run on every https site.' : 'Access to all sites was not granted.',
+    );
+  };
+
   const revoke = async () => {
-    const removed = await chrome.permissions.remove(SITE_ACCESS).catch(() => false);
+    const origins = await grantedSiteOrigins();
+    const removed =
+      origins.length === 0 || (await chrome.permissions.remove({ origins }).catch(() => false));
+    refreshGranted();
     const result = await send<Settings>({
       type: 'ui:set-settings',
       patch: { autofill: { mode: 'manual' } },
@@ -309,6 +329,18 @@ function AutofillModeSection({
           </label>
         ))}
       </fieldset>
+      {settings.autofill.mode !== 'manual' && (
+        <p className="fw-field__hint">
+          {allSites
+            ? 'Fillwright may run on every https site.'
+            : 'Fillwright runs only on job sites and on sites you turn on from its toolbar popup.'}{' '}
+          {!allSites && (
+            <button className="fw-linkbtn" onClick={() => void allowAllSites()}>
+              Allow all sites instead
+            </button>
+          )}
+        </p>
+      )}
       {notice && (
         <p className="fw-field__hint" role="status">
           {notice}

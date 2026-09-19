@@ -1,3 +1,6 @@
+import { useEffect, useState } from 'react';
+import { describeOrigin, grantedSiteOrigins } from '@/utils/site-access';
+
 interface PermissionDoc {
   id: string;
   name: string;
@@ -35,10 +38,10 @@ const PERMISSIONS: PermissionDoc[] = [
   },
   {
     id: 'host',
-    name: 'Access to https sites (optional)',
-    why: 'Only if you choose Assist or Smart mode, so Fillwright can offer help on application pages before you click. Chrome asks you first.',
+    name: 'Access to sites (optional)',
+    why: 'Only if you choose Assist or Smart mode, so Fillwright can offer help on application pages before you click. By default only job sites (Greenhouse, Lever, Workday and similar) are requested; you can turn on a single site from the toolbar popup, or every https site as a separate step. Chrome asks you first.',
     canAccess:
-      'Pages on https sites while Assist or Smart is on. Fillwright checks locally whether a page is an ' +
+      'Pages on the sites you granted — listed below — while Assist or Smart is on. Fillwright checks locally whether a page is an ' +
       'application and stays silent if it is not. Localhost can be granted separately for testing your own forms.',
     cannotAccess:
       'Anything while you are in Manual mode. Switching back to Manual, or removing the access in Chrome, ' +
@@ -91,6 +94,57 @@ export function Permissions() {
           </li>
         ))}
       </ul>
+
+      <GrantedSites />
     </div>
+  );
+}
+
+/** Every site Chrome says Fillwright may run on, each removable on its own. */
+function GrantedSites() {
+  const [origins, setOrigins] = useState<string[] | null>(null);
+  const [notice, setNotice] = useState('');
+  const refresh = () => void grantedSiteOrigins().then(setOrigins);
+  useEffect(refresh, []);
+
+  const revoke = async (origin: string) => {
+    const removed = await chrome.permissions.remove({ origins: [origin] }).catch(() => false);
+    setNotice(
+      removed
+        ? `Access to ${describeOrigin(origin)} removed.`
+        : `Chrome didn’t remove access to ${describeOrigin(origin)}. You can remove it on chrome://extensions.`,
+    );
+    refresh();
+  };
+
+  return (
+    <section className="fw-section" aria-labelledby="fw-granted-title">
+      <h2 className="fw-section__title" id="fw-granted-title">
+        Sites Fillwright can run on
+      </h2>
+      {origins === null ? (
+        <p className="fw-field__hint">Checking…</p>
+      ) : origins.length === 0 ? (
+        <p className="fw-field__hint">
+          None. Fillwright only sees a page after you activate it there.
+        </p>
+      ) : (
+        <ul className="fw-permlist" data-testid="granted-sites">
+          {origins.map((origin) => (
+            <li className="fw-perm fw-perm__head" key={origin}>
+              <code className="fw-perm__name">{describeOrigin(origin)}</code>
+              <button className="fw-btn" onClick={() => void revoke(origin)}>
+                Revoke
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {notice && (
+        <p className="fw-field__hint" role="status">
+          {notice}
+        </p>
+      )}
+    </section>
   );
 }

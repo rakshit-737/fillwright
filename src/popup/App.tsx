@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { send } from '@/utils/messaging';
 import { describeError, unsupportedPageCode } from '@/utils/errors';
+import { originPatternFor } from '@/utils/site-access';
 import { computeCompleteness, type Completeness } from '@/profile/completeness';
 import type { ProfileSummary } from '@/storage/profiles';
 import type { Settings } from '@/types/settings';
@@ -88,6 +89,9 @@ export function App() {
 
   // Some tabs can never be filled. Say so before the user tries.
   const [pageBlock, setPageBlock] = useState('');
+  // The one origin "Turn on for this site" would request, when it is not yet granted.
+  const [siteToGrant, setSiteToGrant] = useState<string | null>(null);
+  const [siteNotice, setSiteNotice] = useState('');
   useEffect(() => {
     chrome.tabs
       .query({ active: true, currentWindow: true })
@@ -97,6 +101,11 @@ export function App() {
         // keeps off-limits, so a missing URL is itself the answer.
         const code = !tab ? null : tab.url ? unsupportedPageCode(tab.url) : 'ERESTRICTED';
         setPageBlock(code ? describeError(code).message : '');
+        const pattern = !code && tab?.url ? originPatternFor(tab.url) : null;
+        if (!pattern) return;
+        return chrome.permissions
+          .contains({ origins: [pattern] })
+          .then((has) => setSiteToGrant(has ? null : pattern));
       })
       .catch(() => setPageBlock(''));
   }, []);
@@ -111,6 +120,19 @@ export function App() {
     }
     setScanState('error');
     setScanError(result.error);
+  };
+
+  /** Asks Chrome for this one origin only — never every site. */
+  const turnOnForSite = async () => {
+    if (!siteToGrant) return;
+    const ok = await chrome.permissions.request({ origins: [siteToGrant] }).catch(() => false);
+    if (ok) {
+      await send({ type: 'ui:sync-auto-detect' });
+      setSiteToGrant(null);
+      setSiteNotice('Fillwright will now offer help on this site.');
+    } else {
+      setSiteNotice('Access to this site was not granted.');
+    }
   };
 
   const openOptions = (hash = '') => {
@@ -272,6 +294,16 @@ export function App() {
             >
               {scanState === 'scanning' ? 'Scanning…' : 'Fill this page'}
             </button>
+            {state.settings.autofill.mode !== 'manual' && siteToGrant && (
+              <button className="fw-btn" onClick={() => void turnOnForSite()}>
+                Turn on for this site
+              </button>
+            )}
+            {siteNotice && (
+              <p className="fw-muted" role="status">
+                {siteNotice}
+              </p>
+            )}
             <button className="fw-btn" onClick={() => openOptions('#/profile')}>
               Open profile
             </button>

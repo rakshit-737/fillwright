@@ -81,6 +81,12 @@ Notable changes, newest first. Versions follow semantic versioning.
   nothing is stored. Settings are type- and enum-checked and clamped; a
   settings page can no longer flip `privacy.encryptionEnabled` directly; a
   page can no longer save a mapping to a field outside the catalog.
+- **Assist and Smart no longer need every website.** Choosing either mode now
+  requests only the applicant-tracking sites; every https site is a separate,
+  explicit step. The popup's "Turn on for this site" requests just the current
+  origin. The content script is registered for exactly what Chrome reports as
+  granted, and Settings → Permissions lists each granted site with a Revoke
+  button that unregisters it at once. No manifest change.
 
 ### Fixed
 

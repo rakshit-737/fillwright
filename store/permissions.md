@@ -18,7 +18,7 @@ Gives the extension access to the current tab only when the user clicks the tool
 
 ## Host permission (optional): https://*/*
 
-Requested only when the user turns on Assist or Smart mode in settings, and only through Chrome's permission prompt. It lets Fillwright notice, on its own, that a page is a job application and offer help, instead of waiting for a click. The check runs locally, the extension never fills or submits anything without the user's approval, and turning the mode off or revoking the permission removes access immediately.
+Declared as optional so that narrower origins can be requested at runtime. When the user turns on Assist or Smart mode, Fillwright requests only the applicant-tracking sites (for example `https://*.greenhouse.io/*`, `https://*.lever.co/*`, `https://*.myworkdayjobs.com/*`). The popup's "Turn on for this site" requests the current site's origin only. Every https site (`https://*/*`) is requested only if the user takes that separate, explicit step in settings. Each request goes through Chrome's permission prompt. It lets Fillwright notice, on its own, that a page is a job application and offer help, instead of waiting for a click. The check runs locally, the extension never fills or submits anything without the user's approval, and the settings page lists every granted site with a Revoke button; revoking, turning the mode off, or removing the permission in Chrome removes access immediately.
 
 ## Host permissions (optional): http://localhost/*, http://127.0.0.1/*
 

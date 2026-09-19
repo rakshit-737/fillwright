@@ -53,7 +53,11 @@ only after you click its toolbar button or press its keyboard shortcut, and only
 on that tab.
 
 If you enable automatic detection, Chrome will ask you to approve specific
-sites. You can withdraw that at any time from `chrome://extensions`.
+sites: by default only job-application sites (Greenhouse, Lever, Workday and
+similar). You can add a single site from the toolbar popup, or every https site
+as a separate step in Settings. Settings → Permissions lists each site you
+granted with a Revoke button; you can also withdraw access from
+`chrome://extensions`.
 
 Fillwright never reads, stores, or fills:
 

@@ -1,6 +1,13 @@
 import { handle, ok, err } from '../router';
 import { destroyDb, idb } from '@/storage/idb';
-import { clearHistory, listHistory } from '@/storage/history';
+import {
+  addHistoryEntries,
+  clearHistory,
+  deleteHistoryEntry,
+  listHistory,
+  updateHistoryEntry,
+} from '@/storage/history';
+import { sanitizeTrackerPatch } from '@/storage/history-model';
 import {
   clearMappings,
   deleteMapping,
@@ -32,6 +39,21 @@ export function registerPrivacyHandlers(): void {
   handle('ui:clear-history', async () => {
     await clearHistory();
     return ok({ cleared: true });
+  });
+
+  /** Tracker fields only; company, role, site and date are not editable here. */
+  handle('ui:update-history', async (request) => {
+    const { id, patch } = request as Extract<UiRequest, { type: 'ui:update-history' }>;
+    const clean = sanitizeTrackerPatch(patch);
+    if (!clean) return err('That change is not valid.', 'EBADPATCH');
+    const updated = await updateHistoryEntry(sanitizeString(id, 64), clean);
+    return updated ? ok(updated) : err('Entry not found', 'ENOTFOUND');
+  });
+
+  handle('ui:delete-history-entry', async (request) => {
+    const { id } = request as Extract<UiRequest, { type: 'ui:delete-history-entry' }>;
+    await deleteHistoryEntry(sanitizeString(id, 64));
+    return ok({ deleted: true });
   });
 
   handle('ui:list-saved-mappings', async (request) => {
@@ -138,8 +160,8 @@ export function registerPrivacyHandlers(): void {
     }
     let historyCount = 0;
     if (plan.history.length && (await getSettings()).privacy.keepApplicationHistory) {
-      for (const entry of plan.history) await idb.put('history', entry);
-      historyCount = plan.history.length;
+      // Through the store, so imported entries are encrypted when the vault is on.
+      historyCount = await addHistoryEntries(plan.history);
     }
     await syncAutoDetect().catch(() => undefined);
 

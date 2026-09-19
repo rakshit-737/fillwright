@@ -36,6 +36,7 @@ export function PrivacyCenter() {
   } | null>(null);
   const [importPass, setImportPass] = useState('');
   const [importError, setImportError] = useState('');
+  const [historyLocked, setHistoryLocked] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
 
   const refresh = useCallback(async () => {
@@ -47,7 +48,9 @@ export function PrivacyCenter() {
     if (p.ok) setProfiles(p.data);
     if (h.ok) setHistory(h.data);
     if (m.ok) setMappings(m.data);
-    const failed = [p, h, m].find((result) => !result.ok);
+    // Locked history is expected, not a failure: it is encrypted and says so below.
+    setHistoryLocked(!h.ok && h.code === 'ELOCKED');
+    const failed = [p, h, m].find((result) => !result.ok && result.code !== 'ELOCKED');
     if (failed && !failed.ok) {
       setNotice(
         `Some of these numbers couldn’t be loaded, so they may be out of date. ${failed.error}`,
@@ -249,8 +252,15 @@ export function PrivacyCenter() {
           />
           <DataRow
             label="Application history"
-            value={history.length === 0 ? 'Off' : `${history.length} entries`}
-            detail="Company, role, site and date only — never field values"
+            value={
+              historyLocked ? 'Locked' : history.length === 0 ? 'Off' : `${history.length} entries`
+            }
+            detail={
+              'Company, role, site, date and a fill count, plus what you add yourself: status, ' +
+              'notes, a follow-up date, the profile used and — only if you tick it — the ' +
+              'posting link without its query string. Never field values. Encrypted when ' +
+              'encryption is on.'
+            }
           />
           <DataRow label="Settings" value="1 record" detail="chrome.storage.local" />
         </ul>
@@ -343,7 +353,7 @@ export function PrivacyCenter() {
           <span>
             <span className="fw-field__label">Include application history</span>
             <span className="fw-field__hint">
-              Off by default. Company, role, site and date only.
+              Off by default. Includes your status, notes, follow-up dates and saved links.
             </span>
           </span>
         </label>

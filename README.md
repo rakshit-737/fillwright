@@ -45,6 +45,9 @@ It never submits an application. That click is always yours.
 - **Refuses to guess** work authorisation, visa status, demographics, salary or
   criminal history. Those come only from answers you set yourself.
 - **Undoes a fill** in one click.
+- **Tracks your applications**, if you switch history on: status, notes,
+  follow-up dates and CSV export, kept on this device and encrypted with the
+  vault.
 
 ---
 

@@ -45,6 +45,7 @@ export function validateProfilePayload(raw: unknown): Checked<Profile> {
 const ENUMS: Record<string, readonly unknown[]> = {
   'autofill.mode': AUTOFILL_MODES,
   'privacy.autoLockMinutes': [0, 5, 15, 30, 60],
+  'privacy.historyRetentionMonths': [0, 6, 12, 24],
   'ai.provider': ['none', 'chrome-builtin'],
   'ui.theme': ['system', 'light', 'dark'],
 };

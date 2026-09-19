@@ -320,10 +320,16 @@ setting a value, so it is constrained:
   candidate token; only origin + path is ever retained (`pageKeyFromUrl`).
 - **No personal data is logged.** ESLint's `no-console` rule is an error, with
   only `warn`/`error` permitted, and those carry no field values.
-- **History is metadata only** — company, role, origin, date, a count and which
-  of your profiles was used — and is off by default. Company and role are a
-  best guess from the page title and heading, capped at 120 characters. (Before
-  0.5.0 nothing recorded history at all, even when it was switched on.)
+- **History records no field values** and is off by default. A fill records
+  company, role, origin, date, a count and which of your profiles was used.
+  Company and role are a best guess from the page title and heading, capped at
+  120 characters. Status, notes (2,000 characters) and a follow-up date are
+  added only by you. A posting link is stored only when you tick it for that
+  entry, and then as origin + path — the query string and fragment are dropped
+  (`normalizePostingUrl`). Retention is 6, 12 or 24 months or until cleared,
+  with a hard cap of 2,000 entries. CSV export neutralises cells that a
+  spreadsheet would run as a formula, since company and role come from pages.
+  (Before 0.5.0 nothing recorded history at all, even when it was switched on.)
 - **The panel cannot be read by the page.** Its shadow root is closed, so page
   scripts cannot read proposed values — including sensitive answers — before
   you approve them. `verify-build.mjs` and `npm run presubmit` fail on an open
@@ -431,9 +437,16 @@ an endless "locked".
 - Decrypted values already handed to an open options page. JavaScript cannot
   guarantee a string is erased from memory, and the UI says so rather than
   implying otherwise.
-- Settings, application history and learned field mappings, which are not
-  encrypted because they contain no resume content. This is stated in the UI
-  rather than left for someone to discover.
+- Settings and learned field mappings, which are not encrypted because they
+  contain no resume content. This is stated in the UI rather than left for
+  someone to discover.
+- The date of each application-history entry, which stays outside the
+  ciphertext so retention can run while locked. Company, role, site, status,
+  notes and the posting link are encrypted like a profile. While locked the
+  History pane says "locked" rather than showing an empty list, and a fill
+  that finishes while locked is not recorded at all rather than stored in
+  plaintext. (Before this release history was plaintext even with the vault
+  on.)
 
 **Why the key lives in session storage.** MV3 tears the service worker down
 after seconds of inactivity. A key held in a module variable would vanish

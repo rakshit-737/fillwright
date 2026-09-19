@@ -6,6 +6,19 @@ import {
   prepareRewrite,
   pruneOrphanResumes,
 } from '@/storage/profiles';
+import { prepareHistoryRewrite } from '@/storage/history';
+import type { PreparedRewrite } from '@/storage/profiles';
+
+/** Profiles, resumes and history, re-keyed together for one atomic write. */
+async function prepareAll(from: CryptoKey | null, to: CryptoKey | null): Promise<PreparedRewrite> {
+  const rewrite = await prepareRewrite(from, to);
+  const history = await prepareHistoryRewrite(from, to);
+  return {
+    ...rewrite,
+    ops: [...rewrite.ops, ...history.ops],
+    bytes: rewrite.bytes + history.bytes,
+  };
+}
 import { deriveKey } from '@/security/crypto';
 import {
   changePassphrase,
@@ -70,7 +83,7 @@ export function registerVaultHandlers(): void {
     const { passphrase } = request as Extract<UiRequest, { type: 'ui:vault-enable' }>;
     if (await hasEncryptedRecords()) return err(ORPHAN_CIPHERTEXT, 'EVAULTMIXED');
     const result = await enable(passphrase, async (key) => {
-      return prepareRewrite(null, key);
+      return prepareAll(null, key);
     });
     if (!result.ok) return err(result.error ?? 'Encryption could not be switched on.', result.code);
 
@@ -99,7 +112,7 @@ export function registerVaultHandlers(): void {
   handle('ui:vault-change-passphrase', async (request) => {
     const { current, next } = request as Extract<UiRequest, { type: 'ui:vault-change-passphrase' }>;
     const result = await changePassphrase(current, next, async (from, to) => {
-      return prepareRewrite(from, to);
+      return prepareAll(from, to);
     });
     return result.ok
       ? ok({ changed: true })
@@ -116,7 +129,7 @@ export function registerVaultHandlers(): void {
       // key: `disable` has already verified it, and this keeps the decryption
       // path independent of whatever happens to be unlocked.
       const key = await deriveKey(passphrase, meta.kdf);
-      return prepareRewrite(key, null);
+      return prepareAll(key, null);
     });
     if (!result.ok)
       return err(result.error ?? 'Encryption could not be switched off.', result.code);

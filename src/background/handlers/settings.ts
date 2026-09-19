@@ -3,6 +3,7 @@ import { getSettings, setSettings } from '@/storage/settings';
 import { listProfiles } from '@/storage/profiles';
 import { hasSiteAccess, syncAutoDetect } from '../auto-detect';
 import { validateSettingsPatch } from '@/security/boundary';
+import { pruneHistory } from '@/storage/history';
 import type { UiRequest } from '@/types/messages';
 
 export function registerSettingsHandlers(): void {
@@ -14,6 +15,8 @@ export function registerSettingsHandlers(): void {
     if (!checked.ok) return err(checked.error, checked.code);
     const mode = checked.value.autofill?.mode;
     const next = await setSettings(checked.value);
+    const retention = checked.value.privacy?.historyRetentionMonths;
+    if (retention !== undefined) await pruneHistory();
     if (mode !== undefined) await syncAutoDetect().catch(() => undefined);
     return ok(next);
   });

@@ -37,6 +37,8 @@ export interface Settings {
   privacy: {
     /** Record company/role/date/url only. Default: false. */
     keepApplicationHistory: boolean;
+    /** Months of history to keep: 6, 12 or 24; 0 keeps it until you clear it. */
+    historyRetentionMonths: number;
     /** Wipe decrypted data from memory after N minutes of inactivity. */
     autoLockMinutes: number;
   };
@@ -90,6 +92,7 @@ export const DEFAULT_SETTINGS: Settings = {
   },
   privacy: {
     keepApplicationHistory: false,
+    historyRetentionMonths: 0,
     autoLockMinutes: 30,
   },
   ai: {

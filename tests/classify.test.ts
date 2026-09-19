@@ -279,3 +279,35 @@ describe('webpage text is data, never instructions', () => {
     }
   });
 });
+
+describe('current and expected pay are kept apart', () => {
+  const cases: Array<[string, string]> = [
+    ['Current CTC', 'sensitive.currentSalary'],
+    ['What is your current CTC?', 'sensitive.currentSalary'],
+    ['Current annual compensation', 'sensitive.currentSalary'],
+    ['Current Salary', 'sensitive.currentSalary'],
+    ['Present CTC (in LPA)', 'sensitive.currentSalary'],
+    ['Last drawn salary', 'sensitive.currentSalary'],
+    ['Existing CTC', 'sensitive.currentSalary'],
+    ['Expected CTC', 'preferences.desiredSalary'],
+    ['Salary expectations', 'preferences.desiredSalary'],
+    ['Desired compensation', 'preferences.desiredSalary'],
+    ['Expected salary (per annum)', 'preferences.desiredSalary'],
+    ['Current and expected CTC', 'unknown'],
+    ['Expected hike over current CTC (%)', 'unknown'],
+    ['Current employer', 'experience.company'],
+  ];
+
+  it.each(cases)('classifies "%s" as %s', (label, expected) => {
+    expect(classify({ labelText: label }).field).toBe(expected);
+  });
+
+  it('never reads a current-pay question as expected pay, or the reverse', () => {
+    for (const label of ['Current CTC', 'Present salary', 'Last drawn CTC']) {
+      expect(classify({ labelText: label }).field).not.toBe('preferences.desiredSalary');
+    }
+    for (const label of ['Expected CTC', 'Desired salary', 'Salary expectation']) {
+      expect(classify({ labelText: label }).field).not.toBe('sensitive.currentSalary');
+    }
+  });
+});

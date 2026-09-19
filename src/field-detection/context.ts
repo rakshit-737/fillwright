@@ -68,6 +68,7 @@ const CAREER_FIELDS: ReadonlySet<string> = new Set([
   'sensitive.requiresSponsorship',
   'preferences.startDate',
   'preferences.desiredSalary',
+  'sensitive.currentSalary',
 ]);
 
 const IDENTITY_FIELDS: ReadonlySet<string> = new Set([

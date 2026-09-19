@@ -38,6 +38,12 @@ export const THIRD_PARTY_RE =
 const COMPANY_CONTEXT_RE =
   /\b(?:company|employer|organization|organisation|business|firm|agency|school|university|college|institution)\b/;
 
+/** Words that mark a pay question as about the pay the candidate has now. */
+const CURRENT_PAY_RE = /\b(?:current|present|last drawn|existing|currently)\b/;
+
+/** Words that mark a pay question as about the pay the candidate wants. */
+const EXPECTED_PAY_RE = /\b(?:expected|expecting|expectations?|desired|hike|increment)\b/;
+
 export const FIELD_RULES: FieldRule[] = [
   /* ------------------------------------------------------------- identity */
   {
@@ -541,11 +547,30 @@ export const FIELD_RULES: FieldRule[] = [
       'salary expectations',
       'expected compensation',
       'desired compensation',
-      'current salary',
-      'current ctc',
       'expected ctc',
     ],
     includes: ['salary', 'compensation', 'ctc'],
+    // Current pay is a different number. A label that asks about it — alone or
+    // alongside the expected figure — must never receive the expected one.
+    not: [CURRENT_PAY_RE],
+  },
+  {
+    field: 'sensitive.currentSalary',
+    exact: [
+      'current salary',
+      'current ctc',
+      'current compensation',
+      'present salary',
+      'present ctc',
+      'last drawn salary',
+      'last drawn ctc',
+      'existing salary',
+      'existing ctc',
+    ],
+    patterns: [
+      /\b(?:current|present|last drawn|existing)\b.*\b(?:salary|compensation|ctc|pay|package)\b/,
+    ],
+    not: [EXPECTED_PAY_RE, COMPANY_CONTEXT_RE],
   },
 ];
 

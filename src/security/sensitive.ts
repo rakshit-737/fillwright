@@ -31,6 +31,7 @@ export const SENSITIVE_FIELDS: ReadonlySet<CanonicalField> = new Set<CanonicalFi
   'sensitive.drugTestConsent',
   'sensitive.backgroundCheckConsent',
   'preferences.desiredSalary',
+  'sensitive.currentSalary',
 ]);
 
 /**

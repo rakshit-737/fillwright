@@ -92,8 +92,12 @@ declaration, screenshots and a checklist are in [`store/`](./store).
    and has one clear "Add education" button, the panel offers to add them.
 9. **Written questions** are marked "You need to write this". With on-device AI
    switched on, "Draft with on-device AI" shows exactly which facts would be
-   used, then gives you an editable draft; nothing reaches the form until you
-   press "Use this answer".
+   used — plus, unticked, an excerpt of the job posting and your saved answers —
+   then streams a draft you can cancel at any point (it stops by itself after
+   60 seconds and never exceeds the field's length limit). Nothing reaches the
+   form until you press "Use this answer". If Chrome still needs its model,
+   Settings → Writing assistance has "Download the on-device model" with
+   progress.
 10. **Job postings.** When the posting is on the page, the panel lists which
     skills it mentions that your profile has, and which it does not. It never
     changes your profile.
@@ -172,6 +176,7 @@ npx serve test-pages     # then open http://localhost:3000
 | `workday.html` | No `<label>` elements at all, `aria-labelledby`, ids with colons and brackets, a collapsed section |
 | `react-form.html` | Controlled inputs that revert any write not made through the native setter |
 | `edge-cases.html` | Prefilled fields, referee details, credentials, demographics, two-country work authorisation, shadow DOM, dynamically added fields, prompt injection |
+| `draft-posting.html` | A job posting with an injection sentence and a 120-character essay question, for streamed drafting |
 | `hard-mode.html` | The regression playground: 50+ controls, repeated education and experience blocks, three custom dropdowns (including one in a portal and one deliberately ambiguous), a field that rejects writes, aria-only labels |
 | `ats/greenhouse.html` | Greenhouse job board: `job_application[...]` names, React-Select school and degree, EEO section |
 | `ats/lever.html` | Lever: labels in sibling divs, `urls[...]` names, a written "Additional information" |

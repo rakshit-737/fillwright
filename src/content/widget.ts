@@ -76,6 +76,8 @@ export interface WidgetCallbacks {
   onDraftStart: (entry: FillPlanEntry) => void;
   onDraftGenerate: (entry: FillPlanEntry, factIds: string[]) => void;
   onDraftUse: (entry: FillPlanEntry, text: string) => void;
+  /** The draft panel was closed: stop any draft still being written. */
+  onDraftStop?: (entry: FillPlanEntry) => void;
 }
 
 export interface FillSummary {
@@ -545,6 +547,7 @@ export class FillwrightWidget {
           onDraftUse: (entry, text) => this.callbacks.onDraftUse(entry, text),
           onDraftCancel: (entry) => {
             this.drafts.delete(entry.fieldId);
+            this.callbacks.onDraftStop?.(entry);
             this.draw();
           },
         }),

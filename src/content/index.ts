@@ -337,6 +337,7 @@ function createWidget(): FillwrightWidget {
       onDraftStart: (entry) => void startDraft(entry),
       onDraftGenerate: (entry, factIds) => void generateDraft(entry, factIds),
       onDraftUse: (entry, text) => void applyDraft(entry, text),
+      onDraftStop: (entry) => stopDraft(entry.fieldId),
     },
     matchMedia('(prefers-reduced-motion: reduce)').matches,
   );
@@ -503,42 +504,144 @@ async function startDraft(entry: FillPlanEntry): Promise<void> {
     });
   } else {
     draftAvailable = true;
-    const facts = response.data;
+    const facts = [...response.data];
+    // The posting is page text: offered, never ticked for the user.
+    const posting = postingExcerpt();
+    if (posting) {
+      facts.push({
+        id: 'posting',
+        label: 'An excerpt of this job posting',
+        value: posting,
+        optional: true,
+      });
+    }
     widget.drafts.set(entry.fieldId, {
       phase: 'facts',
       facts,
-      chosen: new Set(facts.map((fact) => fact.id)),
+      chosen: new Set(facts.filter((fact) => !fact.optional).map((fact) => fact.id)),
     });
   }
   widget.refresh();
+}
+
+/** Characters of the posting offered as context; the worker trims again. */
+const POSTING_EXCERPT_CHARS = 1_500;
+
+function postingExcerpt(): string {
+  const text = collectPostingText(document).replace(/\s+/g, ' ').trim();
+  return text.length < 200 ? '' : text.slice(0, POSTING_EXCERPT_CHARS);
+}
+
+/** Drafts being streamed, by field, so closing the panel can stop the model. */
+const draftPorts = new Map<string, chrome.runtime.Port>();
+
+function stopDraft(fieldId: string): void {
+  const port = draftPorts.get(fieldId);
+  if (!port) return;
+  draftPorts.delete(fieldId);
+  try {
+    port.postMessage({ type: 'cancel' });
+    port.disconnect();
+  } catch {
+    // Already gone.
+  }
 }
 
 async function generateDraft(entry: FillPlanEntry, factIds: string[]): Promise<void> {
   const current = widget?.drafts.get(entry.fieldId);
   if (!widget || !current || !('facts' in current)) return;
   const { facts, chosen } = current;
-  widget.drafts.set(entry.fieldId, { phase: 'generating', facts, chosen });
+  const view = { phase: 'generating' as const, facts, chosen };
+  widget.drafts.set(entry.fieldId, view);
   widget.refresh();
 
   const field = session?.fields.get(entry.fieldId);
   const question = field?.signals.labelText || field?.signals.ariaLabel || entry.label;
-  const response = await request<{ text: string }>({
-    type: 'content:draft',
-    question,
-    factIds,
-    ...(field?.signals.maxLength ? { maxCharacters: field.signals.maxLength } : {}),
-  });
+  const posting = facts.find((fact) => fact.id === 'posting')?.value;
+  const outcome = await streamDraft(
+    entry.fieldId,
+    {
+      type: 'start',
+      question,
+      factIds,
+      ...(field?.signals.maxLength ? { maxCharacters: field.signals.maxLength } : {}),
+      ...(posting && factIds.includes('posting') ? { posting } : {}),
+    },
+    (text) => {
+      // Only while this same draft is still on screen.
+      if (widget?.drafts.get(entry.fieldId) !== view) return;
+      (view as { text?: string }).text = text;
+      scheduleDraftRefresh();
+    },
+  );
 
+  // Closed while it was being written: nothing to show.
+  if (!widget || widget.drafts.get(entry.fieldId) !== view) return;
   widget.drafts.set(
     entry.fieldId,
-    response.ok
-      ? { phase: 'result', text: String(response.data.text ?? ''), facts, chosen }
+    outcome.ok
+      ? { phase: 'result', text: outcome.text, facts, chosen }
       : {
           phase: 'error',
-          message: `${describeError(response.code, response.error).message} Nothing on the form was changed.`,
+          message: `${describeError(outcome.code, outcome.error).message} Nothing on the form was changed.`,
         },
   );
   widget.refresh();
+}
+
+let draftRefreshTimer: ReturnType<typeof setTimeout> | null = null;
+
+/** Streaming redraws at most every 100 ms. */
+function scheduleDraftRefresh(): void {
+  if (draftRefreshTimer) return;
+  draftRefreshTimer = setTimeout(() => {
+    draftRefreshTimer = null;
+    widget?.refresh();
+  }, 100);
+}
+
+type DraftOutcome = { ok: true; text: string } | { ok: false; code: string; error: string };
+
+/** Opens a port to the worker and streams one draft through it. */
+function streamDraft(
+  fieldId: string,
+  start: Record<string, unknown>,
+  onChunk: (text: string) => void,
+): Promise<DraftOutcome> {
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (outcome: DraftOutcome) => {
+      if (settled) return;
+      settled = true;
+      if (draftPorts.get(fieldId) === port) draftPorts.delete(fieldId);
+      resolve(outcome);
+    };
+    let port: chrome.runtime.Port;
+    try {
+      port = chrome.runtime.connect({ name: 'fw-draft' });
+    } catch {
+      resolve({ ok: false, code: 'EINVALIDATED', error: '' });
+      return;
+    }
+    stopDraft(fieldId);
+    draftPorts.set(fieldId, port);
+    port.onMessage.addListener((message: unknown) => {
+      const reply = message as { type?: unknown; text?: unknown; code?: unknown; error?: unknown };
+      if (reply?.type === 'chunk' && typeof reply.text === 'string') onChunk(reply.text);
+      else if (reply?.type === 'done')
+        finish({ ok: true, text: typeof reply.text === 'string' ? reply.text : '' });
+      else if (reply?.type === 'error')
+        finish({
+          ok: false,
+          code: typeof reply.code === 'string' ? reply.code : 'EDRAFT',
+          error: typeof reply.error === 'string' ? reply.error : '',
+        });
+    });
+    port.onDisconnect.addListener(() => {
+      finish({ ok: false, code: 'EWORKER', error: '' });
+    });
+    port.postMessage(start);
+  });
 }
 
 /** The user approved an edited draft. Only now does it touch the form. */

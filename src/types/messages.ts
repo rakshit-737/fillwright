@@ -93,7 +93,14 @@ export type ContentRequest =
   | { type: 'content:open-page'; route: string }
   | { type: 'content:switch-profile'; profileId: string }
   | { type: 'content:draft-facts' }
-  | { type: 'content:draft'; question: string; factIds: string[]; maxCharacters?: number };
+  | {
+      type: 'content:draft';
+      question: string;
+      factIds: string[];
+      maxCharacters?: number;
+      /** Posting excerpt; used only when `factIds` includes 'posting'. */
+      posting?: string;
+    };
 
 export type AnyRequest = UiRequest | ContentRequest;
 

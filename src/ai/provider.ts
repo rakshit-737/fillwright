@@ -78,10 +78,7 @@ export interface AIProvider {
    * from a user gesture, so this is called from a button on an extension page.
    * `onProgress` receives a fraction from 0 to 1.
    */
-  download?(
-    onProgress?: (fraction: number) => void,
-    signal?: AbortSignal,
-  ): Promise<DownloadResult>;
+  download?(onProgress?: (fraction: number) => void, signal?: AbortSignal): Promise<DownloadResult>;
 }
 
 /* ------------------------------------------------------------------- none */

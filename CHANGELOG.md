@@ -2,6 +2,21 @@
 
 Notable changes, newest first. Versions follow semantic versioning.
 
+## Unreleased
+
+### Added
+
+- **On-device drafting no longer dead-ends at "needs a download".** Writing
+  assistance has a "Download the on-device model" button with progress, and a
+  separate "downloading" state.
+- **Drafts stream** into the panel, can be cancelled at any time, stop after
+  60 seconds, and are held to the field's character limit while streaming.
+- **Optional context:** an excerpt of the job posting (fenced as untrusted page
+  text) and your saved answers can be ticked, both off by default.
+- Sessions declare expected input and output languages (English), following
+  the current Prompt API. `npm run probe:ai` reports the state the options page
+  would show.
+
 ## 0.5.0
 
 From feature-complete to shippable: verified in a real browser against

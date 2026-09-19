@@ -1,0 +1,27 @@
+{
+  "layout": "single column",
+  "firstName": "Priya",
+  "lastName": "Natarajan",
+  "email": "priya.natarajan@example.com",
+  "phone": "+91 98401 22334",
+  "education": [
+    {
+      "institution": "Anna University",
+      "degree": "B.E.",
+      "gpa": "8.1"
+    }
+  ],
+  "experience": [
+    {
+      "company": "Kestrel Fintech Pvt Ltd",
+      "title": "Software Engineer"
+    }
+  ],
+  "skills": [
+    "Java",
+    "Spring Boot",
+    "PostgreSQL",
+    "Redis",
+    "Docker"
+  ]
+}

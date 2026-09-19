@@ -1,0 +1,15 @@
+FATIMA AL-SAYED
+Dubai, UAE | fatima.alsayed@example.com | +971 50 123 4567
+
+PROFESSIONAL EXPERIENCE
+Data Analyst, Sandline Logistics LLC
+Dubai | March 2022 - Present
+- Built weekly demand forecasts in Python and Power BI
+
+EDUCATION
+American University of Sharjah
+Bachelor of Science in Mathematics | 2017 - 2021
+GPA: 3.8/4.0
+
+TECHNICAL SKILLS
+Python, SQL, Power BI, Excel, Pandas

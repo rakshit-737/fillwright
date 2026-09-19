@@ -1,0 +1,13 @@
+KIM Minji
+minji.kim@example.com · +82 10 5555 7788 · Seoul
+
+WORK EXPERIENCE
+Data Scientist, Hangang Analytics
+Seoul | March 2021 - Present
+
+EDUCATION
+Seoul National University
+Bachelor of Science in Statistics | 2016 - 2020
+
+SKILLS
+R, Python, SQL, Spark

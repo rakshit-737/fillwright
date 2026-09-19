@@ -1,0 +1,17 @@
+Meera Kulkarni
++1 (412) 555-0190 | meera.kulkarni@example.com | github.com/meerak
+
+Education
+University of Michigan                                        Ann Arbor, MI
+Master of Science in Electrical Engineering                   Sep. 2023 – Dec. 2024
+University of Pune                                            Pune, India
+Bachelor of Engineering in Electronics                        Jun. 2019 – May 2023
+
+Experience
+Machine Learning Engineer                                     Feb. 2025 – Present
+Larkspur AI                                                   San Francisco, CA
+• Trained speech models on 20k hours of audio
+
+Technical Skills
+Languages: Python, C++, MATLAB
+Frameworks: PyTorch, JAX

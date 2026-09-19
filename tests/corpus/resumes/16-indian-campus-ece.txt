@@ -1,0 +1,14 @@
+ANANYA IYER
+ananya.iyer@example.com | +91 90030 44512 | Coimbatore
+
+ACADEMIC DETAILS
+B.E. Electronics and Communication, PSG College of Technology, 2021 - 2025, CGPA 9.05
+Class XII, Chinmaya Vidyalaya, Coimbatore, 2021, 95.4%
+Class X, Chinmaya Vidyalaya, Coimbatore, 2019, 97%
+
+PROJECTS
+Smart Irrigation Controller | ESP32, MQTT
+- Soil-moisture driven irrigation for a 2-acre farm
+
+SKILLS
+Verilog, Embedded C, MATLAB, Python

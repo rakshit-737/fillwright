@@ -1,0 +1,26 @@
+{
+  "layout": "two-column read row by row",
+  "firstName": "Arjun",
+  "lastName": "Mehta",
+  "email": "arjun.mehta@example.com",
+  "phone": "+91 99220 55501",
+  "education": [
+    {
+      "institution": "Savitribai Phule Pune University",
+      "degree": "Bachelor of Engineering",
+      "gpa": "7.8"
+    }
+  ],
+  "experience": [
+    {
+      "company": "Quillpoint Technologies",
+      "title": "Software Developer"
+    }
+  ],
+  "skills": [
+    "Python",
+    "Django",
+    "PostgreSQL",
+    "Celery"
+  ]
+}

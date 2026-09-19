@@ -1,0 +1,20 @@
+CURRICULUM VITAE
+
+PERSONAL INFORMATION
+Julien Moreau
+julien.moreau@example.com
++33 6 12 34 56 78
+Lyon, France
+
+WORK EXPERIENCE
+09/2019 – 08/2023
+Embedded Software Engineer
+Rhône Systèmes SA, Lyon (France)
+
+EDUCATION AND TRAINING
+09/2014 – 06/2019
+Master of Engineering in Embedded Systems
+INSA Lyon, Lyon (France)
+
+DIGITAL SKILLS
+C, Embedded Linux, FreeRTOS, Python

@@ -1,0 +1,30 @@
+{
+  "layout": "Indian campus, Class X / XII rows",
+  "firstName": "Karthik",
+  "lastName": "Subramanian",
+  "email": "karthik.s@example.com",
+  "phone": "+91 98860 33110",
+  "education": [
+    {
+      "institution": "Indian Institute of Management Kozhikode",
+      "degree": "MBA",
+      "gpa": "3.4"
+    },
+    {
+      "institution": "St. Joseph's College of Commerce, Bengaluru",
+      "degree": "B.Com",
+      "gpa": ""
+    }
+  ],
+  "experience": [
+    {
+      "company": "Tamarind Capital Advisors",
+      "title": "Financial Analyst"
+    }
+  ],
+  "skills": [
+    "Financial Modelling",
+    "Excel",
+    "Valuation"
+  ]
+}

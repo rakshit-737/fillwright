@@ -1,0 +1,31 @@
+{
+  "layout": "single column",
+  "firstName": "Daniel",
+  "lastName": "Whitford",
+  "email": "daniel.whitford@example.com",
+  "phone": "(503) 555-0142",
+  "education": [
+    {
+      "institution": "Oregon State University",
+      "degree": "Bachelor of Science",
+      "gpa": "3.6"
+    }
+  ],
+  "experience": [
+    {
+      "company": "Mossgrove Labs",
+      "title": "Frontend Engineer"
+    },
+    {
+      "company": "Tidewater Digital",
+      "title": "Junior Web Developer"
+    }
+  ],
+  "skills": [
+    "JavaScript",
+    "TypeScript",
+    "React",
+    "CSS",
+    "GraphQL"
+  ]
+}

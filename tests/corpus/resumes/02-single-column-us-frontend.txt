@@ -1,0 +1,20 @@
+Daniel Whitford
+Portland, OR 97205 · daniel.whitford@example.com · (503) 555-0142
+github.com/dwhitford
+
+WORK EXPERIENCE
+Frontend Engineer, Mossgrove Labs
+Portland, OR | January 2021 - Present
+- Rebuilt the checkout flow in React, lifting conversion by 4%
+
+Junior Web Developer, Tidewater Digital
+Seattle, WA | June 2018 - December 2020
+- Maintained 30 client marketing sites
+
+EDUCATION
+Oregon State University
+Bachelor of Science in Computer Science | 2014 - 2018
+GPA: 3.6/4.0
+
+SKILLS
+JavaScript, TypeScript, React, CSS, GraphQL

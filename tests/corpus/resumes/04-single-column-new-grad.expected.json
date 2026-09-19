@@ -1,0 +1,26 @@
+{
+  "layout": "single column",
+  "firstName": "Tomás",
+  "lastName": "Herrera",
+  "email": "tomas.herrera@example.com",
+  "phone": "+34 612 345 678",
+  "education": [
+    {
+      "institution": "Universidad Politécnica de Madrid",
+      "degree": "Master of Science",
+      "gpa": ""
+    },
+    {
+      "institution": "Universidad de Sevilla",
+      "degree": "Bachelor of Engineering",
+      "gpa": ""
+    }
+  ],
+  "experience": [],
+  "skills": [
+    "Python",
+    "C++",
+    "TensorFlow",
+    "Linux"
+  ]
+}

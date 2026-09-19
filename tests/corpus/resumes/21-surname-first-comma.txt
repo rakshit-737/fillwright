@@ -1,0 +1,13 @@
+NAKAMURA, Hiroshi
+hiroshi.nakamura@example.com | +81 90 5555 1234 | Tokyo, Japan
+
+EXPERIENCE
+Infrastructure Engineer, Sakura Grid KK
+Tokyo | April 2019 - Present
+
+EDUCATION
+University of Tokyo
+Master of Engineering in Information Science | 2017 - 2019
+
+SKILLS
+Linux, Ansible, Python, Networking

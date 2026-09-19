@@ -1,0 +1,31 @@
+{
+  "layout": "Indian campus, Class X / XII rows",
+  "firstName": "Rohan",
+  "lastName": "Verma",
+  "email": "rohan.verma@example.com",
+  "phone": "+91 94150 12398",
+  "education": [
+    {
+      "institution": "Indian Institute of Technology (BHU), Varanasi",
+      "degree": "B.Tech",
+      "gpa": "8.72"
+    },
+    {
+      "institution": "Kendriya Vidyalaya, Lucknow",
+      "degree": "Class XII",
+      "gpa": ""
+    }
+  ],
+  "experience": [
+    {
+      "company": "Pinecone Commerce",
+      "title": "Software Development Intern"
+    }
+  ],
+  "skills": [
+    "C++",
+    "Go",
+    "Python",
+    "MySQL"
+  ]
+}

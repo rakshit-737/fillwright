@@ -55,6 +55,7 @@ function callbacks(patch: Partial<WidgetCallbacks> = {}): WidgetCallbacks {
     onUndo: () => undefined,
     onClose: () => undefined,
     onRescan: () => undefined,
+    onOpen: () => undefined,
     onTeach: () => undefined,
     onListProfiles: async () => [],
     onSwitchProfile: () => undefined,
@@ -89,7 +90,7 @@ describe('review list keeps your place', () => {
   });
 
   it('keeps focus on the toggled checkbox and the list scroll position', () => {
-    const widget = new FillwrightWidget(callbacks(), true);
+    const widget = new FillwrightWidget(callbacks(), true, { trust: () => true });
     const root = open(widget, planOf(Array.from({ length: 30 }, (_, i) => entry(i))));
     const boxes = [...root.querySelectorAll<HTMLInputElement>('input.fw-check')];
     const fifteenth = boxes[14]!;
@@ -108,7 +109,7 @@ describe('review list keeps your place', () => {
   });
 
   it('keeps focus on "Why?" after it opens', () => {
-    const widget = new FillwrightWidget(callbacks(), true);
+    const widget = new FillwrightWidget(callbacks(), true, { trust: () => true });
     const root = open(widget, planOf([entry(0), entry(1), entry(2)]));
     const whys = [...root.querySelectorAll('button')].filter((b) => b.textContent === 'Why?');
     whys[1]!.focus();
@@ -118,7 +119,7 @@ describe('review list keeps your place', () => {
   });
 
   it('does not offer "Edit for this form" on a file upload', () => {
-    const widget = new FillwrightWidget(callbacks(), true);
+    const widget = new FillwrightWidget(callbacks(), true, { trust: () => true });
     const upload = { ...entry(0, 'manual-required', 'documents.resume'), newValue: '' };
     const root = open(widget, planOf([upload, entry(1)]));
     expect(
@@ -132,7 +133,8 @@ describe('review list keeps your place', () => {
 
   it('lets you edit a proposed value for this form only, marked as yours', () => {
     const onFill = vi.fn();
-    const widget = new FillwrightWidget(callbacks({ onFill }), true);
+    vi.useFakeTimers();
+    const widget = new FillwrightWidget(callbacks({ onFill }), true, { trust: () => true });
     const root = open(widget, planOf([entry(0), entry(1)]));
     const rows = root.querySelectorAll('.fw-item');
     buttonNamed(rows[1] as HTMLElement, 'Edit for this form')!.click();
@@ -147,16 +149,19 @@ describe('review list keeps your place', () => {
     expect(row.querySelector('.fw-item__new')!.textContent).toBe('my own value');
     expect(row.textContent).toContain('your edit');
 
+    // The click-jacking guard arms Fill only after the panel has been shown.
+    vi.advanceTimersByTime(2_000);
     buttonNamed(root, 'Fill 2 fields')!.click();
     const sent = onFill.mock.calls[0]![0] as FillPlanEntry[];
     expect(sent.find((e) => e.fieldId === 'f1')!.newValue).toBe('my own value');
     expect(sent.find((e) => e.fieldId === 'f1')!.selected).toBe(true);
     widget.destroy();
+    vi.useRealTimers();
   });
 
   it('offers "Add it in your profile" on a missing value', () => {
     const onOpenPage = vi.fn();
-    const widget = new FillwrightWidget(callbacks({ onOpenPage }), true);
+    const widget = new FillwrightWidget(callbacks({ onOpenPage }), true, { trust: () => true });
     const root = open(widget, planOf([entry(0), entry(1, 'missing-value', 'links.github')]));
     buttonNamed(root, 'Add it in your profile')!.click();
     expect(onOpenPage).toHaveBeenCalledWith('profile', 'links.github');
@@ -164,7 +169,7 @@ describe('review list keeps your place', () => {
   });
 
   it('groups rows by section with select all and none per group', () => {
-    const widget = new FillwrightWidget(callbacks(), true);
+    const widget = new FillwrightWidget(callbacks(), true, { trust: () => true });
     const root = open(
       widget,
       planOf([
@@ -190,7 +195,7 @@ describe('review list keeps your place', () => {
   });
 
   it('filters rows by status', () => {
-    const widget = new FillwrightWidget(callbacks(), true);
+    const widget = new FillwrightWidget(callbacks(), true, { trust: () => true });
     const root = open(
       widget,
       planOf([entry(0), entry(1, 'missing-value'), entry(2, 'review'), entry(3)]),

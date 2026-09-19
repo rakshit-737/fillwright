@@ -121,6 +121,10 @@ export function classifyField(signals: FieldSignals): Classification {
   const disqualified = new Set<CanonicalField>();
 
   for (const rule of FIELD_RULES) {
+    // Gates, not evidence: a rule that does not apply here neither scores nor
+    // disqualifies its field.
+    if (rule.section && !rule.section.test(signals.sectionHeading)) continue;
+    if (rule.onlyTypes && !rule.onlyTypes.includes(signals.inputType)) continue;
     if (isDisqualified(rule, normalized)) {
       disqualified.add(rule.field);
       continue;

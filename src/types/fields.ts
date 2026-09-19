@@ -13,6 +13,10 @@ export type CanonicalField =
   | 'personal.pronouns'
   | 'personal.email'
   | 'personal.phone'
+  /** Dialling code alone, e.g. "+91" — only derived from a stored "+CC …" phone. */
+  | 'personal.phoneCountryCode'
+  /** The phone number without its dialling code. */
+  | 'personal.phoneNational'
   | 'personal.dateOfBirth'
   // address
   | 'address.line1'
@@ -38,11 +42,23 @@ export type CanonicalField =
   | 'education.startDate'
   | 'education.endDate'
   | 'education.graduationDate'
+  | 'education.startMonth'
+  | 'education.startYear'
+  | 'education.endMonth'
+  | 'education.endYear'
+  | 'education.location'
   // experience
   | 'experience.company'
   | 'experience.title'
   | 'experience.startDate'
   | 'experience.endDate'
+  | 'experience.startMonth'
+  | 'experience.startYear'
+  | 'experience.endMonth'
+  | 'experience.endYear'
+  /** "I currently work here". */
+  | 'experience.current'
+  | 'experience.location'
   | 'experience.description'
   | 'experience.yearsOfExperience'
   // documents & free text

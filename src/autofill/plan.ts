@@ -59,6 +59,7 @@ export function buildMappings(
   }
 
   resolveLoneNameField(fields, classifications);
+  splitPhoneBesideCountryCode(fields, classifications, byFingerprint);
 
   const groups = assignGroups(
     fields,
@@ -261,6 +262,32 @@ function isConsentStatement(field: DetectedField): boolean {
     [field.signals.labelText, field.signals.ariaLabel].filter(Boolean).join(' '),
   );
   return CONSENT_REQUIRED_HINT_RE.test(text);
+}
+
+/**
+ * A form that asks for the dialling code separately wants the rest of the
+ * number in its phone field; writing "+91 98450 12345" beside a "+91" select
+ * would enter the code twice. A phone field the user mapped by hand is left
+ * as they chose.
+ */
+function splitPhoneBesideCountryCode(
+  fields: DetectedField[],
+  classifications: Map<string, ReturnType<typeof classifyField>>,
+  saved: Map<string, SavedMapping>,
+): void {
+  const hasCode = [...classifications.values()].some(
+    (c) => c.field === 'personal.phoneCountryCode' && c.confidence >= 0.5,
+  );
+  if (!hasCode) return;
+  for (const field of fields) {
+    const current = classifications.get(field.id);
+    if (current?.field !== 'personal.phone' || saved.has(fingerprintOf(field))) continue;
+    classifications.set(field.id, {
+      ...current,
+      field: 'personal.phoneNational',
+      rationale: `${current.rationale} The form asks for the country code separately, so this gets the number without it.`,
+    });
+  }
 }
 
 /** A correction made for the current form only; see `content:request-mappings`. */

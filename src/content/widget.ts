@@ -138,6 +138,8 @@ export class FillwrightWidget {
   private lastSummary: FillSummary | null = null;
   /** Labels of fields the last undo could not restore. */
   private notUndone: string[] = [];
+  /** Fields that became fillable after the last fill (dependent dropdowns). */
+  private secondPass = 0;
   private lastError: UserError = { message: '', action: 'retry', actionLabel: 'Try again' };
   private detectedCount = 0;
   /** The page element focused before the panel took focus. */
@@ -283,6 +285,7 @@ export class FillwrightWidget {
 
   renderPlan(plan: FillPlan): void {
     const keepReview = this.state === 'review';
+    this.secondPass = 0;
     this.plan = plan;
     this.stale = false;
     this.selection = new Set(
@@ -306,7 +309,20 @@ export class FillwrightWidget {
     this.go('filling');
   }
 
+  /**
+   * After a fill, some fields can be filled that could not before — a State
+   * list that loaded once Country was chosen. Offered, never filled.
+   */
+  offerSecondPass(count: number): void {
+    this.secondPass = count;
+    if (this.state === 'success' || this.state === 'partial') {
+      this.draw();
+      this.live.textContent = `${count} more field${count === 1 ? '' : 's'} can be filled now.`;
+    }
+  }
+
   markFilled(summary: FillSummary): void {
+    this.secondPass = 0;
     this.canUndo = summary.filled > 0 || this.canUndo;
     this.lastSummary = summary;
     this.go(summary.failures.length > 0 || summary.remaining > 0 ? 'partial' : 'success');
@@ -772,6 +788,19 @@ export class FillwrightWidget {
     if (summary.manual > 0)
       tally.appendChild(this.tally('✎', `${summary.manual} need your input`, 'muted'));
     if (tally.childElementCount > 0) body.appendChild(tally);
+
+    if (this.secondPass > 0) {
+      const offer = el('div', 'fw-banner');
+      offer.appendChild(
+        el(
+          'span',
+          '',
+          `${this.secondPass} more field${this.secondPass === 1 ? '' : 's'} can be filled now.`,
+        ),
+      );
+      offer.appendChild(this.link('Review them', () => this.callbacks.onRescan()));
+      body.appendChild(offer);
+    }
 
     // When the page refused every single value, one sentence explains it
     // better than a list of identical failures.

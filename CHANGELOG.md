@@ -115,6 +115,26 @@ Notable changes, newest first. Versions follow semantic versioning.
   Written-question rows offer "Use a saved answer": titles ranked by how well
   they match the question, none pre-selected, and the chosen answer is shown
   for editing before anything is written.
+- **Month and year asked separately.** "Start month" / "Start year" selects
+  and MM / YYYY inputs (Workday, Greenhouse) are filled for education and
+  experience entries. Month options are matched by name, abbreviation or
+  number; a stored year with no month leaves the month empty. The bare labels
+  only count inside an education or experience block, so a lone "Start Month"
+  elsewhere is left alone.
+- **Phone country code and national number.** A "Country code" select gets
+  "+91" (matched by the dialling code in its options; countries that share a
+  code are told apart by your saved country, or not at all) and the phone
+  field beside it gets the number without the code. Both are derived only when
+  your saved phone is written "+CC …"; otherwise they are left for you.
+- **"I currently work here"** is ticked for a current role, and that role's end
+  date, month and year are left empty.
+- **Location per entry**: "Location" inside an education or experience block
+  is that entry's location, not yours.
+- **Dependent dropdowns.** After a fill, a select whose options changed — a
+  State list that loads once Country is chosen — is read again, and the panel
+  offers "N more fields can be filled now". Nothing is filled until you review
+  them and press Fill.
+- All of the above are in the "What is this field?" picker.
 
 ### Changed
 
@@ -141,6 +161,12 @@ Notable changes, newest first. Versions follow semantic versioning.
   profile editor focused on that field.
 - Rows are grouped by section, each with select all / none, and the list can
   be filtered by status.
+- "Graduation year" is no longer rewritten to "graduation date", so a year
+  field gets "2026" rather than "May 2026".
+- A field with `autocomplete="tel-national"` now gets the number without its
+  country code (it used to get the whole stored phone).
+- The form-change signature now counts dropdown options, and an added
+  `<option>` counts as a possible form change.
 
 ### Docs
 

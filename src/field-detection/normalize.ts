@@ -89,7 +89,9 @@ const SYNONYMS: Array<[RegExp, string]> = [
   [/\bcourse of study\b/g, 'major'],
   [/\bdiscipline\b/g, 'major'],
   [/\bspecialisation\b/g, 'specialization'],
-  [/\bgrad(?:uation)? (?:date|year)\b/g, 'graduation date'],
+  [/\bgrad(?:uation)? date\b/g, 'graduation date'],
+  // A year is asked for separately often enough to keep it apart from the date.
+  [/\bgrad year\b/g, 'graduation year'],
   [/\bauthorised\b/g, 'authorized'],
   [/\bauthorisation\b/g, 'authorization'],
   [/\bwilling to relocate\b/g, 'relocate'],

@@ -88,3 +88,34 @@ export function containsWords(a: string, b: string): boolean {
   if (left.trim() === '' || right.trim() === '') return false;
   return left.includes(right) || right.includes(left);
 }
+
+const MONTH_HEADS = [
+  'january',
+  'february',
+  'march',
+  'april',
+  'may',
+  'june',
+  'july',
+  'august',
+  'september',
+  'october',
+  'november',
+  'december',
+];
+
+/**
+ * The month a dropdown option or stored text stands for, 1..12, or null.
+ * Reads names and abbreviations through the alias table ("Sept" is 9) and
+ * plain numbers ("08" and "8" are 8). Anything else is not a month.
+ */
+export function monthNumber(text: string): number | null {
+  const trimmed = text.trim();
+  if (/^\d{1,2}$/.test(trimmed)) {
+    const number = Number(trimmed);
+    return number >= 1 && number <= 12 ? number : null;
+  }
+  const key = aliasKey(trimmed);
+  const index = key === null ? -1 : MONTH_HEADS.indexOf(key);
+  return index === -1 ? null : index + 1;
+}

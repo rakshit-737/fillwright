@@ -24,6 +24,10 @@ It never submits an application. That click is always yours.
   from different entries, never the same one twice.
 - **Drives custom dropdowns** (React Select, Downshift, ARIA comboboxes) by
   opening them and picking the matching option, and refuses when two options fit.
+- **Handles split form shapes** — separate month and year selects, a phone
+  country-code select beside the number, "I currently work here", and a State
+  list that only loads after Country is chosen (offered as "N more fields can
+  be filled now", never filled on its own).
 - **Verifies every write** and reports what did not take, with a one-click retry.
 - **Learns from your corrections.** Tell it what an unrecognised field means and
   it remembers, for that site, on this device only.

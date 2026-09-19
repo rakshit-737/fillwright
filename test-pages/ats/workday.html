@@ -20,6 +20,14 @@
         School field is a searchable prompt whose options load only after two characters are
         typed. Fillwright types only the first few characters, waits, then picks the option.
       </p>
+      <p class="lead">
+        Form shapes: step 1 asks for "Country Phone Code" (a select, "India (+91)") separately,
+        so "Phone Number" gets the number without its code. Each education block has "First Year
+        Attended" / "Last Year Attended". The work experience block labels its date inputs the
+        Workday way — "From" + "Month" and "From" + "Year" through aria-labelledby — and has a
+        Location and an "I currently work here" box; for a past role the box stays unticked and
+        the end month and year are filled.
+      </p>
       <ol data-automation-id="progressBar">
         <li data-automation-id="progressBarActiveStep" aria-current="step" id="step-name">My Information</li>
         <li>My Experience</li>
@@ -83,8 +91,63 @@
           field('First Name', text('legalNameSection_firstName')),
           field('Last Name', text('legalNameSection_lastName')),
           field('Email Address', text('email')),
+          field('Country Phone Code', phoneCode()),
           field('Phone Number', text('phone-number')),
         );
+      }
+
+      function phoneCode() {
+        const select = document.createElement('select');
+        select.setAttribute('data-automation-id', 'countryPhoneCode');
+        for (const [label, value] of [['Select One', ''], ['Canada (+1)', 'CA_1'], ['India (+91)', 'IN_91'],
+          ['United States of America (+1)', 'US_1']]) {
+          select.add(new Option(label, value));
+        }
+        return select;
+      }
+
+      /** Two inputs, each labelled "<group> <part>" through aria-labelledby. */
+      function dateParts(group, key) {
+        const wrap = document.createElement('div');
+        wrap.setAttribute('data-automation-id', 'formField-' + key);
+        const lab = document.createElement('label');
+        lab.id = `lbl-${uid++}`;
+        lab.textContent = group;
+        wrap.appendChild(lab);
+        for (const part of ['Month', 'Year']) {
+          const partLabel = document.createElement('span');
+          partLabel.id = `lbl-${uid++}`;
+          partLabel.textContent = part;
+          partLabel.hidden = true;
+          const input = document.createElement('input');
+          input.type = 'text';
+          input.id = `${key}-dateSection${part}-input-${uid++}`;
+          input.setAttribute('data-automation-id', `dateSection${part}-input`);
+          input.setAttribute('aria-labelledby', `${lab.id} ${partLabel.id}`);
+          input.placeholder = part === 'Month' ? 'MM' : 'YYYY';
+          wrap.append(partLabel, input);
+        }
+        return wrap;
+      }
+
+      function experienceBlock(n) {
+        const block = document.createElement('div');
+        block.setAttribute('data-automation-id', `workExperience-${n}`);
+        const h = document.createElement('h4');
+        h.textContent = `Work Experience ${n}`;
+        const current = document.createElement('input');
+        current.type = 'checkbox';
+        current.setAttribute('data-automation-id', 'currentlyWorkHere');
+        block.append(
+          h,
+          field('Job Title', text('jobTitle')),
+          field('Company', text('company')),
+          field('Location', text('location')),
+          field('I currently work here', current),
+          dateParts('From', 'startDate'),
+          dateParts('To', 'endDate'),
+        );
+        return block;
       }
 
       /** Workday's searchable prompt: options load only after 2+ characters. */
@@ -155,7 +218,13 @@
           o.value = d === 'Select One' ? '' : d;
           degree.appendChild(o);
         }
-        block.append(h, field('School or University', schoolPrompt()), field('Degree', degree));
+        block.append(
+          h,
+          field('School or University', schoolPrompt()),
+          field('Degree', degree),
+          field('First Year Attended', text('firstYearAttended')),
+          field('Last Year Attended', text('lastYearAttended')),
+        );
         return block;
       }
 
@@ -178,7 +247,12 @@
         add.addEventListener('click', () => blocks.appendChild(educationBlock(++count)));
         blocks.appendChild(educationBlock(++count));
         eduSection.append(eh, blocks, add);
-        page.append(h, eduSection);
+        const workSection = document.createElement('div');
+        workSection.setAttribute('data-automation-id', 'workExperienceSection');
+        const wh = document.createElement('h3');
+        wh.textContent = 'Work Experience';
+        workSection.append(wh, experienceBlock(1));
+        page.append(h, workSection, eduSection);
         window.__step = 2;
       }
 

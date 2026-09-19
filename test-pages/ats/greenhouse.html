@@ -27,6 +27,15 @@
           alone ("Needs your answer") because the profile has no saved answers; nothing is
           submitted.
         </p>
+        <p class="lead">
+          Form shapes: the phone "Country code" select gets "+91" and the phone field the number
+          without it; education start/end dates are MM / YYYY inputs; the employment block has
+          month-name and year selects, a location and "I currently work here" (ticked for a
+          current role, whose end month and year are then left empty). State is a dependent
+          dropdown: its options load only after Country is chosen. The first fill picks the
+          country; the panel then offers "1 more field can be filled now" and fills nothing
+          until the user reviews it.
+        </p>
         <h2>Requirements</h2>
         <div class="job-description">
           <p>Requirements: 3+ years of experience with Python or Go, React, and PostgreSQL.</p>
@@ -48,8 +57,31 @@
             <input type="text" id="email" name="job_application[email]" aria-required="true" />
           </div>
           <div class="field">
+            <label for="phone_country_code">Country code</label>
+            <select id="phone_country_code" name="job_application[phone_country_code]">
+              <option value="">Please select</option>
+              <option value="US">United States (+1)</option>
+              <option value="IN">India (+91)</option>
+              <option value="GB">United Kingdom (+44)</option>
+            </select>
+          </div>
+          <div class="field">
             <label for="phone">Phone</label>
             <input type="text" id="phone" name="job_application[phone]" />
+          </div>
+          <div class="field">
+            <label for="country">Country</label>
+            <select id="country" name="job_application[country]">
+              <option value="">Please select</option>
+              <option value="India">India</option>
+              <option value="United States">United States</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="state">State</label>
+            <select id="state" name="job_application[state]">
+              <option value="">Select a country first</option>
+            </select>
           </div>
           <div class="field">
             <label for="job_application_location">Location (City)</label>
@@ -74,6 +106,48 @@
                 aria-labelledby="degree-label" aria-controls="degree-listbox" class="select__input" />
             </div>
             <input type="hidden" name="job_application[educations][][degree_id]" />
+          </div>
+          <div class="field">
+            <span class="label">Start Date</span>
+            <input type="text" id="edu_start_month" aria-label="Start date month" placeholder="MM" maxlength="2"
+              name="job_application[educations][][start_date][month]" />
+            <input type="text" id="edu_start_year" aria-label="Start date year" placeholder="YYYY" maxlength="4"
+              name="job_application[educations][][start_date][year]" />
+          </div>
+          <div class="field">
+            <span class="label">End Date</span>
+            <input type="text" id="edu_end_month" aria-label="End date month" placeholder="MM" maxlength="2"
+              name="job_application[educations][][end_date][month]" />
+            <input type="text" id="edu_end_year" aria-label="End date year" placeholder="YYYY" maxlength="4"
+              name="job_application[educations][][end_date][year]" />
+          </div>
+        </div>
+
+        <div id="employment_section">
+          <h3>Employment</h3>
+          <div class="field">
+            <label for="emp_title">Title</label>
+            <input type="text" id="emp_title" name="job_application[employments][][title]" />
+          </div>
+          <div class="field">
+            <label for="emp_location">Location</label>
+            <input type="text" id="emp_location" name="job_application[employments][][location]" />
+          </div>
+          <div class="field">
+            <label for="emp_start_month">Start Month</label>
+            <select id="emp_start_month" name="job_application[employments][][start_date][month]"></select>
+            <label for="emp_start_year">Start Year</label>
+            <select id="emp_start_year" name="job_application[employments][][start_date][year]"></select>
+          </div>
+          <div class="field">
+            <label for="emp_end_month">End Month</label>
+            <select id="emp_end_month" name="job_application[employments][][end_date][month]"></select>
+            <label for="emp_end_year">End Year</label>
+            <select id="emp_end_year" name="job_application[employments][][end_date][year]"></select>
+          </div>
+          <div class="field">
+            <label><input type="checkbox" id="emp_current" name="job_application[employments][][current]" />
+              I currently work here</label>
           </div>
         </div>
 
@@ -146,6 +220,36 @@
       </form>
     </div>
 
+    <script>
+      // Month selects list names with numeric values; year selects list years.
+      const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August',
+        'September', 'October', 'November', 'December'];
+      for (const id of ['emp_start_month', 'emp_end_month']) {
+        const select = document.getElementById(id);
+        select.add(new Option('Month', ''));
+        MONTHS.forEach((name, i) => select.add(new Option(name, String(i + 1))));
+      }
+      for (const id of ['emp_start_year', 'emp_end_year']) {
+        const select = document.getElementById(id);
+        select.add(new Option('Year', ''));
+        for (let year = 2027; year >= 2015; year -= 1) select.add(new Option(String(year), String(year)));
+      }
+
+      // State depends on Country: its options arrive a moment after a country
+      // is chosen, as if fetched.
+      const STATES = { India: [['Karnataka', 'KA'], ['Kerala', 'KL'], ['Tamil Nadu', 'TN']],
+        'United States': [['California', 'CA'], ['New York', 'NY']] };
+      window.__stateLoads = 0;
+      document.getElementById('country').addEventListener('change', (event) => {
+        const state = document.getElementById('state');
+        const chosen = event.target.value;
+        setTimeout(() => {
+          window.__stateLoads += 1;
+          state.replaceChildren(new Option(chosen ? 'Please select' : 'Select a country first', ''));
+          for (const [label, value] of STATES[chosen] || []) state.add(new Option(label, value));
+        }, 300);
+      });
+    </script>
     <script>
       // A small stand-in for React-Select: the menu is rendered into a portal at
       // the end of <body>, options appear only while open, and choosing one

@@ -571,6 +571,8 @@ async function startSavedAnswer(entry: FillPlanEntry): Promise<void> {
   const field = session?.fields.get(entry.fieldId);
   const question = field?.signals.labelText || field?.signals.ariaLabel || entry.label;
   const response = await request<AnswerChoices>({ type: 'content:answer-choices', question });
+  // Cancelled (or rescanned away) while loading: do not bring the panel back.
+  if (!widget || widget.savedAnswers.get(entry.fieldId)?.phase !== 'loading') return;
   widget.savedAnswers.set(
     entry.fieldId,
     response.ok && response.data.answers.length > 0
@@ -591,6 +593,7 @@ async function pickSavedAnswer(entry: FillPlanEntry, id: string): Promise<void> 
   widget.savedAnswers.set(entry.fieldId, { ...current, busy: true });
   widget.refresh();
   const response = await request<{ text: string }>({ type: 'content:saved-answer', id });
+  if (!widget || widget.savedAnswers.get(entry.fieldId)?.phase !== 'choose') return;
   widget.savedAnswers.set(
     entry.fieldId,
     response.ok

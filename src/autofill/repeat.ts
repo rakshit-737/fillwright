@@ -1,4 +1,4 @@
-import { isSafeToExpand } from '@/adapters';
+import { isSafeToPress } from '@/adapters';
 
 /**
  * "Add another" controls.
@@ -51,7 +51,7 @@ export function findAddControls(root: Document | HTMLElement = document): AddCon
     const label = accessibleText(element);
     const kind = classifyAddLabel(label);
     if (!kind) continue;
-    if (!isSafeToExpand(element)) continue;
+    if (!isSafeToPress(element)) continue;
     controls.push({ kind, element, label });
   }
   return controls;

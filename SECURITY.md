@@ -146,7 +146,19 @@ controlled by someone else.
 - **"Add another" buttons.** The only control Fillwright will press is an
   unambiguous add-entry button, when you ask, at most five times, and only when
   exactly one such control exists for that entry type. It must also pass the
-  adapter guard (no submit, apply, delete, links) — `src/autofill/repeat.ts`.
+  base press guard (no submit, apply, delete, links) — `src/autofill/repeat.ts`.
+
+- **Site adapters (Ashby, Workday, SmartRecruiters).** Adapters may expand a
+  collapsed form section, and only on an explicit activation — never during a
+  quiet or passive scan (Smart mode's preparation, a form change). They press
+  only accordions: an element whose `aria-controls` names a region on the page,
+  or a heading's disclosure button. Anything with `aria-haspopup`, a combobox,
+  menu item or tab role, or inside `nav`, `header`, `[role=menu]`,
+  `[role=menubar]` or `[role=toolbar]` is refused. Each element is pressed at
+  most once per page, and if a press reveals no new form controls, its
+  siblings are left alone — `src/adapters/index.ts`. Up to 0.5.0 the adapters
+  pressed any `button[aria-expanded="false"]` (up to 20 per scan), including
+  in Smart mode's passive scans before the user had done anything.
 
 - **Imported files.** An export file may have been edited or crafted.
   `src/profile/portable.ts` rebuilds every record against the current schema:

@@ -208,7 +208,10 @@ async function runScan(quiet: boolean): Promise<void> {
 
   // Site-specific adapters only prepare the DOM (expanding collapsed sections,
   // for example). They never supply values and never bypass any safety rule.
-  const adapter = detectAdapter(location.href);
+  // They press page controls, so they run only when the user has asked:
+  // never from a quiet scan (Smart mode's passive preparation, a form change,
+  // a remembered correction).
+  const adapter = quiet ? null : detectAdapter(location.href);
   if (adapter) await applyAdapter(adapter);
 
   const { fields, elements, truncated } = harvestFields(document);

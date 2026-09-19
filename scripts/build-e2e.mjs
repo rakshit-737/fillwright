@@ -33,7 +33,9 @@ const manifestPath = resolve(target, 'manifest.json');
 const manifest = JSON.parse(readFileSync(manifestPath, 'utf8'));
 
 manifest.name = 'Fillwright (end-to-end test build)';
-manifest.host_permissions = ['http://127.0.0.1/*', 'http://localhost/*'];
+// https://*/* lets Smart mode run on the HTTPS fixture served under a real ATS
+// hostname (tests/e2e/suite-ats.mjs). Test build only.
+manifest.host_permissions = ['http://127.0.0.1/*', 'http://localhost/*', 'https://*/*'];
 
 writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
 

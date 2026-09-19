@@ -1,9 +1,16 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { ADAPTERS, applyAdapter, detectAdapter } from '@/adapters';
+import {
+  ADAPTERS,
+  applyAdapter,
+  detectAdapter,
+  isSafeToExpand,
+  resetAdapterPresses,
+} from '@/adapters';
 import { validateScan } from '@/security/scan-guard';
 
 beforeEach(() => {
   document.body.innerHTML = '';
+  resetAdapterPresses();
 });
 
 describe('adapter selection', () => {
@@ -30,7 +37,8 @@ describe('adapters can never submit an application', () => {
 
   it('clicks a collapsed expander', async () => {
     document.body.innerHTML = `
-      <button id="x" aria-expanded="false" data-automation-id="addButton">Add Work Experience</button>
+      <button id="x" aria-expanded="false" aria-controls="work" data-automation-id="addButton">Work Experience</button>
+      <div id="work"></div>
     `;
     const button = document.getElementById('x')!;
     let clicked = false;
@@ -187,5 +195,149 @@ describe('scans arriving from a page are untrusted input', () => {
     const result = validateScan({ fields: [{ ...validField, kind: 'javascript:alert(1)' }] });
     expect(result.ok).toBe(true);
     if (result.ok) expect(result.scan.fields[0]!.kind).toBe('unsupported');
+  });
+});
+
+/**
+ * Adapters may only open accordions. A dropdown, a menu or a navigation
+ * button also reports aria-expanded="false", and pressing those on a page the
+ * user never asked about is exactly what the product promises not to do.
+ */
+const workday = ADAPTERS.find((adapter) => adapter.id === 'workday')!;
+
+function visible(...elements: HTMLElement[]): void {
+  for (const element of elements) element.getClientRects = () => [{}] as unknown as DOMRectList;
+}
+
+function counter(ids: string[]): string[] {
+  const clicks: string[] = [];
+  for (const id of ids) {
+    const element = document.getElementById(id)!;
+    visible(element);
+    element.addEventListener('click', () => clicks.push(id));
+  }
+  return clicks;
+}
+
+describe('what counts as an accordion', () => {
+  it('accepts a button that controls a region', () => {
+    document.body.innerHTML = `<button id="b" aria-expanded="false" aria-controls="r">Education</button><div id="r" hidden></div>`;
+    const button = document.getElementById('b')!;
+    visible(button);
+    expect(isSafeToExpand(button)).toBe(true);
+  });
+
+  it('accepts a heading-level disclosure', () => {
+    document.body.innerHTML = `<h3><button id="b" aria-expanded="false">Work history</button></h3>`;
+    const button = document.getElementById('b')!;
+    visible(button);
+    expect(isSafeToExpand(button)).toBe(true);
+  });
+
+  it('refuses a bare collapsed button with no accordion semantics', () => {
+    document.body.innerHTML = `<button id="b" aria-expanded="false">More</button>`;
+    const button = document.getElementById('b')!;
+    visible(button);
+    expect(isSafeToExpand(button)).toBe(false);
+  });
+
+  it('refuses aria-controls that points at nothing', () => {
+    document.body.innerHTML = `<button id="b" aria-expanded="false" aria-controls="missing">More</button>`;
+    const button = document.getElementById('b')!;
+    visible(button);
+    expect(isSafeToExpand(button)).toBe(false);
+  });
+
+  it.each([
+    [
+      'a dropdown',
+      `<button id="b" aria-expanded="false" aria-haspopup="listbox" aria-controls="r">Country</button><div id="r"></div>`,
+    ],
+    [
+      'a menu button',
+      `<button id="b" aria-expanded="false" aria-haspopup="true" aria-controls="r">Account</button><div id="r"></div>`,
+    ],
+    [
+      'a combobox',
+      `<button id="b" role="combobox" aria-expanded="false" aria-controls="r">Pick</button><div id="r"></div>`,
+    ],
+    [
+      'a nav button',
+      `<nav><button id="b" aria-expanded="false" aria-controls="r">Careers</button></nav><div id="r"></div>`,
+    ],
+    [
+      'a header button',
+      `<header><h2><button id="b" aria-expanded="false">Menu</button></h2></header>`,
+    ],
+    [
+      'a menubar item',
+      `<div role="menubar"><button id="b" aria-expanded="false" aria-controls="r">File</button></div><div id="r"></div>`,
+    ],
+    [
+      'a menu item',
+      `<div role="menu"><button id="b" aria-expanded="false" aria-controls="r">Sub</button></div><div id="r"></div>`,
+    ],
+    [
+      'a toolbar button',
+      `<div role="toolbar"><button id="b" aria-expanded="false" aria-controls="r">Format</button></div><div id="r"></div>`,
+    ],
+  ])('refuses %s', (_name, html) => {
+    document.body.innerHTML = html;
+    const button = document.getElementById('b')!;
+    visible(button);
+    expect(isSafeToExpand(button)).toBe(false);
+  });
+});
+
+describe('applyAdapter presses carefully', () => {
+  it('never presses a dropdown or a nav menu button', async () => {
+    document.body.innerHTML = `
+      <nav><button id="nav" aria-expanded="false" aria-controls="navlist">Careers</button><ul id="navlist"></ul></nav>
+      <button id="dd" aria-expanded="false" aria-haspopup="listbox" aria-controls="ddlist">Country</button><div id="ddlist"></div>
+    `;
+    const clicks = counter(['nav', 'dd']);
+    await applyAdapter(workday);
+    expect(clicks).toEqual([]);
+  });
+
+  it('presses an element at most once per page, even after it collapses again', async () => {
+    document.body.innerHTML = `<button id="acc" aria-expanded="false" aria-controls="panel">Education</button><div id="panel"></div>`;
+    const clicks = counter(['acc']);
+    const button = document.getElementById('acc')!;
+    button.addEventListener('click', () => {
+      document.getElementById('panel')!.appendChild(document.createElement('input'));
+    });
+    await applyAdapter(workday);
+    button.setAttribute('aria-expanded', 'false');
+    await applyAdapter(workday);
+    expect(clicks).toEqual(['acc']);
+  });
+
+  it('stops pressing siblings when a press revealed no form controls', async () => {
+    document.body.innerHTML = `
+      <button id="a" aria-expanded="false" aria-controls="pa">One</button><div id="pa"></div>
+      <button id="b" aria-expanded="false" aria-controls="pb">Two</button><div id="pb"></div>
+    `;
+    const clicks = counter(['a', 'b']);
+    await applyAdapter(workday);
+    expect(clicks).toEqual(['a']);
+  });
+
+  it('keeps going while presses reveal fields', async () => {
+    document.body.innerHTML = `
+      <button id="a" aria-expanded="false" aria-controls="pa">One</button><div id="pa"></div>
+      <button id="b" aria-expanded="false" aria-controls="pb">Two</button><div id="pb"></div>
+    `;
+    const clicks = counter(['a', 'b']);
+    for (const [id, panel] of [
+      ['a', 'pa'],
+      ['b', 'pb'],
+    ] as const) {
+      document.getElementById(id)!.addEventListener('click', () => {
+        document.getElementById(panel)!.appendChild(document.createElement('input'));
+      });
+    }
+    await applyAdapter(workday);
+    expect(clicks).toEqual(['a', 'b']);
   });
 });

@@ -4,6 +4,9 @@ import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
+/** The Workday-shaped hostname the passive-scan test visits. */
+export const ATS_TEST_HOST = 'acme.myworkdayjobs.com';
+
 export const DIST = process.env.FW_DIST ? resolve(process.env.FW_DIST) : resolve(root, 'dist-e2e');
 
 /**
@@ -43,6 +46,12 @@ export async function launch({ headless = true } = {}) {
       `--load-extension=${DIST}`,
       '--no-first-run',
       '--no-default-browser-check',
+      // A real ATS hostname, mapped onto the local HTTPS fixture server, so
+      // site adapters run in the test exactly as they would on the real site.
+      // The certificate is a throwaway self-signed one; this browser is a test
+      // browser and nothing else.
+      `--host-resolver-rules=MAP ${ATS_TEST_HOST} 127.0.0.1`,
+      '--ignore-certificate-errors',
       // Needed in containerised CI; harmless locally.
       process.env.CI ? '--no-sandbox' : null,
     ].filter(Boolean),

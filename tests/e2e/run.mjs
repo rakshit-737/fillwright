@@ -6,8 +6,11 @@
  * enforcement, and its own approximations of shadow DOM and layout. This run
  * exercises the built extension exactly as a user would receive it.
  */
-import { resolve, dirname } from 'node:path';
+import { resolve, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { execFileSync } from 'node:child_process';
+import { mkdtempSync, readFileSync as readCert } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { startServer } from './server.mjs';
 import { runV05Suite } from './suite-v05.mjs';
 import { runAtsSuite } from './suite-ats.mjs';
@@ -308,11 +311,45 @@ async function readInputs(page, ids) {
 
 /* --------------------------------------------------------------- the run */
 
+async function startSecureServer() {
+  const dir = mkdtempSync(join(tmpdir(), 'fw-e2e-tls-'));
+  const key = join(dir, 'key.pem');
+  const cert = join(dir, 'cert.pem');
+  execFileSync(
+    'openssl',
+    [
+      'req',
+      '-x509',
+      '-newkey',
+      'rsa:2048',
+      '-nodes',
+      '-keyout',
+      key,
+      '-out',
+      cert,
+      '-days',
+      '1',
+      '-subj',
+      '/CN=fillwright-e2e',
+    ],
+    { stdio: 'ignore' },
+  );
+  return startServer(resolve(root, 'test-pages'), 0, '127.0.0.1', {
+    key: readCert(key),
+    cert: readCert(cert),
+  });
+}
+
 async function main() {
   const server = await startServer(resolve(root, 'test-pages'));
   // A second loopback address is a different origin that the test build has
   // no host access to — the "form in someone else's iframe" case.
   const foreign = await startServer(resolve(root, 'test-pages'), 0, '127.0.0.2').catch(() => null);
+  // The same fixtures over HTTPS, reached under a real ATS hostname (the
+  // harness maps it to loopback), so site adapters actually run. Needs a
+  // throwaway self-signed certificate; without openssl the tests that use it
+  // say so and are skipped rather than silently passing.
+  const secure = await startSecureServer().catch(() => null);
   const { browser, worker, extensionId } = await launch({ headless: process.env.HEADED !== '1' });
 
   console.log(`\nFillwright end-to-end (real Chrome)`);
@@ -1395,6 +1432,7 @@ async function main() {
     /* --- real-world ATS layouts ------------------------------------------ */
 
     await runAtsSuite({
+      secure,
       browser,
       worker,
       extensionId,
@@ -1427,6 +1465,7 @@ async function main() {
     await browser.close();
     await server.close();
     await foreign?.close();
+    await secure?.close();
   }
 
   /* ------------------------------------------------------------- report */

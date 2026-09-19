@@ -10,6 +10,16 @@
     </style>
   </head>
   <body>
+    <header data-automation-id="header">
+      <nav>
+        <button type="button" id="nav-menu" aria-expanded="false" aria-controls="nav-list">Careers menu</button>
+        <ul id="nav-list" hidden><li><a href="#jobs">All jobs</a></li></ul>
+      </nav>
+    </header>
+    <div data-automation-id="languageSelector">
+      <button type="button" id="lang" aria-expanded="false" aria-haspopup="listbox" aria-controls="lang-list">English</button>
+      <ul id="lang-list" role="listbox" hidden><li role="option">English</li><li role="option">Deutsch</li></ul>
+    </div>
     <div data-automation-id="applyFlowPage">
       <h2 data-automation-id="jobPostingHeader">Software Engineer II</h2>
       <p class="lead">
@@ -19,6 +29,9 @@
         "Add" button (aria-label "Add Education") is offered when the profile has entries; the
         School field is a searchable prompt whose options load only after two characters are
         typed. Fillwright types only the first few characters, waits, then picks the option.
+        The page also has a navigation menu button and a language dropdown button, both
+        aria-expanded="false". Fillwright must never press either (window.__pagePresses stays
+        0) — not on a passive Smart-mode scan and not on an explicit one.
       </p>
       <ol data-automation-id="progressBar">
         <li data-automation-id="progressBarActiveStep" aria-current="step" id="step-name">My Information</li>
@@ -34,6 +47,17 @@
 
     <script>
       window.__nextPresses = 0;
+      window.__pagePresses = 0;
+      for (const id of ['nav-menu', 'lang']) {
+        const button = document.getElementById(id);
+        button.addEventListener('click', () => {
+          window.__pagePresses += 1;
+          // Opens and closes again, as real dropdowns do, so it would qualify on every rescan.
+          const list = document.getElementById(button.getAttribute('aria-controls'));
+          list.hidden = false;
+          setTimeout(() => (list.hidden = true), 50);
+        });
+      }
       window.__searches = [];
       const SCHOOLS = [
         'Delhi Public School',

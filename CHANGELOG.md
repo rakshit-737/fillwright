@@ -36,6 +36,15 @@ Notable changes, newest first. Versions follow semantic versioning.
   field, Fillwright checks that the field (or its label) is what is actually at
   its position on the page, so a control hidden under another element is not
   written.
+- **Site adapters no longer press page buttons on their own.** The Ashby,
+  Workday and SmartRecruiters adapters clicked every collapsed
+  `button[aria-expanded="false"]` — dropdowns, menus and navigation included,
+  up to 20 per scan — and did so in Smart mode's passive scans, before the user
+  had done anything, and again on every form change. Adapters now run only when
+  the user opens Fillwright, press only accordions (a real `aria-controls`
+  region or a heading disclosure), never anything with `aria-haspopup`, a
+  combobox/menu role, or inside `nav`/`header`/menus/toolbars, press each
+  element at most once per page, and stop when a press reveals no new fields.
 
 ### Fixed
 

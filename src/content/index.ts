@@ -533,12 +533,18 @@ function postingExcerpt(): string {
 }
 
 /** Drafts being streamed, by field, so closing the panel can stop the model. */
-const draftPorts = new Map<string, chrome.runtime.Port>();
+const draftPorts = new Map<
+  string,
+  { port: chrome.runtime.Port; finish: (outcome: DraftOutcome) => void }
+>();
 
 function stopDraft(fieldId: string): void {
-  const port = draftPorts.get(fieldId);
-  if (!port) return;
+  const active = draftPorts.get(fieldId);
+  if (!active) return;
   draftPorts.delete(fieldId);
+  const { port } = active;
+  // A port closed from this side never fires its own onDisconnect, so settle here.
+  active.finish({ ok: false, code: 'EDRAFTCANCELLED', error: '' });
   try {
     port.postMessage({ type: 'cancel' });
     port.disconnect();
@@ -613,7 +619,7 @@ function streamDraft(
     const finish = (outcome: DraftOutcome) => {
       if (settled) return;
       settled = true;
-      if (draftPorts.get(fieldId) === port) draftPorts.delete(fieldId);
+      if (draftPorts.get(fieldId)?.port === port) draftPorts.delete(fieldId);
       resolve(outcome);
     };
     let port: chrome.runtime.Port;
@@ -624,7 +630,7 @@ function streamDraft(
       return;
     }
     stopDraft(fieldId);
-    draftPorts.set(fieldId, port);
+    draftPorts.set(fieldId, { port, finish });
     port.onMessage.addListener((message: unknown) => {
       const reply = message as { type?: unknown; text?: unknown; code?: unknown; error?: unknown };
       if (reply?.type === 'chunk' && typeof reply.text === 'string') onChunk(reply.text);

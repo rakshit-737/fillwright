@@ -101,6 +101,27 @@ controlled by someone else.
   option counts, and rebuilds every field from scratch rather than passing the
   page's object through. Unexpected properties are dropped, not forwarded.
 
+- **Hidden fields and honeypots.** A page can hide a field from the person but
+  not from a script: an anti-bot honeypot (fill it and the application is
+  silently discarded as spam), or a hidden "phone" field that harvests what an
+  autofiller writes. `assessVisibility` in `src/field-detection/harvest.ts`
+  requires a control to have a box at least 4 px each way, to be on the page
+  (not moved off-screen), not clipped away (`clip`, `clip-path`, or a clipping
+  container with no room), to have an effective opacity of at least 0.1 up the
+  ancestor chain, and not to sit inside an `aria-hidden` or `inert` subtree.
+  A styled radio or checkbox may be visually hidden behind its label; only
+  those are judged by their label instead. A field that fails is never sent to
+  the worker, never gets a value and cannot be ticked; the panel says "N hidden
+  fields ignored" with each reason on request (`display: none` is not counted,
+  since multi-step forms park later steps that way). At fill time, for each
+  ticked field only, `obscuredBy` checks with `elementsFromPoint` that the
+  control or its label is what is actually at its position (Fillwright's own
+  panel is looked through), so a field covered by another element is refused
+  too. Each review row has "Show me", which scrolls to and outlines the field
+  the row refers to. Covered by `tests/harvest.test.ts`,
+  `tests/autofill.test.ts` and `test-pages/hidden-fields.html` in the
+  end-to-end run.
+
 - **Restyling, hiding or reading the UI.** The panel renders inside a
   **closed** shadow root with self-contained styles. Page CSS cannot disguise the
   controls, and page scripts cannot read the preview — which shows proposed

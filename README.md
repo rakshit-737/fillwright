@@ -28,7 +28,10 @@ It never submits an application. That click is always yours.
 - **Learns from your corrections.** Tell it what an unrecognised field means and
   it remembers, for that site, on this device only.
 - **Explains itself.** Every row in the review list has a "Why?" that says what
-  matched and where.
+  matched and where, and a "Show me" that points at the field on the page.
+- **Leaves hidden fields alone.** Fields a person cannot see — honeypots,
+  off-screen or transparent inputs, fields covered by something else — are
+  never filled. The panel says how many it ignored and why.
 - **Encrypts what it stores**, optionally, with a passphrase only you hold.
 - **Refuses to guess** work authorisation, visa status, demographics, salary or
   criminal history. Those come only from answers you set yourself.
@@ -183,6 +186,7 @@ npx serve test-pages     # then open http://localhost:3000
 | `spa-steps.html`, `add-another.html`, `one-off.html`, `rejecting.html`, `frame-host.html` | Router navigation, adding blocks, one-off corrections, a form that rejects every write, a form in someone else's frame |
 | `newsletter.html`, `login.html` | Pages that are *not* applications, where proactive modes must stay silent |
 | `hostile-roles.html` | Submit buttons and links disguised as dropdowns, options and radios |
+| `hidden-fields.html` | Honeypots and six hiding techniques (opacity, off-screen, 1 px clip, `aria-hidden`, `inert`, covered); none may be filled |
 
 Every fixture states its expected behaviour at the top of the page.
 

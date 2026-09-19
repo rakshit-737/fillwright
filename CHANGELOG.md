@@ -306,6 +306,20 @@ Notable changes, newest first. Versions follow semantic versioning.
 - The end-to-end harness now drives the panel with real (trusted) input
   (`trustedClick`), since `element.click()` from page script is ignored.
 
+### Release and CI
+
+- **Reproducible store package.** `scripts/package.mjs` now sorts zip entries,
+  stamps every entry with one timestamp from `SOURCE_DATE_EPOCH` or the last
+  commit (in UTC, never the wall clock), uses fixed deflate settings, prints
+  the SHA-256 and writes `SHA256SUMS`. Two builds of one commit are identical.
+- **Releases are built by CI.** `release.yml` runs on a `v*` tag: `npm ci`,
+  check, end-to-end, packages twice and fails unless the hashes match, then
+  publishes the zip, `SHA256SUMS` and a build provenance attestation.
+- **Tighter CI.** Read-only token permissions, actions pinned by commit SHA, a
+  concurrency group, a Windows job running `npm run check`, Dependabot for npm
+  and GitHub Actions, and CodeQL for JavaScript/TypeScript.
+- README: "Verify the store package yourself".
+
 
 ## 0.5.0
 

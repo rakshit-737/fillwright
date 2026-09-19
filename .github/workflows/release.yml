@@ -1,0 +1,74 @@
+name: Release
+
+# Builds the store package from a version tag, twice, and refuses to publish
+# unless both builds are byte-identical. The zip, its SHA256SUMS and a build
+# provenance attestation are attached to a GitHub Release, so anyone can
+# rebuild the tag and compare (README: "Verify the store package yourself").
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    name: Build, verify and publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # create the release
+      id-token: write # sign the provenance attestation
+      attestations: write
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 1
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - name: Tag matches the package version
+        run: |
+          version=$(node -p "require('./package.json').version")
+          test "v$version" = "$GITHUB_REF_NAME" || { echo "tag $GITHUB_REF_NAME != v$version"; exit 1; }
+
+      - name: Check
+        run: npm run check
+
+      - name: End-to-end
+        run: npm run test:e2e
+        env:
+          CI: 'true'
+
+      # Two clean builds from the same commit must give the same bytes.
+      - name: Package twice and compare
+        run: |
+          export SOURCE_DATE_EPOCH=$(git log -1 --format=%ct)
+          rm -rf dist && npm run build && node scripts/package.mjs --out build-a
+          rm -rf dist && npm run build && node scripts/package.mjs --out build-b
+          cat build-a/SHA256SUMS build-b/SHA256SUMS
+          cmp build-a/SHA256SUMS build-b/SHA256SUMS
+          mkdir -p release && cp build-a/* release/
+          node scripts/presubmit.mjs --no-build
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
+        with:
+          subject-path: release/fillwright-*.zip
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" release/fillwright-*.zip release/SHA256SUMS \
+            --title "Fillwright $GITHUB_REF_NAME" \
+            --notes "Reproducible build. SHA-256: $(cut -d' ' -f1 release/SHA256SUMS). See README, 'Verify the store package yourself'."

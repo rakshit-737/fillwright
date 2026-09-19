@@ -105,9 +105,9 @@ export function ImportResume({
     if (stage.name === 'done') onSaved?.();
   }, [stage.name, onSaved]);
 
-  const handleText = useCallback((text: string, source: SourceInfo) => {
+  const handleText = useCallback((text: string, source: SourceInfo, links: string[] = []) => {
     try {
-      const parsed = parseResume(text);
+      const parsed = parseResume(text, { links });
       // Defence in depth: fail loudly if the parser ever starts producing
       // sensitive fields, rather than letting them flow into the profile.
       assertNoSensitiveInference(parsed);
@@ -129,12 +129,16 @@ export function ImportResume({
       try {
         const bytes = await file.arrayBuffer();
         const extracted = await extractResumeText(bytes, file.name);
-        handleText(extracted.text, {
-          fileName: file.name,
-          mimeType: file.type || 'application/octet-stream',
-          bytes,
-          text: extracted.text,
-        });
+        handleText(
+          extracted.text,
+          {
+            fileName: file.name,
+            mimeType: file.type || 'application/octet-stream',
+            bytes,
+            text: extracted.text,
+          },
+          extracted.links,
+        );
       } catch (cause) {
         const message =
           cause instanceof ExtractionError

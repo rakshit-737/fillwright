@@ -188,6 +188,13 @@ employer).
   setter — **never** `innerHTML`. Stored text cannot become live DOM.
 - Files are size-capped at 15 MB and format is detected from magic bytes, not
   the filename.
+- A DOCX is refused if any part it needs declares more than 8 MB, or all of them
+  more than 16 MB, once inflated. Entries are inflated into buffers of their
+  declared size and no larger, so a ZIP bomb cannot exhaust memory.
+- Link URLs taken from a file (PDF link annotations, DOCX hyperlink
+  relationships) are kept only when they are `http(s)`, at most 50 per file,
+  and are re-validated by the same URL check as links written in the text.
+  They are never opened or fetched.
 
 ### 3.2b Custom dropdowns require interacting with the page
 

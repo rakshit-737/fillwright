@@ -56,6 +56,10 @@ Notable changes, newest first. Versions follow semantic versioning.
 - `content:open-page` now accepts the `profile` route with an optional
   `field`, validated against `FIELD_CATALOG` in both the content script and
   the service worker. It still only opens a page.
+- DOCX parts are capped at 8 MB each and 16 MB in total, checked against the
+  declared sizes before anything is inflated. fflate never inflates past a
+  declared size, so a ZIP bomb is refused quickly and a lying header only
+  truncates its entry.
 
 ### Fixed
 
@@ -104,6 +108,16 @@ Notable changes, newest first. Versions follow semantic versioning.
 - **Years of experience is no longer inflated.** Overlapping roles are merged
   before summing, the total is whole years completed (never rounded up), and
   under one year goes to review instead of writing an invented "1".
+- Two-column (sidebar) PDF resumes are read column by column. A per-page gutter
+  is found from a histogram of text extents; the header above the columns is
+  read first. Single-column pages, including right-aligned date columns, are
+  read exactly as before.
+- Profile links that exist only as clickable words are now found: PDF link
+  annotations and DOCX hyperlink relationships (`http(s)` only) are passed to
+  the link matcher.
+- DOCX text boxes are no longer read twice (`mc:Fallback` is skipped).
+- Names with non-ASCII letters ("José Álvarez") or initials ("S. R. Jeevan")
+  are recognised.
 
 ### Added
 

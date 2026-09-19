@@ -1414,6 +1414,55 @@ async function main() {
       }
     });
 
+    /* --- resume reading: columns, annotation links (prompt 13) ------- */
+
+    const reviewText = async (bytes, name) => {
+      const { writeFileSync: write, mkdtempSync } = await import('node:fs');
+      const { join } = await import('node:path');
+      const { tmpdir } = await import('node:os');
+      const file = join(mkdtempSync(join(tmpdir(), 'fw-read-')), name);
+      write(file, bytes);
+
+      const page = await browser.newPage();
+      await page.goto(`chrome-extension://${extensionId}/options.html#/import`, {
+        waitUntil: 'networkidle0',
+      });
+      const input = await page.$('input[type="file"]');
+      assert(input, 'the file input was not found');
+      await input.uploadFile(file);
+      await page.waitForFunction(
+        () => document.body.innerText.indexOf('Here is what Fillwright read') !== -1,
+        { timeout: 20_000 },
+      );
+      const seen = await page.evaluate(
+        () =>
+          document.body.innerText +
+          '\n' +
+          Array.from(document.querySelectorAll('input, textarea'))
+            .map((field) => field.value)
+            .join('\n'),
+      );
+      await page.close();
+      return seen;
+    };
+
+    await test('a PDF whose links exist only as annotations yields its profile links', async () => {
+      const { buildAnnotationLinkPdf } = await import('../fixtures/resume-files.mjs');
+      const seen = await reviewText(buildAnnotationLinkPdf(), 'links.pdf');
+      assert(
+        seen.includes('linkedin.com/in/arjun-mehta-example'),
+        'the LinkedIn annotation URL was not offered for review',
+      );
+      assert(!seen.includes('javascript:'), 'a javascript: annotation leaked into the review');
+    });
+
+    await test('a two-column PDF is read column by column', async () => {
+      const { buildTwoColumnPdf } = await import('../fixtures/resume-files.mjs');
+      const seen = await reviewText(buildTwoColumnPdf(), 'columns.pdf');
+      assert(seen.includes('Northwind Analytics'), 'the experience column was not parsed');
+      assert(seen.includes('Meera'), 'the name in the full-width header was not read');
+    });
+
     /* --- v0.5: proactive modes, corrections, SPA, focus, portability --- */
 
     await runV05Suite({

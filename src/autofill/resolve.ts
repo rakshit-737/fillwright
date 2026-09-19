@@ -1,4 +1,5 @@
 import { containsWords, sameByAlias } from './aliases';
+import { countryDisplayName, detectCountries } from './countries';
 import type { CanonicalField, DetectedField, FieldOption } from '@/types/fields';
 import type { Profile, TriState } from '@/types/profile';
 import { formatDate } from '@/parser/dates';
@@ -337,7 +338,8 @@ export function resolveForField(
  * Work authorisation is always about a specific country, so the country is read
  * from the question text. If the question names a country the user has not
  * answered for, nothing is filled — an answer for the US says nothing about
- * the UK.
+ * the UK. A question that names no country, or more than one, is never
+ * answered: the user decides.
  */
 function resolveAuthorization(
   field: 'sensitive.workAuthorization' | 'sensitive.requiresSponsorship',
@@ -345,12 +347,22 @@ function resolveAuthorization(
   profile: Profile,
 ): ResolvedValue {
   const question = `${detected.signals.labelText} ${detected.signals.ariaLabel} ${detected.signals.precedingText}`;
-  const country = detectCountry(question);
+  const countries = detectCountries(question);
   const answers =
     field === 'sensitive.workAuthorization'
       ? profile.sensitive.workAuthorization.authorizedIn
       : profile.sensitive.workAuthorization.requiresSponsorship;
 
+  if (countries.length > 1) {
+    // "the United States or Canada": any single saved answer could be wrong for
+    // the other country, so the user answers this one.
+    return {
+      ...none(`this question mentions ${listCountries(countries)}`),
+      needsConsent: true,
+    };
+  }
+
+  const country = countries[0];
   if (!country) {
     const codes = Object.keys(answers);
     // Exactly one country answered and no country named in the question: still
@@ -368,7 +380,7 @@ function resolveAuthorization(
   const answer = answers[country];
   if (!answer || answer === 'unset') {
     return {
-      ...none(`you have not answered this for ${country}`),
+      ...none(`you have not answered this for ${countryDisplayName(country)}`),
       needsConsent: true,
     };
   }
@@ -376,30 +388,28 @@ function resolveAuthorization(
   return {
     value: answer === 'yes' ? 'Yes' : 'No',
     confidence: 0.9,
-    note: `your saved answer for ${country}`,
+    note: `your saved answer for ${countryDisplayName(country)}`,
     needsConsent: false,
   };
 }
 
-const COUNTRY_PATTERNS: Array<[RegExp, string]> = [
-  [/\b(?:united states|usa|u\.s\.a|u\.s\.|america|us\b)/i, 'US'],
-  [/\b(?:india|indian)\b/i, 'IN'],
-  [/\b(?:united kingdom|uk\b|britain|england)\b/i, 'GB'],
-  [/\bcanada|canadian\b/i, 'CA'],
-  [/\baustralia\b/i, 'AU'],
-  [/\bgermany\b/i, 'DE'],
-  [/\bireland\b/i, 'IE'],
-  [/\bnetherlands\b/i, 'NL'],
-  [/\bsingapore\b/i, 'SG'],
-  [/\b(?:uae|united arab emirates)\b/i, 'AE'],
-];
-
-export function detectCountry(text: string): string | null {
-  for (const [pattern, code] of COUNTRY_PATTERNS) {
-    if (pattern.test(text)) return code;
-  }
-  return null;
+function listCountries(codes: string[]): string {
+  const names = codes.map(countryDisplayName);
+  return names.length <= 2
+    ? names.join(' and ')
+    : `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
 }
+
+/**
+ * The one country a question is about, or null when it names none or several.
+ * See ./countries for the matching rules.
+ */
+export function detectCountry(text: string): string | null {
+  const found = detectCountries(text);
+  return found.length === 1 ? found[0]! : null;
+}
+
+export { detectCountries };
 
 /* --------------------------------------------------------- option matching */
 

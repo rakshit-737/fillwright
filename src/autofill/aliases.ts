@@ -10,24 +10,11 @@
  * and goes to review — a near-miss on a job application is worse than a gap.
  */
 
+import { countryAliasGroups } from './countries';
+
 const GROUPS: string[][] = [
-  // countries
-  ['united states', 'united states of america', 'usa', 'us', 'u s', 'u s a', 'america'],
-  [
-    'united kingdom',
-    'uk',
-    'u k',
-    'great britain',
-    'britain',
-    'united kingdom of great britain and northern ireland',
-  ],
-  ['united arab emirates', 'uae', 'u a e'],
-  ['south korea', 'korea republic of', 'republic of korea', 'korea south'],
-  ['netherlands', 'the netherlands', 'holland'],
-  ['czechia', 'czech republic'],
-  ['russia', 'russian federation'],
-  ['viet nam', 'vietnam'],
-  ['india', 'republic of india', 'bharat'],
+  // countries: shared with work-authorisation detection, see ./countries
+  ...countryAliasGroups(),
   // degrees
   ['bachelor of technology', 'b tech', 'btech', 'b tech hons'],
   ['bachelor of engineering', 'b e', 'be', 'b eng', 'beng'],

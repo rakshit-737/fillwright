@@ -253,3 +253,23 @@
     grid-column: 2;
   }
 }
+
+.fw-entrylist {
+  list-style: none;
+  margin: 0 0 var(--fw-space-6);
+  padding: 0;
+  display: grid;
+  gap: var(--fw-space-1);
+  font-size: var(--fw-text-sm);
+}
+
+.fw-entry {
+  padding: var(--fw-space-2) 0;
+  border-bottom: 1px solid var(--fw-line);
+  overflow-wrap: anywhere;
+}
+
+.fw-entry--kept,
+.fw-entry--missing {
+  color: var(--fw-ink-subtle);
+}

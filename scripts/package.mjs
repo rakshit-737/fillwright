@@ -24,7 +24,12 @@ import { buildZip, resolveEpoch } from './lib/zip.mjs';
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const dist = resolve(root, 'dist');
 const outFlag = process.argv.indexOf('--out');
-const outDir = outFlag > -1 ? resolve(process.argv[outFlag + 1]) : resolve(root, 'release');
+const outArg = outFlag > -1 ? process.argv[outFlag + 1] : undefined;
+if (outFlag > -1 && (!outArg || outArg.startsWith('--'))) {
+  console.error('[fillwright] --out needs a directory.');
+  process.exit(1);
+}
+const outDir = outArg ? resolve(outArg) : resolve(root, 'release');
 
 if (!existsSync(dist)) {
   console.error('[fillwright] dist/ is missing — run `npm run build` first.');

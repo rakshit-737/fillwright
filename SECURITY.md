@@ -314,6 +314,8 @@ These are enforced in code, not merely documented:
 | Store or log a passphrase | It is used to derive a key and then discarded |
 | Claim a write succeeded without checking | Every write is read back and verified; a rejected value is reverted and reported |
 | Use one profile entry for two repeated blocks | Each block resolves its own entry; a block with no entry is left empty |
+| Fill a dropdown that appeared after you pressed Fill | `src/autofill/second-pass.ts` only finds it; the panel offers "N more fields can be filled now" and writes nothing until you review and press Fill again |
+| Guess where a phone number's country code ends | `splitPhone` in `src/autofill/resolve.ts` splits only a phone saved as "+CC rest"; anything else leaves the code and national-number fields empty |
 
 ---
 
@@ -341,6 +343,8 @@ the security properties in the real runtime rather than in a simulation:
 - a plan read while the vault was open is not written after it locks;
 - controls disguised as dropdowns, options and radios are never pressed;
 - a searchable dropdown never receives more than six characters of a value;
+- a State list that loads after Country is chosen is offered as "1 more field
+  can be filled now" and stays empty until the user reviews it;
 - Assist and Smart stay silent on sign-in and newsletter pages, and Manual
   mode leaves no script registered;
 - one-off corrections are forgotten on reload;

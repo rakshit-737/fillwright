@@ -21,9 +21,12 @@ const LIGATURES: Array<[RegExp, string]> = [
 
 /** Lower-cases and removes diacritics: "Città" → "citta". */
 export function foldText(value: string): string {
+  // Lower-case after NFKD too: compatibility forms such as mathematical bold
+  // "𝐀" decompose to an upper-case letter.
   let out = value
     .toLowerCase()
     .normalize('NFKD')
+    .toLowerCase()
     .replace(/\p{M}+/gu, '');
   for (const [pattern, replacement] of LIGATURES) out = out.replace(pattern, replacement);
   return out;

@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Apply — Platform Engineer</title>
+    <link rel="stylesheet" href="./shared.css" />
+  </head>
+  <body>
+    <h1>Apply: Platform Engineer</h1>
+    <p class="lead">
+      Expected: with a profile record stored by an older release (schema v1, missing keys that
+      newer releases added) as the active profile, First Name, Last Name, Email and City fill from
+      it. Pronouns, which that record never had, stays empty.
+    </p>
+    <form>
+      <label for="m-first">First Name</label>
+      <input id="m-first" name="first_name" autocomplete="given-name" />
+      <label for="m-last">Last Name</label>
+      <input id="m-last" name="last_name" autocomplete="family-name" />
+      <label for="m-email">Email</label>
+      <input id="m-email" name="email" type="email" autocomplete="email" />
+      <label for="m-city">City</label>
+      <input id="m-city" name="city" autocomplete="address-level2" />
+      <label for="m-pronouns">Pronouns</label>
+      <input id="m-pronouns" name="pronouns" />
+      <button type="submit">Submit application</button>
+    </form>
+    <script src="./shared.js"></script>
+  </body>
+</html>

@@ -194,7 +194,47 @@ export function conformProfile(raw: Record<string, unknown>): Profile {
  * Shapes `value` to look exactly like `template`. The template decides which
  * keys exist and what type each has; `value` only ever supplies content.
  */
-function conform(value: unknown, template: unknown, path: string, depth: number): unknown {
+interface ConformOptions {
+  /**
+   * Keep list-entry ids that look like ids, and do not shorten list strings
+   * below the text cap. Used for records Fillwright itself stored, where the
+   * ids are references the editor relies on; imports always regenerate them.
+   */
+  keepIds?: boolean;
+}
+
+const ID_PATTERN = /^[A-Za-z0-9_-]{1,64}$/;
+
+/** True for a string that is safe to keep as a record or entry id. */
+export function isSafeId(value: unknown): value is string {
+  return typeof value === 'string' && ID_PATTERN.test(value);
+}
+
+/**
+ * Rebuilds a stored profile against the current template, keeping its ids,
+ * dates and provenance. Missing keys come from the template, unknown keys go.
+ */
+export function hydrateProfile(raw: Record<string, unknown>): Profile {
+  const template = createEmptyProfile();
+  const shaped = conform(raw, template, '', 0, { keepIds: true }) as Profile;
+  return {
+    ...shaped,
+    id: isSafeId(raw.id) ? raw.id : template.id,
+    name: sanitizeString(raw.name, 120) || 'Untitled Profile',
+    createdAt: shaped.createdAt || template.createdAt,
+    updatedAt: shaped.updatedAt || template.updatedAt,
+    schemaVersion: template.schemaVersion,
+    resumeIds: shaped.resumeIds.filter(isSafeId),
+  };
+}
+
+function conform(
+  value: unknown,
+  template: unknown,
+  path: string,
+  depth: number,
+  options: ConformOptions = {},
+): unknown {
   if (depth > 8) return template;
 
   if (typeof template === 'string') {
@@ -219,16 +259,17 @@ function conform(value: unknown, template: unknown, path: string, depth: number)
         .filter(isPlainObject)
         .map((item) => {
           const blank = factory();
-          const shaped = conform(item, blank, `${path}[]`, depth + 1) as { id: string };
+          const shaped = conform(item, blank, `${path}[]`, depth + 1, options) as { id: string };
           // Ids are regenerated so an import can never collide with stored data.
-          return { ...shaped, id: (blank as { id: string }).id };
+          const keep = options.keepIds && isSafeId(item.id);
+          return { ...shaped, id: keep ? (item.id as string) : (blank as { id: string }).id };
         });
     }
     // Everything else modelled as a list is a list of strings.
     return value
       .slice(0, MAX_LIST)
       .filter((item): item is string => typeof item === 'string')
-      .map((item) => sanitizeString(item, 400));
+      .map((item) => sanitizeString(item, options.keepIds ? MAX_TEXT : 400));
   }
 
   if (isPlainObject(template)) {
@@ -247,7 +288,13 @@ function conform(value: unknown, template: unknown, path: string, depth: number)
 
     const out: Record<string, unknown> = {};
     for (const key of keys) {
-      out[key] = conform(source[key], template[key], path ? `${path}.${key}` : key, depth + 1);
+      out[key] = conform(
+        source[key],
+        template[key],
+        path ? `${path}.${key}` : key,
+        depth + 1,
+        options,
+      );
     }
     // Provenance notes are optional, so the blank template does not carry one.
     if ('source' in template && 'confidence' in template && typeof source.note === 'string') {

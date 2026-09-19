@@ -9,7 +9,7 @@
 export type StoreName = 'profiles' | 'resumes' | 'mappings' | 'history' | 'meta';
 
 export const DB_NAME = 'fillwright';
-export const DB_VERSION = 1;
+export const DB_VERSION = 2;
 
 const STORES: Array<{ name: StoreName; keyPath: string; indexes?: Array<[string, string]> }> = [
   { name: 'profiles', keyPath: 'id' },
@@ -19,20 +19,47 @@ const STORES: Array<{ name: StoreName; keyPath: string; indexes?: Array<[string,
   { name: 'meta', keyPath: 'key' },
 ];
 
+/**
+ * Schema upgrades, keyed by the version they upgrade TO. Each runs inside the
+ * versionchange transaction when a database older than that version is
+ * opened, in order. A fresh install runs them all.
+ *
+ * To change the schema: bump DB_VERSION, add a step here, and add a case to
+ * tests/boundary.test.ts that opens the previous version and upgrades it.
+ * Steps must not await anything: the upgrade transaction closes on the first
+ * microtask gap it does not own.
+ */
+type UpgradeStep = (db: IDBDatabase, tx: IDBTransaction) => void;
+
+export const UPGRADES: Readonly<Record<number, UpgradeStep>> = {
+  1: ensureStores,
+  // 2: reconcile stores and indexes, so a v1 database missing any of them
+  // (for example from an interrupted first install) is repaired.
+  2: ensureStores,
+};
+
+function ensureStores(db: IDBDatabase, tx: IDBTransaction): void {
+  for (const store of STORES) {
+    const os = db.objectStoreNames.contains(store.name)
+      ? tx.objectStore(store.name)
+      : db.createObjectStore(store.name, { keyPath: store.keyPath });
+    for (const [indexName, keyPath] of store.indexes ?? []) {
+      if (!os.indexNames.contains(indexName)) os.createIndex(indexName, keyPath, { unique: false });
+    }
+  }
+}
+
 let dbPromise: Promise<IDBDatabase> | null = null;
 
 export function openDb(): Promise<IDBDatabase> {
   if (dbPromise) return dbPromise;
   dbPromise = new Promise((resolve, reject) => {
     const request = indexedDB.open(DB_NAME, DB_VERSION);
-    request.onupgradeneeded = () => {
+    request.onupgradeneeded = (event) => {
       const db = request.result;
-      for (const store of STORES) {
-        if (db.objectStoreNames.contains(store.name)) continue;
-        const os = db.createObjectStore(store.name, { keyPath: store.keyPath });
-        for (const [indexName, keyPath] of store.indexes ?? []) {
-          os.createIndex(indexName, keyPath, { unique: false });
-        }
+      const tx = request.transaction!;
+      for (let version = event.oldVersion + 1; version <= DB_VERSION; version++) {
+        UPGRADES[version]?.(db, tx);
       }
     };
     request.onsuccess = () => {
@@ -90,6 +117,18 @@ export const idb = {
     return run<number>(store, 'readonly', (os) => os.count());
   },
 };
+
+/** Test helper: drops the cached handle and deletes the database. */
+export async function __resetDbForTests(): Promise<void> {
+  if (dbPromise) (await dbPromise.catch(() => null))?.close();
+  dbPromise = null;
+  await new Promise<void>((resolve) => {
+    const request = indexedDB.deleteDatabase(DB_NAME);
+    request.onsuccess = () => resolve();
+    request.onerror = () => resolve();
+    request.onblocked = () => resolve();
+  });
+}
 
 /** Removes the entire database. Used by the "erase all data" control. */
 export async function destroyDb(): Promise<void> {

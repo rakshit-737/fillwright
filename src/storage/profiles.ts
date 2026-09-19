@@ -1,5 +1,6 @@
 import { idb } from './idb';
 import { createEmptyProfile, newId, now } from '@/profile/factory';
+import { migrateProfile } from '@/profile/migrate';
 import {
   decryptBytes,
   decryptJson,
@@ -99,11 +100,12 @@ export async function listProfiles(): Promise<ProfileSummary[]> {
 export async function getProfile(id: string): Promise<Profile | undefined> {
   const record = await idb.get<StoredProfile>('profiles', id);
   if (!record) return undefined;
-  if (!isEncryptedProfile(record)) return record;
+  // Older records are upgraded on read; encrypted ones only once unlocked.
+  if (!isEncryptedProfile(record)) return migrateProfile(record);
 
   const key = await getKey();
   if (!key) throw new VaultLockedError();
-  return decryptJson<Profile>(key, record.blob);
+  return migrateProfile(await decryptJson<Profile>(key, record.blob));
 }
 
 export async function getResume(id: string): Promise<ResumeAttachment | undefined> {

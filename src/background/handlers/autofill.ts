@@ -1,3 +1,4 @@
+import { validateMappingInput } from '@/security/boundary';
 import { handle, ok, err } from '../router';
 import { getProfile } from '@/storage/profiles';
 import { getSettings } from '@/storage/settings';
@@ -192,13 +193,9 @@ export function registerAutofillHandlers(): void {
     const origin = originFromUrl(sender.tab?.url ?? sender.url ?? '');
     if (!origin) return err('Unknown sender', 'ENOSENDER');
 
-    const saved = await saveMapping({
-      origin,
-      fingerprint: sanitizeString(mapping.fingerprint, 240),
-      label: sanitizeString(mapping.label, 120),
-      canonical: mapping.canonical,
-      ...(mapping.customKey ? { customKey: sanitizeString(mapping.customKey, 80) } : {}),
-    });
+    const checked = validateMappingInput(mapping);
+    if (!checked.ok) return err(checked.error, checked.code);
+    const saved = await saveMapping({ origin, ...checked.value });
     return ok(saved);
   });
 

@@ -1051,6 +1051,63 @@ async function main() {
       });
       assert(profile.ok, 'the profile should be readable with encryption off');
       assertEqual(profile.data.personal.email.value, TEST_PROFILE.email, 'data survived');
+      assert(!status.data.problem, 'a clean switch-off must not report a damaged store');
+    });
+
+    await test('a store left half-encrypted by an old version gets a recovery message', async () => {
+      // Simulates what an interrupted enable in 0.5.0 could leave behind:
+      // ciphertext with no meta record holding its salt.
+      async function raw(action) {
+        const page = await browser.newPage();
+        await page.goto(`chrome-extension://${extensionId}/options.html`, {
+          waitUntil: 'domcontentloaded',
+        });
+        await page.evaluate(
+          (what) =>
+            new Promise((resolve, reject) => {
+              const open = indexedDB.open('fillwright');
+              open.onsuccess = () => {
+                const tx = open.result.transaction('profiles', 'readwrite');
+                const os = tx.objectStore('profiles');
+                if (what === 'add') {
+                  os.put({
+                    id: 'prof_orphan',
+                    encrypted: true,
+                    name: 'Orphan',
+                    updatedAt: '2026-01-01T00:00:00.000Z',
+                    hasResume: false,
+                    blob: { v: 1, iv: 'AAAAAAAAAAAAAAAA', ct: 'AAAAAAAAAAAAAAAAAAAAAA==' },
+                  });
+                } else os.delete('prof_orphan');
+                tx.oncomplete = () => {
+                  open.result.close();
+                  resolve();
+                };
+                tx.onabort = () => reject(tx.error);
+              };
+              open.onerror = () => reject(open.error);
+            }),
+          action,
+        );
+        await page.close();
+      }
+
+      await raw('add');
+      try {
+        const status = await ask({ type: 'ui:vault-status' });
+        assertEqual(status.data.state, 'off', 'no meta record means the vault reads as off');
+        assert(
+          typeof status.data.problem === 'string' && status.data.problem.includes('Privacy Center'),
+          'the status should carry a specific recovery message',
+        );
+        const enabled = await ask({ type: 'ui:vault-enable', passphrase: PASSPHRASE });
+        assert(!enabled.ok, 'encryption must not switch on over orphaned ciphertext');
+        assertEqual(enabled.code, 'EVAULTMIXED', 'the refusal should say why');
+      } finally {
+        await raw('delete');
+      }
+      const clean = await ask({ type: 'ui:vault-status' });
+      assert(!clean.data.problem, 'removing the orphan clears the message');
     });
 
     /* --- importing a real PDF through the UI -------------------------- */

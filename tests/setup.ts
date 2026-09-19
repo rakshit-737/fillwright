@@ -6,6 +6,7 @@ import { vi } from 'vitest';
  * that accidentally reaches for a real Chrome API fails loudly.
  */
 const storage = new Map<string, unknown>();
+const session = new Map<string, unknown>();
 
 const chromeMock = {
   storage: {
@@ -24,6 +25,23 @@ const chromeMock = {
         for (const k of Array.isArray(key) ? key : [key]) storage.delete(k);
       }),
       clear: vi.fn(async () => storage.clear()),
+    },
+    // Memory-only in Chrome as well; used by the vault for the unlocked key.
+    session: {
+      get: vi.fn(async (key?: string | string[] | null) => {
+        if (key == null) return Object.fromEntries(session);
+        const keys = Array.isArray(key) ? key : [key];
+        const out: Record<string, unknown> = {};
+        for (const k of keys) if (session.has(k)) out[k] = session.get(k);
+        return out;
+      }),
+      set: vi.fn(async (items: Record<string, unknown>) => {
+        for (const [k, v] of Object.entries(items)) session.set(k, v);
+      }),
+      remove: vi.fn(async (key: string | string[]) => {
+        for (const k of Array.isArray(key) ? key : [key]) session.delete(k);
+      }),
+      clear: vi.fn(async () => session.clear()),
     },
   },
   runtime: {
@@ -53,6 +71,7 @@ vi.stubGlobal('chrome', chromeMock);
 
 export function resetStorage(): void {
   storage.clear();
+  session.clear();
 }
 
 export { chromeMock };

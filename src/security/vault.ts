@@ -1,4 +1,4 @@
-import { idb } from '@/storage/idb';
+import { idb, writeAtomic, type WriteOp } from '@/storage/idb';
 import {
   decryptJson,
   deriveKey,
@@ -134,17 +134,65 @@ export async function touch(): Promise<void> {
 export interface EnableResult {
   ok: boolean;
   error?: string;
+  /** A stable code when the failure has its own recovery, e.g. EQUOTA. */
+  code?: string;
+}
+
+/**
+ * Every record re-written under the new key (or none), computed but not yet
+ * stored. `bytes` is a rough size, used for the free-space check.
+ */
+export interface Rewrite {
+  ops: WriteOp[];
+  bytes: number;
+}
+
+const NO_ROOM: EnableResult = {
+  ok: false,
+  code: 'EQUOTA',
+  error:
+    'There is not enough free storage to re-write your data, so nothing was changed. Free some disk space or remove resumes you no longer need, then try again.',
+};
+
+/**
+ * Writes the re-written records and the vault's meta change in ONE
+ * transaction, so the database is either entirely in the old state or
+ * entirely in the new one. A salt is never lost while ciphertext under it
+ * exists, and an interrupted switch leaves the old passphrase (or none) working.
+ */
+async function commit(rewrite: Rewrite, metaOp: WriteOp): Promise<EnableResult | null> {
+  if (!(await hasRoomFor(rewrite.bytes))) return NO_ROOM;
+  try {
+    await writeAtomic([...rewrite.ops, metaOp]);
+  } catch (cause) {
+    const name = (cause as { name?: string } | null)?.name;
+    if (name === 'QuotaExceededError') return NO_ROOM;
+    throw cause;
+  }
+  return null;
+}
+
+/**
+ * Checks the browser's own estimate before starting a large write. When the
+ * estimate is unavailable the write goes ahead: it is atomic, so running out
+ * part-way still changes nothing.
+ */
+async function hasRoomFor(bytes: number): Promise<boolean> {
+  const estimate = await globalThis.navigator?.storage?.estimate?.().catch(() => undefined);
+  if (!estimate?.quota) return true;
+  return estimate.quota - (estimate.usage ?? 0) >= bytes;
 }
 
 /**
  * Turns encryption on and re-writes existing records as ciphertext.
  *
  * The caller supplies the re-encryption step so this module does not need to
- * know about profile shapes — it owns the key, not the data.
+ * know about profile shapes — it owns the key, not the data. That step only
+ * computes; this function does all the writing, in one transaction.
  */
 export async function enable(
   passphrase: string,
-  reencrypt: (key: CryptoKey) => Promise<void>,
+  prepare: (key: CryptoKey) => Promise<Rewrite>,
 ): Promise<EnableResult> {
   if (await isEnabled()) return { ok: false, error: 'Encryption is already on.' };
   if (passphrase.length < 8) {
@@ -154,9 +202,9 @@ export async function enable(
   const kdf = newKdfParams();
   const key = await deriveKey(passphrase, kdf);
 
-  // Encrypt everything first. If this throws, no meta record is written and the
-  // vault stays off, rather than leaving half the database unreadable.
-  await reencrypt(key);
+  // Encrypt everything in memory first. Nothing has been written yet, so if
+  // this throws the vault simply stays off.
+  const rewrite = await prepare(key);
 
   const meta: VaultMeta = {
     key: META_KEY,
@@ -166,7 +214,8 @@ export async function enable(
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
   };
-  await idb.put('meta', meta);
+  const failed = await commit(rewrite, { store: 'meta', op: 'put', value: meta });
+  if (failed) return failed;
   await storeSessionKey(key);
 
   return { ok: true };
@@ -197,7 +246,7 @@ export async function lock(): Promise<void> {
 export async function changePassphrase(
   current: string,
   next: string,
-  reencrypt: (from: CryptoKey, to: CryptoKey) => Promise<void>,
+  prepare: (from: CryptoKey, to: CryptoKey) => Promise<Rewrite>,
 ): Promise<EnableResult> {
   const meta = await getMeta();
   if (!meta?.enabled) return { ok: false, error: 'Encryption is not switched on.' };
@@ -212,14 +261,18 @@ export async function changePassphrase(
   const kdf = newKdfParams();
   const newKey = await deriveKey(next, kdf);
 
-  await reencrypt(oldKey, newKey);
+  const rewrite = await prepare(oldKey, newKey);
 
-  await idb.put('meta', {
+  const nextMeta: VaultMeta = {
     ...meta,
     kdf,
     verifier: await encryptJson(newKey, VERIFIER_TEXT),
     updatedAt: new Date().toISOString(),
-  } satisfies VaultMeta);
+  };
+  // The new salt and every record under the new key land together, or not at
+  // all — in which case the current passphrase still opens everything.
+  const failed = await commit(rewrite, { store: 'meta', op: 'put', value: nextMeta });
+  if (failed) return failed;
   await storeSessionKey(newKey);
 
   return { ok: true };
@@ -228,7 +281,7 @@ export async function changePassphrase(
 /** Turns encryption off, writing records back in the clear. */
 export async function disable(
   passphrase: string,
-  decryptAll: (key: CryptoKey) => Promise<void>,
+  prepare: (key: CryptoKey) => Promise<Rewrite>,
 ): Promise<EnableResult> {
   const meta = await getMeta();
   if (!meta?.enabled) return { ok: false, error: 'Encryption is not switched on.' };
@@ -237,9 +290,12 @@ export async function disable(
   if (!unlocked.ok) return unlocked;
 
   const key = await deriveKey(passphrase, meta.kdf);
-  await decryptAll(key);
+  const rewrite = await prepare(key);
 
-  await idb.delete('meta', META_KEY);
+  // The plaintext records and the removal of the meta record share one
+  // transaction: an interrupted switch-off leaves the vault on and intact.
+  const failed = await commit(rewrite, { store: 'meta', op: 'delete', key: META_KEY });
+  if (failed) return failed;
   await lock();
   return { ok: true };
 }

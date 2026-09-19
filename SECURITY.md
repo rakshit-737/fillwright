@@ -273,6 +273,21 @@ The optional vault (Options → Security) narrows the window:
 **What it protects:** the IndexedDB file on disk. Someone who copies your
 browser profile does not get your resume.
 
+**Switching is all-or-nothing.** Turning encryption on or off, and changing
+the passphrase, first computes every new record in memory, then writes all
+profiles, all resumes and the vault's meta record (which holds the salt) in a
+single IndexedDB transaction. If that write fails part-way — a full disk, the
+browser closing — the transaction rolls back: the database is exactly as it
+was and the previous passphrase (or none) still opens every record. Free space
+is checked with `navigator.storage.estimate()` first, and a shortfall is
+refused with `EQUOTA` before anything is written. Writes are reported as saved
+only when their transaction completes. A unit test injects a failure on every
+write position for all three operations and asserts the database is
+unchanged. Stores left half-converted by 0.5.0 or earlier (ciphertext with no
+salt record, or records a correct passphrase cannot open) are detected on the
+Security page and after unlocking, with a specific recovery message instead of
+an endless "locked".
+
 **What it does not protect:**
 
 - Anything, while the vault is unlocked and malware is running as you.

@@ -1,4 +1,4 @@
-import { idb } from './idb';
+import { idb, type WriteOp } from './idb';
 import { createEmptyProfile, newId, now } from '@/profile/factory';
 import {
   decryptBytes,
@@ -263,44 +263,53 @@ export async function pruneOrphanResumes(): Promise<number> {
 
 /* ------------------------------------------------- vault re-encryption */
 
+export interface PreparedRewrite {
+  /** Every put, ready for one atomic transaction. */
+  ops: WriteOp[];
+  profiles: number;
+  resumes: number;
+  /** A rough size of what will be written, for the free-space check. */
+  bytes: number;
+}
+
 /**
- * Re-writes every profile and resume under a new key (or no key).
+ * Computes every profile and resume under a new key (or no key) WITHOUT
+ * writing anything.
  *
- * Used when encryption is switched on, off, or the passphrase changes. Reads
- * use `from` explicitly rather than the session key, because during a
+ * Used when encryption is switched on, off, or the passphrase changes. The
+ * vault writes the result together with its own meta record in a single
+ * transaction, so an interruption leaves the database exactly as it was.
+ * Reads use `from` explicitly rather than the session key, because during a
  * passphrase change the session still holds the old one.
  */
-export async function rewriteAll(
+export async function prepareRewrite(
   from: CryptoKey | null,
   to: CryptoKey | null,
-): Promise<{ profiles: number; resumes: number }> {
-  const profileRecords = await idb.getAll<StoredProfile>('profiles');
-  let profiles = 0;
+): Promise<PreparedRewrite> {
+  const ops: WriteOp[] = [];
+  let bytes = 0;
 
+  const profileRecords = await idb.getAll<StoredProfile>('profiles');
   for (const record of profileRecords) {
     const plain: Profile = isEncryptedProfile(record)
       ? await decryptJson<Profile>(requireKey(from), record.blob)
       : record;
 
-    await idb.put(
-      'profiles',
-      to
-        ? ({
-            id: plain.id,
-            encrypted: true,
-            name: plain.name,
-            updatedAt: plain.updatedAt,
-            hasResume: plain.resumeIds.length > 0,
-            blob: await encryptJson(to, plain),
-          } satisfies EncryptedProfileRecord)
-        : plain,
-    );
-    profiles++;
+    const value: StoredProfile = to
+      ? ({
+          id: plain.id,
+          encrypted: true,
+          name: plain.name,
+          updatedAt: plain.updatedAt,
+          hasResume: plain.resumeIds.length > 0,
+          blob: await encryptJson(to, plain),
+        } satisfies EncryptedProfileRecord)
+      : plain;
+    bytes += JSON.stringify(value).length * 2;
+    ops.push({ store: 'profiles', op: 'put', value });
   }
 
   const resumeRecords = await idb.getAll<StoredResume>('resumes');
-  let resumes = 0;
-
   for (const record of resumeRecords) {
     const plain: ResumeAttachment = isEncryptedResume(record)
       ? {
@@ -314,25 +323,51 @@ export async function rewriteAll(
         }
       : record;
 
-    await idb.put(
-      'resumes',
-      to
-        ? ({
-            id: plain.id,
-            encrypted: true,
-            fileName: plain.fileName,
-            mimeType: plain.mimeType,
-            sizeBytes: plain.sizeBytes,
-            importedAt: plain.importedAt,
-            data: await encryptBytes(to, plain.data),
-            text: await encryptJson(to, plain.text),
-          } satisfies EncryptedResumeRecord)
-        : plain,
-    );
-    resumes++;
+    const value: StoredResume = to
+      ? ({
+          id: plain.id,
+          encrypted: true,
+          fileName: plain.fileName,
+          mimeType: plain.mimeType,
+          sizeBytes: plain.sizeBytes,
+          importedAt: plain.importedAt,
+          data: await encryptBytes(to, plain.data),
+          text: await encryptJson(to, plain.text),
+        } satisfies EncryptedResumeRecord)
+      : plain;
+    bytes += isEncryptedResume(value)
+      ? (value.data.ct.length + value.text.ct.length) * 2
+      : value.data.byteLength + value.text.length * 2;
+    ops.push({ store: 'resumes', op: 'put', value });
   }
 
-  return { profiles, resumes };
+  return { ops, profiles: profileRecords.length, resumes: resumeRecords.length, bytes };
+}
+
+/** Whether any stored profile or resume is ciphertext. Reads no plaintext. */
+export async function hasEncryptedRecords(): Promise<boolean> {
+  return (
+    (await idb.some<StoredProfile>('profiles', isEncryptedProfile)) ||
+    (await idb.some<StoredResume>('resumes', isEncryptedResume))
+  );
+}
+
+/**
+ * Counts encrypted records the given key cannot open. Above zero means the
+ * store was left mixed, for example by an interrupted re-encryption in an
+ * older version.
+ */
+export async function countUndecryptable(key: CryptoKey): Promise<number> {
+  let bad = 0;
+  for (const record of await idb.getAll<StoredProfile>('profiles')) {
+    if (!isEncryptedProfile(record)) continue;
+    await decryptJson(key, record.blob).catch(() => bad++);
+  }
+  for (const record of await idb.getAll<StoredResume>('resumes')) {
+    if (!isEncryptedResume(record)) continue;
+    await decryptJson(key, record.text).catch(() => bad++);
+  }
+  return bad;
 }
 
 function requireKey(key: CryptoKey | null): CryptoKey {

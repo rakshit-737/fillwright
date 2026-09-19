@@ -1,8 +1,22 @@
 import { handle, ok, err } from '../router';
 import { getSettings, setSettings } from '@/storage/settings';
-import { pruneOrphanResumes, rewriteAll } from '@/storage/profiles';
+import {
+  countUndecryptable,
+  hasEncryptedRecords,
+  prepareRewrite,
+  pruneOrphanResumes,
+} from '@/storage/profiles';
 import { deriveKey } from '@/security/crypto';
-import { changePassphrase, disable, enable, getMeta, lock, status, unlock } from '@/security/vault';
+import {
+  changePassphrase,
+  disable,
+  enable,
+  getKey,
+  getMeta,
+  lock,
+  status,
+  unlock,
+} from '@/security/vault';
 import type { ContentRequest, UiRequest } from '@/types/messages';
 
 const OPENABLE_ROUTES: ReadonlySet<string> = new Set([
@@ -47,20 +61,23 @@ export function registerVaultHandlers(): void {
   handle('ui:vault-status', async () => {
     const settings = await getSettings();
     const meta = await getMeta();
+    const current = await status(settings.privacy.autoLockMinutes);
     return ok({
-      ...(await status(settings.privacy.autoLockMinutes)),
+      ...current,
       autoLockMinutes: settings.privacy.autoLockMinutes,
       createdAt: meta?.createdAt ?? null,
       iterations: meta?.kdf.iterations ?? null,
+      problem: await diagnose(current.state),
     });
   });
 
   handle('ui:vault-enable', async (request) => {
     const { passphrase } = request as Extract<UiRequest, { type: 'ui:vault-enable' }>;
+    if (await hasEncryptedRecords()) return err(ORPHAN_CIPHERTEXT, 'EVAULTMIXED');
     const result = await enable(passphrase, async (key) => {
-      await rewriteAll(null, key);
+      return prepareRewrite(null, key);
     });
-    if (!result.ok) return err(result.error ?? 'Encryption could not be switched on.');
+    if (!result.ok) return err(result.error ?? 'Encryption could not be switched on.', result.code);
 
     await setSettings({ privacy: { encryptionEnabled: true } });
     return ok({ enabled: true });
@@ -73,8 +90,11 @@ export function registerVaultHandlers(): void {
 
     // Deleting a profile while locked can leave resume blobs behind; this is
     // the first moment they can safely be identified.
-    await pruneOrphanResumes();
-    return ok({ unlocked: true });
+    const problem = await diagnose('unlocked');
+    // Pruning decides by what each profile references; with unreadable
+    // records in the store, that cannot be known, so nothing is removed.
+    if (!problem) await pruneOrphanResumes();
+    return ok({ unlocked: true, problem });
   });
 
   handle('ui:vault-lock', async () => {
@@ -85,11 +105,11 @@ export function registerVaultHandlers(): void {
   handle('ui:vault-change-passphrase', async (request) => {
     const { current, next } = request as Extract<UiRequest, { type: 'ui:vault-change-passphrase' }>;
     const result = await changePassphrase(current, next, async (from, to) => {
-      await rewriteAll(from, to);
+      return prepareRewrite(from, to);
     });
     return result.ok
       ? ok({ changed: true })
-      : err(result.error ?? 'The passphrase could not be changed.');
+      : err(result.error ?? 'The passphrase could not be changed.', result.code);
   });
 
   handle('ui:vault-disable', async (request) => {
@@ -102,11 +122,30 @@ export function registerVaultHandlers(): void {
       // key: `disable` has already verified it, and this keeps the decryption
       // path independent of whatever happens to be unlocked.
       const key = await deriveKey(passphrase, meta.kdf);
-      await rewriteAll(key, null);
+      return prepareRewrite(key, null);
     });
-    if (!result.ok) return err(result.error ?? 'Encryption could not be switched off.');
+    if (!result.ok) return err(result.error ?? 'Encryption could not be switched off.', result.code);
 
     await setSettings({ privacy: { encryptionEnabled: false } });
     return ok({ enabled: false });
   });
+}
+
+const ORPHAN_CIPHERTEXT =
+  'Some of your data is encrypted, but the record that holds its passphrase settings is missing, so it cannot be unlocked. This can happen if switching encryption on was interrupted in Fillwright 0.5.0 or earlier. Export what is still readable from the Privacy Center, then erase all data and import your resume again.';
+
+const MIXED_KEYS =
+  'Your passphrase is right, but some records were encrypted with a different key and cannot be opened. This can happen if a passphrase change was interrupted in Fillwright 0.5.0 or earlier. Try your previous passphrase; if that does not open them, export what is readable from the Privacy Center, then erase all data and import your resume again.';
+
+/**
+ * Detects a store left half re-encrypted by an older, non-atomic version, so
+ * the user gets a way out instead of an endless "locked". Returns null when
+ * the store is consistent.
+ */
+async function diagnose(state: 'off' | 'locked' | 'unlocked'): Promise<string | null> {
+  if (state === 'off') return (await hasEncryptedRecords()) ? ORPHAN_CIPHERTEXT : null;
+  if (state === 'locked') return null;
+  const key = await getKey();
+  if (!key) return null;
+  return (await countUndecryptable(key)) > 0 ? MIXED_KEYS : null;
 }

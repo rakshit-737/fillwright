@@ -1,4 +1,24 @@
-import { beforeEach, describe, expect, it } from 'vitest';
+import 'fake-indexeddb/auto';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { resetStorage } from './setup';
+import { destroyDb, idb } from '@/storage/idb';
+import {
+  getProfile,
+  getResume,
+  prepareRewrite,
+  saveProfile,
+  saveResume,
+} from '@/storage/profiles';
+import { changePassphrase, disable, enable, getMeta, lock, unlock } from '@/security/vault';
+import { createEmptyProfile } from '@/profile/factory';
+
+// The vault derives keys with the production 600k iterations; that is asserted
+// below, but exercising it dozens of times would take minutes.
+vi.mock('@/security/crypto', async (importOriginal) => {
+  const real = await importOriginal<typeof import('@/security/crypto')>();
+  return { ...real, newKdfParams: () => ({ ...real.newKdfParams(), iterations: 1_000 }) };
+});
+
 import {
   decryptBytes,
   decryptJson,
@@ -193,5 +213,190 @@ describe('stored shape', () => {
     expect(isEncryptedBlob({ iv: 'aa' })).toBe(false);
     expect(isEncryptedBlob(null)).toBe(false);
     expect(isEncryptedBlob('nope')).toBe(false);
+  });
+});
+
+/* ---------------------------------------------- all-or-nothing re-encryption */
+
+describe('switching encryption is all-or-nothing', () => {
+  const OLD = 'old passphrase one';
+  const NEW = 'new passphrase two';
+
+  async function seed(): Promise<{ profileIds: string[]; resumeIds: string[] }> {
+    const profileIds: string[] = [];
+    const resumeIds: string[] = [];
+    for (let index = 0; index < 3; index++) {
+      const resumeId = `res_${index}`;
+      await saveResume({
+        id: resumeId,
+        fileName: `cv-${index}.pdf`,
+        mimeType: 'application/pdf',
+        sizeBytes: 64,
+        importedAt: '2026-01-01T00:00:00.000Z',
+        data: new Uint8Array(64).fill(index + 1).buffer,
+        text: `resume text ${index}`,
+      });
+      const profile = { ...createEmptyProfile(`Profile ${index}`), resumeIds: [resumeId] };
+      profile.personal.firstName = { ...profile.personal.firstName, value: `Aditi${index}` };
+      await saveProfile(profile);
+      profileIds.push(profile.id);
+      resumeIds.push(resumeId);
+    }
+    return { profileIds, resumeIds };
+  }
+
+  async function snapshot() {
+    return {
+      profiles: await idb.getAll('profiles'),
+      resumes: await idb.getAll('resumes'),
+      meta: await idb.getAll('meta'),
+    };
+  }
+
+  async function readsEverything(ids: { profileIds: string[]; resumeIds: string[] }) {
+    for (const [index, id] of ids.profileIds.entries()) {
+      expect((await getProfile(id))?.personal.firstName.value).toBe(`Aditi${index}`);
+    }
+    for (const [index, id] of ids.resumeIds.entries()) {
+      const resume = await getResume(id);
+      expect(resume?.text).toBe(`resume text ${index}`);
+      expect(new Uint8Array(resume!.data)[0]).toBe(index + 1);
+    }
+  }
+
+  /** Makes the Nth put/delete (1-based) from now on throw, as a full disk would. */
+  function failOnWrite(n: number): () => void {
+    const proto = globalThis.IDBObjectStore.prototype;
+    const put = proto.put;
+    const del = proto.delete;
+    let count = 0;
+    const tick = () => {
+      count++;
+      if (count === n) throw new DOMException('injected failure', 'QuotaExceededError');
+    };
+    proto.put = function (this: IDBObjectStore, ...args: Parameters<IDBObjectStore['put']>) {
+      tick();
+      return put.apply(this, args);
+    };
+    proto.delete = function (this: IDBObjectStore, ...args: Parameters<IDBObjectStore['delete']>) {
+      tick();
+      return del.apply(this, args);
+    };
+    return () => {
+      proto.put = put;
+      proto.delete = del;
+    };
+  }
+
+  // 3 profiles + 3 resumes + 1 meta record.
+  const WRITES = 7;
+
+  let restore: (() => void) | null = null;
+
+  beforeEach(async () => {
+    await destroyDb();
+    resetStorage();
+  });
+
+  afterEach(() => {
+    restore?.();
+    restore = null;
+  });
+
+  for (let n = 1; n <= WRITES; n++) {
+    it(`enable: a failure on write ${n} leaves the database as it was, in the clear`, async () => {
+      const ids = await seed();
+      const before = await snapshot();
+
+      restore = failOnWrite(n);
+      const result = await enable(OLD, (key) => prepareRewrite(null, key)).catch((e) => e);
+      restore();
+      restore = null;
+
+      expect(result.ok).not.toBe(true);
+      expect(await snapshot()).toEqual(before);
+      expect(await getMeta()).toBeUndefined();
+      await readsEverything(ids);
+
+      // And a retry works, rather than tripping over half-encrypted records.
+      expect((await enable(OLD, (key) => prepareRewrite(null, key))).ok).toBe(true);
+      await readsEverything(ids);
+    });
+
+    it(`change: a failure on write ${n} keeps the old passphrase working`, async () => {
+      const ids = await seed();
+      expect((await enable(OLD, (key) => prepareRewrite(null, key))).ok).toBe(true);
+      const before = await snapshot();
+
+      restore = failOnWrite(n);
+      const result = await changePassphrase(OLD, NEW, (from, to) =>
+        prepareRewrite(from, to),
+      ).catch((e) => e);
+      restore();
+      restore = null;
+
+      expect(result.ok).not.toBe(true);
+      expect(await snapshot()).toEqual(before);
+      await lock();
+      expect((await unlock(NEW)).ok).toBe(false);
+      expect((await unlock(OLD)).ok).toBe(true);
+      await readsEverything(ids);
+    });
+
+    it(`disable: a failure on write ${n} leaves the vault on and intact`, async () => {
+      const ids = await seed();
+      expect((await enable(OLD, (key) => prepareRewrite(null, key))).ok).toBe(true);
+      const before = await snapshot();
+
+      restore = failOnWrite(n);
+      const result = await disable(OLD, (key) => prepareRewrite(key, null)).catch((e) => e);
+      restore();
+      restore = null;
+
+      expect(result.ok).not.toBe(true);
+      expect(await snapshot()).toEqual(before);
+      expect((await getMeta())?.enabled).toBe(true);
+      await lock();
+      expect((await unlock(OLD)).ok).toBe(true);
+      await readsEverything(ids);
+    });
+  }
+
+  it('reports a quota failure as EQUOTA', async () => {
+    await seed();
+    restore = failOnWrite(2);
+    const result = await enable(OLD, (key) => prepareRewrite(null, key));
+    expect(result).toMatchObject({ ok: false, code: 'EQUOTA' });
+  });
+
+  it('refuses up front when the browser says there is no room', async () => {
+    const ids = await seed();
+    const before = await snapshot();
+    const storage = { estimate: async () => ({ quota: 1_000, usage: 999 }) };
+    vi.stubGlobal('navigator', { ...globalThis.navigator, storage });
+    try {
+      const result = await enable(OLD, (key) => prepareRewrite(null, key));
+      expect(result).toMatchObject({ ok: false, code: 'EQUOTA' });
+    } finally {
+      vi.unstubAllGlobals();
+      // unstubAllGlobals also drops the chrome stub from setup; put it back.
+      const { chromeMock } = await import('./setup');
+      vi.stubGlobal('chrome', chromeMock);
+    }
+    expect(await snapshot()).toEqual(before);
+    await readsEverything(ids);
+  });
+
+  it('round-trips on, change, off with every record readable at each step', async () => {
+    const ids = await seed();
+    expect((await enable(OLD, (key) => prepareRewrite(null, key))).ok).toBe(true);
+    const encrypted = JSON.stringify(await idb.getAll('profiles'));
+    expect(encrypted).not.toContain('Aditi');
+    await readsEverything(ids);
+    expect((await changePassphrase(OLD, NEW, (f, t) => prepareRewrite(f, t))).ok).toBe(true);
+    await readsEverything(ids);
+    expect((await disable(NEW, (key) => prepareRewrite(key, null))).ok).toBe(true);
+    expect(await getMeta()).toBeUndefined();
+    await readsEverything(ids);
   });
 });

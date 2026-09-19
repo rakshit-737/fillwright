@@ -43,6 +43,8 @@ export interface ReviewCallbacks {
   /** The user told Fillwright what an unrecognised field means. */
   onTeach: (entry: FillPlanEntry, field: CanonicalField, remember: boolean) => void;
   onExplainToggle: () => void;
+  /** Scroll the row's field into view and outline it on the page. */
+  onShowField?: (fieldId: string) => void;
 }
 
 export function renderReviewList(
@@ -140,6 +142,13 @@ function renderRow(
   /* --- the explanation, and the correction ---------------------------- */
 
   const tools = el('div', 'fw-item__tools');
+
+  // Which field on the page is this row about? Show it rather than describe it.
+  if (callbacks.onShowField) {
+    const show = button('Show me', 'fw-link', () => callbacks.onShowField?.(entry.fieldId));
+    show.setAttribute('aria-label', `Show ${entry.label} on the page`);
+    tools.appendChild(show);
+  }
 
   if (entry.rationale) {
     const why = button(expanded.has(entry.fieldId) ? 'Hide reason' : 'Why?', 'fw-link', () => {

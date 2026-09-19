@@ -76,6 +76,14 @@ export interface WidgetCallbacks {
   onDraftStart: (entry: FillPlanEntry) => void;
   onDraftGenerate: (entry: FillPlanEntry, factIds: string[]) => void;
   onDraftUse: (entry: FillPlanEntry, text: string) => void;
+  /** Scroll a row's field into view and outline it. */
+  onShowField?: (fieldId: string) => void;
+}
+
+/** A field on the page that a person could not see, so it was left alone. */
+export interface HiddenField {
+  label: string;
+  reason: string;
 }
 
 export interface FillSummary {
@@ -131,6 +139,10 @@ export class FillwrightWidget {
   private diagnostics = false;
   private signals = new Map<string, FieldSignals>();
 
+  /** Hidden fields ignored on this page, and whether their reasons are open. */
+  private hiddenFields: HiddenField[] = [];
+  private showHidden = false;
+
   constructor(
     private callbacks: WidgetCallbacks,
     reducedMotion: boolean,
@@ -179,6 +191,11 @@ export class FillwrightWidget {
   setDiagnostics(enabled: boolean, signals: Map<string, FieldSignals>): void {
     this.diagnostics = enabled;
     this.signals = signals;
+  }
+
+  /** Fields a person could not see. They are counted, never filled. */
+  setHidden(fields: HiddenField[]): void {
+    this.hiddenFields = fields;
   }
 
   setMeta(patch: Partial<PageMeta>): void {
@@ -493,6 +510,8 @@ export class FillwrightWidget {
       summary.appendChild(this.tally('–', `${counts.filled} already filled`, 'muted'));
     body.appendChild(summary);
 
+    if (this.hiddenFields.length > 0) body.appendChild(this.hiddenNote());
+
     if (this.meta.progress && this.meta.progress.filled > 0) {
       body.appendChild(
         el(
@@ -540,6 +559,7 @@ export class FillwrightWidget {
             this.callbacks.onTeach(entry, field, remember);
           },
           onExplainToggle: () => this.draw(),
+          onShowField: this.callbacks.onShowField,
           onDraftStart: (entry) => this.callbacks.onDraftStart(entry),
           onDraftGenerate: (entry, facts) => this.callbacks.onDraftGenerate(entry, facts),
           onDraftUse: (entry, text) => this.callbacks.onDraftUse(entry, text),
@@ -964,6 +984,39 @@ export class FillwrightWidget {
     tools.appendChild(close);
     header.appendChild(tools);
     return header;
+  }
+
+  /**
+   * "N hidden fields ignored", with each field's reason on request. Every
+   * label here came from the page, so it is set as text only.
+   */
+  private hiddenNote(): HTMLElement {
+    const count = this.hiddenFields.length;
+    const wrap = el('div', 'fw-hidden');
+    const line = el('p', 'fw-note');
+    line.appendChild(el('span', '', `${count} hidden field${count === 1 ? '' : 's'} ignored. `));
+    const toggle = this.link(this.showHidden ? 'Hide reasons' : 'Why?', () => {
+      this.showHidden = !this.showHidden;
+      this.draw();
+    });
+    toggle.setAttribute('aria-expanded', String(this.showHidden));
+    line.appendChild(toggle);
+    wrap.appendChild(line);
+    if (this.showHidden) {
+      const list = el('ul', 'fw-hidden__list');
+      for (const field of this.hiddenFields) {
+        list.appendChild(el('li', 'fw-note', `${field.label}: ${field.reason}`));
+      }
+      wrap.appendChild(list);
+      wrap.appendChild(
+        el(
+          'p',
+          'fw-note',
+          'A person cannot see these, so Fillwright never fills them. Hidden fields are often traps for bots.',
+        ),
+      );
+    }
+    return wrap;
   }
 
   private tally(icon: string, label: string, tone: 'ok' | 'caution' | 'muted'): HTMLElement {

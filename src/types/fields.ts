@@ -137,6 +137,11 @@ export interface DetectedField {
   currentValue: string;
   hasExistingValue: boolean;
   visible: boolean;
+  /**
+   * Why a field was judged not visible ("transparent", "off-screen", …).
+   * Stays in the page: a hidden field is never sent to the worker.
+   */
+  hiddenReason?: string | null;
   disabled: boolean;
   readOnly: boolean;
   /** Index in document order — used to order the review list. */

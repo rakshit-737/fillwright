@@ -3,7 +3,13 @@ import { collectPageSignals, guessPosting } from './page-signals';
 import { fillFields, undoFill, type UndoRecord } from '@/autofill/fill';
 import { collectPostingText, type JobMatch } from '@/autofill/job-match';
 import { addEntries, findAddControls } from '@/autofill/repeat';
-import { FillwrightWidget, type AddOffer, type FillSummary, type ProfileChoice } from './widget';
+import {
+  FillwrightWidget,
+  type AddOffer,
+  type FillSummary,
+  type HiddenField,
+  type ProfileChoice,
+} from './widget';
 import type { DraftFact } from './review';
 import { applyAdapter, detectAdapter } from '@/adapters';
 import type { CanonicalField, DetectedField, FillPlan, FillPlanEntry } from '@/types/fields';
@@ -209,6 +215,7 @@ async function runScan(quiet: boolean): Promise<void> {
   lastSignature = `${location.href}#${controlSignature(document)}`;
   const visible = fields.filter((field) => field.visible && !field.disabled);
   const fieldMap = new Map(visible.map((field) => [field.id, field]));
+  widget.setHidden(hiddenFieldsOf(fields));
 
   // Nothing here, but the form is in a same-origin frame that has its own
   // copy of this script (explicit activation injects into every frame): stay
@@ -337,6 +344,7 @@ function createWidget(): FillwrightWidget {
       onDraftStart: (entry) => void startDraft(entry),
       onDraftGenerate: (entry, factIds) => void generateDraft(entry, factIds),
       onDraftUse: (entry, text) => void applyDraft(entry, text),
+      onShowField: (fieldId) => showField(fieldId),
     },
     matchMedia('(prefers-reduced-motion: reduce)').matches,
   );
@@ -344,6 +352,62 @@ function createWidget(): FillwrightWidget {
 }
 
 /* ---------------------------------------------------------------- filling */
+
+/**
+ * Fields that exist but a person could not see: honeypots, off-screen or
+ * transparent inputs. They are never sent for a value; the panel only counts
+ * them. `display: none` is left out of the count — that is how ordinary
+ * multi-step forms park later steps, and saying so would be noise.
+ */
+function hiddenFieldsOf(fields: DetectedField[]): HiddenField[] {
+  return fields
+    .filter(
+      (field) =>
+        !field.visible &&
+        !field.disabled &&
+        field.hiddenReason &&
+        field.hiddenReason !== 'not displayed',
+    )
+    .map((field) => ({
+      label:
+        field.signals.labelText || field.signals.placeholder || field.signals.name || 'A field',
+      reason: field.hiddenReason ?? 'hidden',
+    }));
+}
+
+const SHOW_OUTLINE_MS = 2400;
+
+/** "Show me": scroll a row's field into view and outline it for a moment. */
+function showField(fieldId: string): void {
+  const element = session?.elements.get(fieldId)?.find((node) => node.isConnected);
+  if (!element) return;
+  // A visually hidden radio or checkbox is shown through its label.
+  const target =
+    element instanceof HTMLInputElement &&
+    (element.type === 'radio' || element.type === 'checkbox') &&
+    element.closest('label')
+      ? (element.closest('label') as HTMLElement)
+      : element;
+  const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  target.scrollIntoView({
+    block: 'center',
+    inline: 'nearest',
+    behavior: reduced ? 'auto' : 'smooth',
+  });
+  if (target.hasAttribute('data-fillwright-shown')) return;
+  const previous = {
+    outline: target.style.outline,
+    outlineOffset: target.style.outlineOffset,
+  };
+  target.setAttribute('data-fillwright-shown', '');
+  target.style.outline = '3px solid #4b3ecf';
+  target.style.outlineOffset = '2px';
+  setTimeout(() => {
+    target.style.outline = previous.outline;
+    target.style.outlineOffset = previous.outlineOffset;
+    target.removeAttribute('data-fillwright-shown');
+  }, SHOW_OUTLINE_MS);
+}
 
 async function runFill(entries: FillPlanEntry[]): Promise<void> {
   if (!widget) return;

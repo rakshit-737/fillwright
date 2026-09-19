@@ -1,4 +1,4 @@
-import { containsWords, normalizeOptionText, sameByAlias } from './aliases';
+import { containsWords, localeYesNo, normalizeOptionText, sameByAlias } from './aliases';
 import { isPressSafe } from './press-guard';
 
 /**
@@ -507,7 +507,10 @@ function matchYesNo(options: ComboOption[], target: string): ComboOption | null 
   return (
     options.find((option) => {
       const label = option.label.toLowerCase();
-      return wantYes ? YES_RE.test(label) : NO_RE.test(label);
+      const translated = localeYesNo(label);
+      return wantYes
+        ? YES_RE.test(label) || translated === 'yes'
+        : NO_RE.test(label) || translated === 'no';
     }) ?? null
   );
 }

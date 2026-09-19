@@ -1,4 +1,4 @@
-import { containsWords, sameByAlias } from './aliases';
+import { containsWords, localeYesNo, sameByAlias } from './aliases';
 import type { CanonicalField, DetectedField, FieldOption } from '@/types/fields';
 import type { Profile, TriState } from '@/types/profile';
 import { formatDate } from '@/parser/dates';
@@ -445,11 +445,16 @@ export function matchOption(value: string, options: FieldOption[]): OptionMatch 
   }
 
   // 3. Yes/No equivalence, which is how most compliance questions are shaped.
+  //    Option labels may be translated ("Ja", "Oui", "Sí", "Sim", "Sì").
   if (YES_RE.test(target) || NO_RE.test(target)) {
     const wantYes = YES_RE.test(target);
     for (const option of usable) {
       const label = option.label.trim().toLowerCase();
-      if ((wantYes && YES_RE.test(label)) || (!wantYes && NO_RE.test(label))) {
+      const translated = localeYesNo(label);
+      if (
+        (wantYes && (YES_RE.test(label) || translated === 'yes')) ||
+        (!wantYes && (NO_RE.test(label) || translated === 'no'))
+      ) {
         return { option, confidence: 0.92, exact: true };
       }
     }

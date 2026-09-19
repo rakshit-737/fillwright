@@ -1,4 +1,6 @@
 import type { CanonicalField } from '@/types/fields';
+import { LOCALE_PACKS, type LocaleCode } from './locales';
+import { normalizeLabel } from './normalize';
 
 /**
  * The field vocabulary.
@@ -28,17 +30,63 @@ export interface FieldRule {
   types?: string[];
   /** Ceiling for this rule, 0..1. Defaults to 0.95. */
   weight?: number;
+  /** Set on rules that come from a locale pack (see locales.ts). */
+  locale?: LocaleCode;
+  /** Locale rule that applies only when the control's language is its pack's. */
+  langOnly?: boolean;
 }
 
-/** Words that mean the field is about somebody other than the candidate. */
-export const THIRD_PARTY_RE =
-  /\b(?:referr?er|referee|reference|emergency|contact person|recruiter|manager|supervisor|guardian|parent|spouse|friend|colleague|witness|next of kin)\b/;
+const ENGLISH_THIRD_PARTY = [
+  'referr?er',
+  'referee',
+  'reference',
+  'emergency',
+  'contact person',
+  'recruiter',
+  'manager',
+  'supervisor',
+  'guardian',
+  'parent',
+  'spouse',
+  'friend',
+  'colleague',
+  'witness',
+  'next of kin',
+];
 
-/** Words that mean the field is about a company, not a person. */
-const COMPANY_CONTEXT_RE =
-  /\b(?:company|employer|organization|organisation|business|firm|agency|school|university|college|institution)\b/;
+const ENGLISH_COMPANY = [
+  'company',
+  'employer',
+  'organization',
+  'organisation',
+  'business',
+  'firm',
+  'agency',
+  'school',
+  'university',
+  'college',
+  'institution',
+];
 
-export const FIELD_RULES: FieldRule[] = [
+/**
+ * Safety vocabulary is never gated by language: a German referee field on a
+ * page that claims to be English is still someone else's field.
+ */
+const wordsRe = (words: string[]) => new RegExp(`\\b(?:${words.join('|')})\\b`);
+
+/** Words that mean the field is about somebody other than the candidate, in every supported language. */
+export const THIRD_PARTY_RE = wordsRe([
+  ...ENGLISH_THIRD_PARTY,
+  ...LOCALE_PACKS.flatMap((pack) => pack.thirdParty),
+]);
+
+/** Words that mean the field is about a company, not a person, in every supported language. */
+const COMPANY_CONTEXT_RE = wordsRe([
+  ...ENGLISH_COMPANY,
+  ...LOCALE_PACKS.flatMap((pack) => pack.company),
+]);
+
+const ENGLISH_RULES: FieldRule[] = [
   /* ------------------------------------------------------------- identity */
   {
     field: 'personal.firstName',
@@ -95,7 +143,12 @@ export const FIELD_RULES: FieldRule[] = [
     includes: ['email'],
     autocomplete: ['email'],
     types: ['email'],
-    not: [THIRD_PARTY_RE, /\b(?:confirm|verify|re enter|repeat)\b/],
+    // "Confirm email" in every supported language: a confirmation box is not
+    // where the candidate's address is first asked for.
+    not: [
+      THIRD_PARTY_RE,
+      /\b(?:confirm\w*|verify|re enter|repeat|bestatig\w*|wiederhol\w*|resaisi\w*|repet\w*|repit\w*|bevestig\w*|herhaal\w*|conferma\w*|ripeti\w*)\b/,
+    ],
   },
   {
     field: 'personal.phone',
@@ -548,6 +601,52 @@ export const FIELD_RULES: FieldRule[] = [
     includes: ['salary', 'compensation', 'ctc'],
   },
 ];
+
+/**
+ * Locale rules, merged under the English rules' negative discipline: each one
+ * inherits every `not` (and the input types) of the first English rule for
+ * its field, then adds its own. A locale can only add vocabulary; it can never
+ * lift a disqualification the English rule imposes.
+ */
+function localeRules(): FieldRule[] {
+  const english = new Map<CanonicalField, FieldRule>();
+  for (const rule of ENGLISH_RULES) if (!english.has(rule.field)) english.set(rule.field, rule);
+
+  const phrases = (list?: string[]) =>
+    list ? [...new Set(list.map((phrase) => normalizeLabel(phrase)).filter(Boolean))] : undefined;
+
+  return LOCALE_PACKS.flatMap((pack) =>
+    pack.rules.map((entry): FieldRule => {
+      const base = english.get(entry.field);
+      return {
+        field: entry.field,
+        exact: phrases(entry.exact),
+        includes: phrases(entry.includes),
+        patterns: entry.patterns,
+        not: [...(base?.not ?? []), ...(entry.not ?? [])],
+        types: base?.types,
+        weight: entry.weight ?? base?.weight,
+        locale: pack.code,
+        langOnly: entry.langOnly,
+      };
+    }),
+  );
+}
+
+export const FIELD_RULES: FieldRule[] = [...ENGLISH_RULES, ...localeRules()];
+
+/**
+ * Fields whose vocabulary applies whatever language the page declares. These
+ * are the ones where a miss is unsafe (a demographic question read as an
+ * ordinary field), not merely unhelpful.
+ */
+export function isSafetyField(field: CanonicalField): boolean {
+  return (
+    field.startsWith('sensitive.') ||
+    field === 'personal.dateOfBirth' ||
+    field === 'preferences.desiredSalary'
+  );
+}
 
 /**
  * Fields Fillwright must never fill without the user explicitly confirming on

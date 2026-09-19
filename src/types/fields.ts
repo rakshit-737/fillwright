@@ -125,6 +125,12 @@ export interface FieldSignals {
   optionLabels: string[];
   required: boolean;
   maxLength: number | null;
+  /**
+   * BCP 47 language of the control, from the nearest `lang` attribute
+   * ("de-DE"). Chooses which locale vocabulary packs apply. Empty or absent
+   * when the page declares none.
+   */
+  lang?: string;
 }
 
 export interface DetectedField {

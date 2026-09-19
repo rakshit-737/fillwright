@@ -353,6 +353,7 @@ function readSignals(
     optionLabels: options.slice(0, 40).map((option) => option.label),
     required: element.hasAttribute('required') || element.getAttribute('aria-required') === 'true',
     maxLength: Number.isFinite(input.maxLength) && input.maxLength > 0 ? input.maxLength : null,
+    lang: truncate(element.closest('[lang]')?.getAttribute('lang') ?? '', 35),
   };
 }
 

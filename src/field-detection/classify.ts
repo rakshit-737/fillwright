@@ -1,5 +1,6 @@
 import type { CanonicalField, FieldSignals } from '@/types/fields';
-import { FIELD_RULES, THIRD_PARTY_RE, type FieldRule } from './rules';
+import { FIELD_RULES, THIRD_PARTY_RE, isSafetyField, type FieldRule } from './rules';
+import { packForLang } from './locales';
 import { containsPhrase, looksLikeQuestion, normalizeLabel, wordCount } from './normalize';
 
 export interface Classification {
@@ -120,7 +121,14 @@ export function classifyField(signals: FieldSignals): Classification {
   // passes — which do not re-read the rules — cannot resurrect them.
   const disqualified = new Set<CanonicalField>();
 
+  // Locale packs: the control's language picks one pack; with no supported
+  // language, every pack applies except words that are also English.
+  const pagePack = packForLang(signals.lang);
+
   for (const rule of FIELD_RULES) {
+    if (rule.locale && !isSafetyField(rule.field)) {
+      if (pagePack ? rule.locale !== pagePack : rule.langOnly) continue;
+    }
     if (isDisqualified(rule, normalized)) {
       disqualified.add(rule.field);
       continue;

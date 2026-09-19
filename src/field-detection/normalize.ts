@@ -7,6 +7,8 @@
  * (required)" must all collapse to "legal first name".
  */
 
+import { foldText } from '@/utils/fold';
+
 /** Markers that decorate a label but carry no meaning for matching. */
 const DECORATION_RE =
   /\((?:required|optional|mandatory|if applicable|please specify|max \d+[^)]*)\)|\*|\brequired\b|\boptional\b|\bmandatory\b/gi;
@@ -16,8 +18,18 @@ const DECORATION_RE =
  * "legalFirstName" → "legal First Name", "URLField" → "URL Field".
  */
 export function splitCamelCase(value: string): string {
-  return value.replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/([A-Z]+)([A-Z][a-z])/g, '$1 $2');
+  return value
+    .replace(/([\p{Ll}\p{N}])(\p{Lu})/gu, '$1 $2')
+    .replace(/(\p{Lu}+)(\p{Lu}\p{Ll})/gu, '$1 $2');
 }
+
+/**
+ * Required/optional markers in the supported languages, after folding. Only
+ * the parenthesised form is removed: a bare "obligatorio" inside a sentence
+ * may carry meaning ("¿Es obligatorio el visado?").
+ */
+const LOCALE_DECORATION_RE =
+  /\((?:obligatoire|facultatif|obligatorio|opcional|obrigatorio|pflichtfeld|pflicht|erforderlich|freiwillig|verplicht|optioneel|obbligatorio|facoltativo)\)/g;
 
 /**
  * Canonical form used by every matching rule.
@@ -29,11 +41,12 @@ export function splitCamelCase(value: string): string {
 export function normalizeLabel(raw: string): string {
   if (!raw) return '';
   return applySynonyms(
-    splitCamelCase(raw)
-      .replace(DECORATION_RE, ' ')
-      .toLowerCase()
-      // Keep letters, digits and spaces; everything else becomes a separator.
-      .replace(/[^a-z0-9]+/g, ' ')
+    foldText(splitCamelCase(raw).replace(DECORATION_RE, ' '))
+      .replace(LOCALE_DECORATION_RE, ' ')
+      // Keep letters (any script), digits and spaces; everything else becomes
+      // a separator. Diacritics were folded away above, so "Prénom" is
+      // "prenom" rather than "pr nom".
+      .replace(/[^\p{L}\p{N}]+/gu, ' ')
       .replace(/\s+/g, ' ')
       .trim(),
   );

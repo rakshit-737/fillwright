@@ -72,7 +72,8 @@ declaration, screenshots and a checklist are in [`store/`](./store).
    section can show **what autofill will see**; entries reorder with
    Alt+↑/↓; skills can be pasted as a list.
 4. **Options → Application preferences** — set work authorisation, relocation
-   and (optionally) demographics and salary. All off and unanswered by default.
+   and (optionally) demographics and salary (current and expected are kept
+   separate and never converted between units). All off and unanswered by default.
 5. **On an application**, click the Fillwright toolbar button or press
    `Alt+Shift+F`. A panel appears: "27 application fields found — 21 ready,
    4 to review, 2 need you". It can be dragged (or moved with the arrow keys on

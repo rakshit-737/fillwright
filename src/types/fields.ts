@@ -52,6 +52,7 @@ export type CanonicalField =
   | 'profile.skills'
   // preferences
   | 'preferences.desiredSalary'
+  | 'sensitive.currentSalary'
   | 'preferences.startDate'
   | 'preferences.noticePeriod'
   | 'preferences.workMode'

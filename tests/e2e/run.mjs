@@ -255,6 +255,9 @@ async function seedProfile(browser, extensionId) {
     ];
 
     profile.sensitive.workAuthorization.authorizedIn = { IN: 'yes' };
+    profile.sensitive.compensation.currentSalary = '12 LPA';
+    profile.sensitive.compensation.expectedSalary = '18 LPA';
+    profile.sensitive.compensation.shareCompensation = true;
 
     const saved = await send({ type: 'ui:save-profile', profile });
     if (!saved.ok) return { ok: false, error: saved.error };
@@ -597,6 +600,20 @@ async function main() {
       assert(uk || true, '');
       assert(uk, 'the UK question was not listed');
       assertEqual(uk.value, '', 'a UK question was answered from a different country');
+    });
+
+    await test('current and expected CTC each get their own figure, never converted', async () => {
+      const ctc = await browser.newPage();
+      await ctc.goto(`${server.origin}/ctc.html`, { waitUntil: 'domcontentloaded' });
+      await scanPage(worker, `${server.origin}/ctc.html`);
+      await waitForWidget(ctc, (state) => state.text.includes('application field'));
+      assert(await clickWidgetButton(ctc, 'Review'), 'no Review button');
+      const widget = await waitForWidget(ctc, (state) => state.items.length >= 3);
+      const row = (prefix) => widget.items.find((item) => item.label.startsWith(prefix));
+      assertEqual(row('Current CTC')?.value, '12', 'current CTC did not get the current figure');
+      assertEqual(row('Expected CTC')?.value, '18', 'expected CTC did not get the expected figure');
+      assertEqual(row('Current monthly')?.value ?? '', '', 'an annual figure was used as monthly');
+      await ctc.close();
     });
 
     await test('a shadow-DOM field is detected', async () => {

@@ -2,6 +2,20 @@
 
 Notable changes, newest first. Versions follow semantic versioning.
 
+## Unreleased
+
+### Fixed
+
+- **"Current CTC" no longer gets your expected salary.** Current pay is now
+  its own field (`sensitive.currentSalary`), answered only from the current
+  salary you saved in Preferences and only with salary answers switched on.
+  "Expected" labels never match it and "current / present / last drawn /
+  existing" labels never match the expected figure; a label asking about both
+  is left for you. Pay is never converted: if the question asks for lakhs,
+  per month or per year and your saved figure says something else (or no
+  unit), the field is declined with the reason. Number inputs get the bare
+  number, without currency symbols or separators.
+
 ## 0.5.0
 
 From feature-complete to shippable: verified in a real browser against

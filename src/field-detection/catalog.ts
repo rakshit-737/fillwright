@@ -110,6 +110,12 @@ export const FIELD_CATALOG: CatalogEntry[] = [
     group: 'Only from your saved answers',
     hint: 'Left blank unless you switch salary answers on.',
   },
+  {
+    field: 'sensitive.currentSalary',
+    label: 'Current salary',
+    group: 'Only from your saved answers',
+    hint: 'Left blank unless you switch salary answers on.',
+  },
 ];
 
 const BY_FIELD = new Map(FIELD_CATALOG.map((entry) => [entry.field, entry]));

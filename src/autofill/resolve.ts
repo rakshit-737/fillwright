@@ -223,6 +223,15 @@ export function resolveValue(
       }
       return fromPreference(profile.sensitive.compensation.expectedSalary, 'your expected salary');
     }
+    case 'sensitive.currentSalary': {
+      if (!profile.sensitive.compensation.shareCompensation) {
+        return {
+          ...none('salary answers are switched off in your preferences'),
+          needsConsent: true,
+        };
+      }
+      return fromPreference(profile.sensitive.compensation.currentSalary, 'your current salary');
+    }
 
     case 'sensitive.workAuthorization':
     case 'sensitive.requiresSponsorship':
@@ -295,6 +304,11 @@ export function resolveForField(
 
   if (!resolved.value) return resolved;
 
+  if (field === 'preferences.desiredSalary' || field === 'sensitive.currentSalary') {
+    resolved = fitPayToQuestion(resolved, detected);
+    if (!resolved.value) return resolved;
+  }
+
   // Dates: match the precision the control actually wants.
   if (detected.kind === 'date' || detected.kind === 'month') {
     resolved = { ...resolved, value: formatForDateInput(resolved.value, detected.kind) };
@@ -329,6 +343,72 @@ export function resolveForField(
   }
 
   return resolved;
+}
+
+/* ------------------------------------------------------------------- pay */
+
+type PayDimension = 'scale' | 'period';
+
+const PAY_UNITS: Array<{ dimension: PayDimension; unit: string; re: RegExp }> = [
+  { dimension: 'scale', unit: 'lakhs', re: /\b(?:lpa|l\.p\.a\.?|lakhs?|lacs?|lakh)\b/i },
+  { dimension: 'scale', unit: 'crores', re: /\b(?:crores?|cr)\b/i },
+  { dimension: 'scale', unit: 'thousands', re: /\b(?:thousands?|\d+\s*k|in k)\b/i },
+  {
+    dimension: 'period',
+    unit: 'per month',
+    re: /\b(?:monthly|per month|a month|p\.m\.|pm)\b|\/\s*(?:month|mo)\b/i,
+  },
+  {
+    dimension: 'period',
+    unit: 'per year',
+    re: /\b(?:lpa|annual|annually|per annum|p\.a\.?|yearly|per year|a year)\b|\/\s*(?:year|yr)\b/i,
+  },
+];
+
+function payUnits(text: string): Partial<Record<PayDimension, string>> {
+  const found: Partial<Record<PayDimension, string>> = {};
+  for (const { dimension, unit, re } of PAY_UNITS) {
+    if (!found[dimension] && re.test(text)) found[dimension] = unit;
+  }
+  return found;
+}
+
+/**
+ * Pay figures are never converted. If the question names a unit (lakhs, per
+ * month, per year, ...) the stored answer must name the same one, otherwise
+ * the field is declined with the reason. A number input gets the bare number.
+ */
+function fitPayToQuestion(resolved: ResolvedValue, detected: DetectedField): ResolvedValue {
+  const { labelText, ariaLabel, placeholder } = detected.signals;
+  const asked = payUnits(`${labelText} ${ariaLabel} ${placeholder}`);
+  const stored = payUnits(resolved.value);
+
+  for (const dimension of ['scale', 'period'] as const) {
+    const want = asked[dimension];
+    if (want && stored[dimension] !== want) {
+      return {
+        ...none(
+          stored[dimension]
+            ? `the question asks for ${want} but your saved figure is ${stored[dimension]}; it is not converted`
+            : `the question asks for ${want} and your saved figure does not say its unit; it is not converted`,
+        ),
+        needsConsent: resolved.needsConsent,
+      };
+    }
+  }
+
+  if (detected.kind !== 'number') return resolved;
+
+  let bare = resolved.value;
+  for (const { re } of PAY_UNITS) bare = bare.replace(new RegExp(re.source, 'gi'), ' ');
+  bare = bare.replace(/(?:rs\.?|inr|usd|eur|gbp|[₹$€£¥])/gi, '').replace(/[\s,_']/g, '');
+  if (!/^\d+(?:\.\d+)?$/.test(bare)) {
+    return {
+      ...none('your saved figure is not a single number, so it cannot go in a number field'),
+      needsConsent: resolved.needsConsent,
+    };
+  }
+  return { ...resolved, value: bare };
 }
 
 /* ---------------------------------------------------------- authorisation */

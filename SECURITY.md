@@ -307,6 +307,7 @@ These are enforced in code, not merely documented:
 | Answer a demographic question from an inference | `src/security/sensitive.ts` — the resume parser cannot write to `profile.sensitive` at all |
 | Turn "not answered" into "No" | `TriState` is three-valued; `unset` resolves to no value |
 | Apply a US work-authorisation answer to a UK question | The country is read from the question; a mismatch fills nothing |
+| Give your expected salary to a current-CTC question, or convert pay units | `sensitive.currentSalary` is its own field with negative rules both ways; `src/autofill/resolve.ts` declines when the question's unit (lakhs, per month, per year) differs from the saved one |
 | Overwrite something you typed | Off by default; and your edits set `provenance.source = 'user'`, which the resume merge never overwrites |
 | Consent to a background check or drug test unattended | `ALWAYS_CONFIRM` — re-confirmed on every application even with a saved answer |
 | Attach a file | Browsers forbid it, and Fillwright does not attempt workarounds |

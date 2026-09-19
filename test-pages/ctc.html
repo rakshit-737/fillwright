@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Apply — Backend Engineer (Bengaluru)</title>
+    <link rel="stylesheet" href="./shared.css" />
+  </head>
+  <body>
+    <h1>Apply: Backend Engineer</h1>
+    <p class="lead">
+      Expected (with salary answers on, current pay saved as "12 LPA" and expected as "18 LPA"):
+      "Current CTC" proposes 12, "Expected CTC" proposes 18 — never each other's figure. "Current
+      monthly salary" is left empty, because a figure in lakhs per annum is never converted to a
+      monthly one.
+    </p>
+    <form>
+      <label for="k-first">First Name</label>
+      <input id="k-first" name="first_name" autocomplete="given-name" />
+      <label for="k-current">Current CTC (in LPA)</label>
+      <input id="k-current" name="current_ctc" type="number" />
+      <label for="k-expected">Expected CTC (in LPA)</label>
+      <input id="k-expected" name="expected_ctc" type="number" />
+      <label for="k-monthly">Current monthly salary</label>
+      <input id="k-monthly" name="monthly_salary" />
+      <button type="submit">Submit application</button>
+    </form>
+    <script src="./shared.js"></script>
+  </body>
+</html>

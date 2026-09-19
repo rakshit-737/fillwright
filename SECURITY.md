@@ -327,7 +327,7 @@ These are enforced in code, not merely documented:
 | Attach a file | Browsers forbid it, and Fillwright does not attempt workarounds |
 | Write plaintext while the vault is locked | Storage throws `ELOCKED` rather than falling back |
 | Store or log a passphrase | It is used to derive a key and then discarded |
-| Claim a write succeeded without checking | Every write is read back and verified; a rejected value is reverted and reported |
+| Claim a write succeeded without checking | Every write is read back and compared by kind: email and URL exactly (host case and a trailing slash aside), phone by digits (a country-code prefix aside), numbers numerically, dates as the same date, other text by normalised equality. A truncated value is a failure, not a success. A rejected value is reverted and reported; a value longer than the field's `maxlength` goes to review before anything is written. Undo names any custom dropdown it could not put back |
 | Use one profile entry for two repeated blocks | Each block resolves its own entry; a block with no entry is left empty |
 
 ---

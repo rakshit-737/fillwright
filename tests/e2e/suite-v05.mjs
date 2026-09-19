@@ -739,6 +739,27 @@ export async function runV05Suite(ctx) {
     await page.close();
   });
 
+  await test('verify: a cut value fails and is removed, a masked phone passes', async () => {
+    const page = await browser.newPage();
+    await page.goto(url('strict-verify.html'), { waitUntil: 'domcontentloaded' });
+    await scanPage(worker, url('strict-verify.html'));
+    await waitForWidget(page, (s) => s.text.includes('application field'));
+    assert(await clickWidgetButton(page, 'Fill'), 'no Fill button');
+    const widget = await waitForWidget(page, (s) => s.text.includes('was cut'));
+    const values = await page.evaluate(() => ({
+      first: document.getElementById('s-first').value,
+      linkedin: document.getElementById('s-linkedin').value,
+      code: document.getElementById('s-github').value,
+      phone: document.getElementById('s-phone').value,
+    }));
+    assertEqual(values.linkedin, '', 'a value longer than maxlength was written');
+    assertEqual(values.code, '', 'a truncated value was left in the field');
+    assertEqual(values.phone, '(98450) 12345', 'the masked phone was not accepted');
+    assert(values.first !== '', 'the plain field was not filled');
+    assert(widget.text.includes('accepts 20 characters'), `unexpected text: ${widget.text}`);
+    await page.close();
+  });
+
   await test('errors: a form in an unreachable frame is explained', async () => {
     if (!ctx.foreign) {
       console.log('      (skipped: 127.0.0.2 is not bindable here)');

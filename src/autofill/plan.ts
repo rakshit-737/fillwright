@@ -182,6 +182,17 @@ export function buildMappings(
       };
     }
 
+    // A value the field cannot hold would be cut on write, and a cut URL or
+    // email is a different value. Say so before anything is written.
+    const limit = field.signals.maxLength;
+    if (limit && resolved.value.length > limit) {
+      return {
+        ...entry,
+        status: 'review',
+        rationale: `${entry.rationale} This field accepts ${limit} characters and your value has ${resolved.value.length}, so it would be cut — check it before filling.`,
+      };
+    }
+
     if (combined < settings.autofill.confidenceThreshold) {
       return { ...entry, status: 'review' };
     }

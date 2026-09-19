@@ -316,7 +316,7 @@ function createWidget(): FillwrightWidget {
     {
       onFill: (entries) => void runFill(entries),
       onUndo: () => {
-        void applyUndo().then((result) => widget?.markUndone(result.restored));
+        void applyUndo().then((result) => widget?.markUndone(result.restored, result.notRestored));
       },
       onRescan: () => void open(),
       onClose: () => teardown(),
@@ -481,11 +481,16 @@ const EMPTY_ENTRY: FillPlanEntry = {
   remembered: false,
 };
 
-async function applyUndo(): Promise<{ ok: true; restored: number }> {
-  if (!session) return { ok: true, restored: 0 };
-  const restored = await undoFill(session.undo);
+async function applyUndo(): Promise<{ ok: true; restored: number; notRestored: string[] }> {
+  if (!session) return { ok: true, restored: 0, notRestored: [] };
+  const { restored, notRestored } = await undoFill(session.undo);
+  const fields = session.fields;
   session.undo = [];
-  return { ok: true, restored };
+  return {
+    ok: true,
+    restored,
+    notRestored: notRestored.map((id) => fields.get(id)?.signals.labelText.trim() || 'A field'),
+  };
 }
 
 /* -------------------------------------------------------------- drafting */

@@ -20,10 +20,8 @@ vi.mock('pdfjs-dist', async () => import('pdfjs-dist/legacy/build/pdf.mjs'));
 beforeAll(async () => {
   // src/parser/extract/pdf.ts points the worker at the extension package; in
   // Node, pdf.js runs its worker in-process from the file on disk instead.
-  const worker = new URL(
-    '../node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs',
-    import.meta.url,
-  ).href;
+  const worker = new URL('../node_modules/pdfjs-dist/legacy/build/pdf.worker.mjs', import.meta.url)
+    .href;
   const pdfjs = await import('pdfjs-dist');
   pdfjs.GlobalWorkerOptions.workerSrc = worker;
 });

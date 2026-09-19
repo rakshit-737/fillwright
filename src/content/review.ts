@@ -1,5 +1,10 @@
 import type { CanonicalField, FieldSignals, FillPlanEntry, MappingStatus } from '@/types/fields';
-import { FIELD_CATALOG, catalogGroups } from '@/field-detection/catalog';
+import {
+  FIELD_CATALOG,
+  catalogGroupOf,
+  catalogGroups,
+  isOpenableProfileField,
+} from '@/field-detection/catalog';
 import { STATUS_LABELS } from '@/autofill/status';
 
 /**
@@ -30,6 +35,57 @@ export type DraftView =
   | { phase: 'result'; text: string; facts: DraftFact[]; chosen: Set<string> }
   | { phase: 'error'; message: string };
 
+/** Which rows the list shows. Filtering never changes what is selected. */
+export type StatusFilter = 'all' | 'ready' | 'review' | 'needs-you' | 'missing-value' | 'filled';
+
+const FILTERS: Array<[StatusFilter, string]> = [
+  ['all', 'All fields'],
+  ['ready', 'Ready'],
+  ['review', 'To review'],
+  ['needs-you', 'Need you'],
+  ['missing-value', 'Not in your profile'],
+  ['filled', 'Already filled or not recognised'],
+];
+
+export function matchesFilter(status: MappingStatus, filter: StatusFilter): boolean {
+  switch (filter) {
+    case 'all':
+      return true;
+    case 'ready':
+      return status === 'ready';
+    case 'review':
+      return status === 'review';
+    case 'needs-you':
+      return (
+        status === 'needs-consent' || status === 'missing-value' || status === 'manual-required'
+      );
+    case 'missing-value':
+      return status === 'missing-value';
+    case 'filled':
+      return status === 'skipped-existing' || status === 'unmapped';
+  }
+}
+
+/**
+ * Everything the list needs to know about what the user has done so far.
+ * Owned by the widget, so it survives a redraw.
+ */
+export interface ReviewState {
+  selection: Set<string>;
+  /** Rows whose "Why?" explanation is open. */
+  expanded: Set<string>;
+  /** Rows whose correction picker is open. */
+  teaching: Set<string>;
+  /** Rows whose value editor is open. */
+  editing: Set<string>;
+  /**
+   * Values the user typed for this form. Content-script memory only: never
+   * sent to the service worker, never saved to the profile.
+   */
+  edits: Map<string, string>;
+  filter: StatusFilter;
+}
+
 export interface ReviewCallbacks {
   /** Raw signals per field, when diagnostics are on. Null otherwise. */
   diagnostics?: Map<string, FieldSignals> | null;
@@ -40,39 +96,129 @@ export interface ReviewCallbacks {
   onDraftUse?: (entry: FillPlanEntry, text: string) => void;
   onDraftCancel?: (entry: FillPlanEntry) => void;
   onToggle: (fieldId: string, selected: boolean) => void;
+  /** Select all / none within one section. */
+  onSetMany?: (fieldIds: string[], selected: boolean) => void;
+  onFilter?: (filter: StatusFilter) => void;
+  onEditStart?: (fieldId: string) => void;
+  /** An empty value removes the edit and goes back to the proposed value. */
+  onEditSave?: (fieldId: string, value: string) => void;
+  onEditCancel?: (fieldId: string) => void;
+  /** "Add it in your profile" on a row whose value is missing. */
+  onOpenProfile?: (field: CanonicalField) => void;
   /** The user told Fillwright what an unrecognised field means. */
   onTeach: (entry: FillPlanEntry, field: CanonicalField, remember: boolean) => void;
   onExplainToggle: () => void;
 }
 
+/**
+ * The review list.
+ *
+ * Every control carries a `data-fw-key` that stays the same across redraws
+ * (field id plus control name), so the widget can put focus back on the very
+ * control the user pressed and keep the list where it was scrolled.
+ */
 export function renderReviewList(
   entries: FillPlanEntry[],
-  selection: Set<string>,
-  expandedExplanations: Set<string>,
-  teaching: Set<string>,
+  state: ReviewState,
   callbacks: ReviewCallbacks,
 ): HTMLElement {
-  const list = el('ul', 'fw-list');
+  const wrap = el('div', 'fw-review');
+
+  const filterRow = el('div', 'fw-filterrow');
+  const filterLabel = el('label', 'fw-note', 'Show');
+  filterLabel.setAttribute('for', 'fw-filter');
+  const filter = document.createElement('select');
+  filter.id = 'fw-filter';
+  filter.className = 'fw-filter';
+  filter.setAttribute('data-fw-key', 'filter');
+  for (const [value, label] of FILTERS) {
+    const option = document.createElement('option');
+    option.value = value;
+    option.textContent = label;
+    if (value === state.filter) option.selected = true;
+    filter.appendChild(option);
+  }
+  filter.addEventListener('change', () => callbacks.onFilter?.(filter.value as StatusFilter));
+  filterRow.appendChild(filterLabel);
+  filterRow.appendChild(filter);
+  wrap.appendChild(filterRow);
+
+  const list = el('div', 'fw-list');
   list.setAttribute('role', 'group');
   list.setAttribute('aria-label', 'Fields Fillwright found');
 
-  for (const entry of entries) {
-    list.appendChild(renderRow(entry, selection, expandedExplanations, teaching, callbacks));
+  // Sections in the order they first appear on the form.
+  const groups = new Map<string, FillPlanEntry[]>();
+  for (const raw of entries) {
+    if (!matchesFilter(raw.status, state.filter)) continue;
+    const edit = state.edits.get(raw.fieldId);
+    const entry = edit === undefined ? raw : { ...raw, newValue: edit };
+    const name = catalogGroupOf(entry.canonical);
+    const rows = groups.get(name) ?? [];
+    rows.push(entry);
+    groups.set(name, rows);
   }
 
-  return list;
+  if (groups.size === 0) {
+    list.appendChild(el('p', 'fw-note fw-empty', 'No fields match this filter.'));
+  }
+
+  let index = 0;
+  for (const [name, rows] of groups) {
+    const titleId = `fw-group-${index++}`;
+    const group = el('div', 'fw-group');
+    const head = el('div', 'fw-group__head');
+    const title = el('span', 'fw-group__title', name);
+    title.id = titleId;
+    head.appendChild(title);
+
+    const selectable = rows
+      .filter((entry) => isFillable(entry, state))
+      .map((entry) => entry.fieldId);
+    if (selectable.length > 0) {
+      const all = button('All', 'fw-link', () => callbacks.onSetMany?.(selectable, true));
+      all.setAttribute('aria-label', `Select all in ${name}`);
+      all.setAttribute('data-fw-key', `group:${name}:all`);
+      const none = button('None', 'fw-link', () => callbacks.onSetMany?.(selectable, false));
+      none.setAttribute('aria-label', `Select none in ${name}`);
+      none.setAttribute('data-fw-key', `group:${name}:none`);
+      head.appendChild(all);
+      head.appendChild(none);
+    }
+    group.appendChild(head);
+
+    const ul = el('ul', 'fw-group__list');
+    ul.setAttribute('aria-labelledby', titleId);
+    for (const entry of rows) ul.appendChild(renderRow(entry, state, callbacks));
+    group.appendChild(ul);
+    list.appendChild(group);
+  }
+
+  wrap.appendChild(list);
+  return wrap;
+}
+
+function isFillable(entry: FillPlanEntry, state: ReviewState): boolean {
+  if (entry.newValue === '') return false;
+  return entry.status !== 'manual-required' || state.edits.has(entry.fieldId);
+}
+
+function keyed<T extends HTMLElement>(node: T, entry: FillPlanEntry, name: string): T {
+  node.setAttribute('data-fw-key', `${entry.fieldId}:${name}`);
+  return node;
 }
 
 function renderRow(
   entry: FillPlanEntry,
-  selection: Set<string>,
-  expanded: Set<string>,
-  teaching: Set<string>,
+  state: ReviewState,
   callbacks: ReviewCallbacks,
 ): HTMLElement {
+  const { selection, expanded, teaching } = state;
+  const edited = state.edits.has(entry.fieldId);
   const tone = statusTone(entry.status);
   const item = el('li', `fw-item fw-item--${tone}`);
-  const fillable = entry.newValue !== '' && entry.status !== 'manual-required';
+  item.setAttribute('data-fw-row', entry.fieldId);
+  const fillable = isFillable(entry, state);
 
   const row = el('div', 'fw-item__row');
 
@@ -82,6 +228,7 @@ function renderRow(
     checkbox.className = 'fw-check';
     checkbox.checked = selection.has(entry.fieldId);
     checkbox.id = `fw-check-${entry.fieldId}`;
+    keyed(checkbox, entry, 'check');
     checkbox.addEventListener('change', () => callbacks.onToggle(entry.fieldId, checkbox.checked));
     row.appendChild(checkbox);
   } else {
@@ -94,7 +241,9 @@ function renderRow(
   const label = el('label', 'fw-item__label', entry.label);
   if (fillable) label.setAttribute('for', `fw-check-${entry.fieldId}`);
   labelRow.appendChild(label);
-  if (entry.remembered) {
+  if (edited) {
+    labelRow.appendChild(el('span', 'fw-chip', 'your edit'));
+  } else if (entry.remembered) {
     labelRow.appendChild(el('span', 'fw-chip', 'remembered'));
   } else if (entry.corrected) {
     labelRow.appendChild(el('span', 'fw-chip', 'your choice'));
@@ -123,14 +272,18 @@ function renderRow(
   // field Fillwright is deliberately leaving alone, "95%" answers a question
   // nobody asked and hides the one that matters ("already filled in").
   const showsConfidence =
-    (entry.status === 'ready' || entry.status === 'review') && entry.newValue !== '';
+    !edited && (entry.status === 'ready' || entry.status === 'review') && entry.newValue !== '';
 
   const meta = el('span', 'fw-item__meta');
   meta.appendChild(
     el(
       'span',
       `fw-badge fw-badge--${tone}`,
-      showsConfidence ? `${Math.round(entry.confidence * 100)}%` : STATUS_LABELS[entry.status],
+      edited
+        ? 'Your value'
+        : showsConfidence
+          ? `${Math.round(entry.confidence * 100)}%`
+          : STATUS_LABELS[entry.status],
     ),
   );
   row.appendChild(meta);
@@ -148,7 +301,7 @@ function renderRow(
       callbacks.onExplainToggle();
     });
     why.setAttribute('aria-expanded', String(expanded.has(entry.fieldId)));
-    tools.appendChild(why);
+    tools.appendChild(keyed(why, entry, 'why'));
   }
 
   // Any mapping can be corrected - a confident match can still be wrong for
@@ -167,7 +320,24 @@ function renderRow(
       callbacks.onExplainToggle();
     });
     change.setAttribute('aria-expanded', String(opening));
-    tools.appendChild(change);
+    tools.appendChild(keyed(change, entry, 'change'));
+  }
+
+  // A value for this form only. Offered wherever Fillwright would write, or
+  // could write if it had a value — never on a field the user already filled.
+  if (entry.status !== 'skipped-existing' && !state.editing.has(entry.fieldId)) {
+    const edit = button('Edit for this form', 'fw-link', () =>
+      callbacks.onEditStart?.(entry.fieldId),
+    );
+    edit.setAttribute('aria-label', `Edit ${entry.label} for this form`);
+    tools.appendChild(keyed(edit, entry, 'edit'));
+  }
+
+  if (entry.status === 'missing-value' && !edited && isOpenableProfileField(entry.canonical)) {
+    const add = button('Add it in your profile', 'fw-link', () =>
+      callbacks.onOpenProfile?.(entry.canonical),
+    );
+    tools.appendChild(keyed(add, entry, 'add'));
   }
 
   if (
@@ -176,11 +346,19 @@ function renderRow(
     !callbacks.drafts?.has(entry.fieldId)
   ) {
     tools.appendChild(
-      button('Draft with on-device AI', 'fw-link', () => callbacks.onDraftStart?.(entry)),
+      keyed(
+        button('Draft with on-device AI', 'fw-link', () => callbacks.onDraftStart?.(entry)),
+        entry,
+        'draft',
+      ),
     );
   }
 
   if (tools.childElementCount > 0) item.appendChild(tools);
+
+  if (state.editing.has(entry.fieldId)) {
+    item.appendChild(renderEditor(entry, callbacks));
+  }
 
   if (expanded.has(entry.fieldId)) {
     item.appendChild(renderWhy(entry));
@@ -200,6 +378,49 @@ function renderRow(
 }
 
 /**
+ * "Edit for this form": one text box. Enter saves, Escape cancels. The value
+ * stays in this tab's memory and is used only for this fill.
+ */
+function renderEditor(entry: FillPlanEntry, callbacks: ReviewCallbacks): HTMLElement {
+  const panel = el('div', 'fw-teach fw-edit');
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.className = 'fw-edit__input';
+  input.value = entry.newValue;
+  input.setAttribute('aria-label', `Value for ${entry.label}, this form only`);
+  input.autocomplete = 'off';
+  keyed(input, entry, 'edit-input');
+  const save = () => callbacks.onEditSave?.(entry.fieldId, input.value.trim());
+  input.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      save();
+    } else if (event.key === 'Escape') {
+      // Escape closes this editor, not the whole panel.
+      event.stopPropagation();
+      callbacks.onEditCancel?.(entry.fieldId);
+    }
+  });
+  panel.appendChild(input);
+  panel.appendChild(el('p', 'fw-note', 'Used for this form only. Your profile is not changed.'));
+  const actions = el('div', 'fw-teach__actions');
+  actions.appendChild(
+    keyed(
+      button('Cancel', 'fw-btn fw-btn--ghost fw-btn--sm', () =>
+        callbacks.onEditCancel?.(entry.fieldId),
+      ),
+      entry,
+      'edit-cancel',
+    ),
+  );
+  actions.appendChild(
+    keyed(button('Save', 'fw-btn fw-btn--primary fw-btn--sm', save), entry, 'edit-save'),
+  );
+  panel.appendChild(actions);
+  return panel;
+}
+
+/**
  * The correction control.
  *
  * Kept deliberately plain: a grouped select and one checkbox. The interesting
@@ -215,6 +436,7 @@ function renderTeachPicker(entry: FillPlanEntry, callbacks: ReviewCallbacks): HT
   const select = document.createElement('select');
   select.className = 'fw-teach__select';
   select.setAttribute('aria-label', `What ${entry.label} asks for`);
+  keyed(select, entry, 'teach-select');
 
   const blank = document.createElement('option');
   blank.value = '';

@@ -115,6 +115,14 @@ controlled by someone else.
   surface: a plan for the fields it reported, profile *names* for the switcher,
   skill names already present in the posting, and — only when answer drafting is
   on — career facts the user explicitly ticks.
+  `content:open-page` only opens one of a fixed list of Fillwright pages
+  (`src/background/open-page.ts`). Its optional `field` — used by "Add it in
+  your profile" — is accepted only for the profile page and only when it is
+  exactly a key of `FIELD_CATALOG`; the options page merely focuses that
+  field. No `content:*` message writes to the profile.
+- **Edits made in the review list stay in the tab.** "Edit for this form"
+  keeps the typed value in the content script's memory for that fill only. It
+  is never sent to the service worker and never saved to the profile.
 
 - **Passive detection.** In Assist/Smart mode the decision "is this an
   application?" is made locally from cheap signals

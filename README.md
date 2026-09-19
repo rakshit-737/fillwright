@@ -28,7 +28,8 @@ It never submits an application. That click is always yours.
 - **Learns from your corrections.** Tell it what an unrecognised field means and
   it remembers, for that site, on this device only.
 - **Explains itself.** Every row in the review list has a "Why?" that says what
-  matched and where.
+  matched and where. Rows are grouped by section, can be filtered by status,
+  and any proposed value can be edited for just this form.
 - **Encrypts what it stores**, optionally, with a passphrase only you hold.
 - **Refuses to guess** work authorisation, visa status, demographics, salary or
   criminal history. Those come only from answers you set yourself.

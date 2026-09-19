@@ -2,6 +2,28 @@
 
 Notable changes, newest first. Versions follow semantic versioning.
 
+## Unreleased
+
+### Changed
+
+- **The review list keeps your place.** Ticking a box, opening "Why?" or
+  "Change" no longer sends focus to the Fill button and the list back to the
+  top: rows are keyed by field, and focus and scroll position survive every
+  redraw.
+- **Edit for this form.** A proposed value can be changed in its row. The
+  value is marked "your edit", is used for this fill only, and lives only in
+  the tab — your profile is not changed.
+- **"Add it in your profile"** on rows whose value is missing opens the
+  profile editor focused on that field.
+- Rows are grouped by section, each with select all / none, and the list can
+  be filtered by status.
+
+### Security
+
+- `content:open-page` now accepts the `profile` route with an optional
+  `field`, validated against `FIELD_CATALOG` in both the content script and
+  the service worker. It still only opens a page.
+
 ## 0.5.0
 
 From feature-complete to shippable: verified in a real browser against

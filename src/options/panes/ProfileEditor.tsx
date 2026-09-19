@@ -1,4 +1,5 @@
-import { useId, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
+import { focusProfileField, requestedField } from '../focusField';
 import { useProfile, saveStateLabel } from '../useProfile';
 import { LoadError } from '@/components/LoadError';
 import { AutofillPreview } from '@/components/AutofillPreview';
@@ -47,6 +48,14 @@ const userProv = () => provenance('user', 1, 'entered by you');
 export function ProfileEditor({ settings }: { settings: Settings | null }) {
   const editor = useProfile(settings?.activeProfileId ?? null);
   const { profile, update } = editor;
+  const loaded = profile !== null;
+
+  // #/profile?field=links.github, from the panel's "Add it in your profile".
+  useEffect(() => {
+    if (!loaded) return;
+    const field = requestedField(location.hash);
+    if (field) focusProfileField(field);
+  }, [loaded]);
 
   if (editor.loading) {
     return (

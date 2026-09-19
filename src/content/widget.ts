@@ -1,7 +1,7 @@
 import type { CanonicalField, FieldSignals, FillPlan, FillPlanEntry } from '@/types/fields';
 import type { JobMatch } from '@/autofill/job-match';
 import type { RepeatKind } from '@/autofill/repeat';
-import { renderReviewList, type DraftView } from './review';
+import { renderReviewList, type DraftView, type StatusFilter } from './review';
 import { WIDGET_CSS } from './styles';
 import type { UserError } from '@/utils/errors';
 
@@ -69,7 +69,7 @@ export interface WidgetCallbacks {
   onAddEntries: (offer: AddOffer) => void;
   onUnlock: () => void;
   /** Opens one of Fillwright's own pages (import, privacy, …). */
-  onOpenPage: (route: string) => void;
+  onOpenPage: (route: string, field?: CanonicalField) => void;
   onReload: () => void;
   /** Whether a written question can be drafted at all (AI on and available). */
   canDraft: (entry: FillPlanEntry) => boolean;
@@ -121,6 +121,16 @@ export class FillwrightWidget {
   private explanations = new Set<string>();
   /** Rows whose correction picker is open. */
   private teaching = new Set<string>();
+  /** Rows whose value editor is open. */
+  private editing = new Set<string>();
+  /**
+   * Values the user typed for this form ("Edit for this form"). They live
+   * only here, in the content script's memory, and are used for this fill.
+   */
+  private edits = new Map<string, string>();
+  private filter: StatusFilter = 'all';
+  /** A control to focus after the next redraw, by its data-fw-key. */
+  private pendingFocus: string | null = null;
   /** Drafting panels, per field. */
   drafts = new Map<string, DraftView>();
   private profiles: ProfileChoice[] | null = null;
@@ -223,6 +233,11 @@ export class FillwrightWidget {
     // Drafts and pickers refer to fields of the previous scan.
     const ids = new Set(plan.entries.map((entry) => entry.fieldId));
     for (const id of [...this.drafts.keys()]) if (!ids.has(id)) this.drafts.delete(id);
+    for (const id of [...this.edits.keys()]) {
+      if (!ids.has(id)) this.edits.delete(id);
+      else this.selection.add(id);
+    }
+    for (const id of [...this.editing]) if (!ids.has(id)) this.editing.delete(id);
     this.go(keepReview ? 'review' : 'ready');
   }
 
@@ -281,7 +296,14 @@ export class FillwrightWidget {
   /* ------------------------------------------------------------ drawing */
 
   private draw(): void {
-    const hadFocus = this.root.activeElement !== null;
+    const active = this.root.activeElement;
+    const hadFocus = active !== null;
+    // Keep the user's place: the control they were on, and how far the list
+    // was scrolled. Rows are keyed by field id, so the same control is found
+    // again in the fresh markup.
+    const focusKey = this.pendingFocus ?? active?.getAttribute('data-fw-key') ?? null;
+    this.pendingFocus = null;
+    const scrollTop = this.panel.querySelector<HTMLElement>('.fw-list')?.scrollTop ?? 0;
     this.panel.replaceChildren();
     this.panel.setAttribute('data-state', this.state);
 
@@ -309,6 +331,10 @@ export class FillwrightWidget {
       case 'ready':
       case 'review':
         this.drawPlan();
+        if (this.state === 'review') {
+          const list = this.panel.querySelector<HTMLElement>('.fw-list');
+          if (list) list.scrollTop = scrollTop;
+        }
         break;
       case 'success':
       case 'partial':
@@ -324,7 +350,18 @@ export class FillwrightWidget {
         this.drawLocked();
         break;
     }
-    if (hadFocus) this.focusFirst();
+    if (hadFocus || focusKey) {
+      const target = focusKey ? this.keyed(focusKey) : null;
+      if (target) target.focus({ preventScroll: true });
+      else if (hadFocus) this.focusFirst();
+    }
+  }
+
+  private keyed(key: string): HTMLElement | null {
+    for (const node of this.panel.querySelectorAll<HTMLElement>('[data-fw-key]')) {
+      if (node.getAttribute('data-fw-key') === key) return node;
+    }
+    return null;
   }
 
   private drawPill(): void {
@@ -526,28 +563,74 @@ export class FillwrightWidget {
 
     if (reviewing) {
       body.appendChild(
-        renderReviewList(plan.entries, this.selection, this.explanations, this.teaching, {
-          diagnostics: this.diagnostics ? this.signals : null,
-          drafts: this.drafts,
-          canDraft: (entry) => this.callbacks.canDraft(entry),
-          onToggle: (fieldId, selected) => {
-            if (selected) this.selection.add(fieldId);
-            else this.selection.delete(fieldId);
-            this.draw();
+        renderReviewList(
+          plan.entries,
+          {
+            selection: this.selection,
+            expanded: this.explanations,
+            teaching: this.teaching,
+            editing: this.editing,
+            edits: this.edits,
+            filter: this.filter,
           },
-          onTeach: (entry, field, remember) => {
-            this.teaching.delete(entry.fieldId);
-            this.callbacks.onTeach(entry, field, remember);
+          {
+            diagnostics: this.diagnostics ? this.signals : null,
+            drafts: this.drafts,
+            canDraft: (entry) => this.callbacks.canDraft(entry),
+            onToggle: (fieldId, selected) => {
+              if (selected) this.selection.add(fieldId);
+              else this.selection.delete(fieldId);
+              this.draw();
+            },
+            onTeach: (entry, field, remember) => {
+              this.teaching.delete(entry.fieldId);
+              this.callbacks.onTeach(entry, field, remember);
+            },
+            onExplainToggle: () => this.draw(),
+            onDraftStart: (entry) => this.callbacks.onDraftStart(entry),
+            onDraftGenerate: (entry, facts) => this.callbacks.onDraftGenerate(entry, facts),
+            onDraftUse: (entry, text) => this.callbacks.onDraftUse(entry, text),
+            onDraftCancel: (entry) => {
+              this.drafts.delete(entry.fieldId);
+              this.draw();
+            },
+            onSetMany: (fieldIds, selected) => {
+              for (const id of fieldIds) {
+                if (selected) this.selection.add(id);
+                else this.selection.delete(id);
+              }
+              this.draw();
+            },
+            onFilter: (filter) => {
+              this.filter = filter;
+              this.draw();
+            },
+            onEditStart: (fieldId) => {
+              this.editing.add(fieldId);
+              this.pendingFocus = fieldId + ':edit-input';
+              this.draw();
+            },
+            onEditSave: (fieldId, value) => {
+              this.editing.delete(fieldId);
+              if (value) {
+                this.edits.set(fieldId, value);
+                this.selection.add(fieldId);
+              } else {
+                this.edits.delete(fieldId);
+                const original = plan.entries.find((entry) => entry.fieldId === fieldId);
+                if (!original?.selected) this.selection.delete(fieldId);
+              }
+              this.pendingFocus = fieldId + ':edit';
+              this.draw();
+            },
+            onEditCancel: (fieldId) => {
+              this.editing.delete(fieldId);
+              this.pendingFocus = fieldId + ':edit';
+              this.draw();
+            },
+            onOpenProfile: (field) => this.callbacks.onOpenPage('profile', field),
           },
-          onExplainToggle: () => this.draw(),
-          onDraftStart: (entry) => this.callbacks.onDraftStart(entry),
-          onDraftGenerate: (entry, facts) => this.callbacks.onDraftGenerate(entry, facts),
-          onDraftUse: (entry, text) => this.callbacks.onDraftUse(entry, text),
-          onDraftCancel: (entry) => {
-            this.drafts.delete(entry.fieldId);
-            this.draw();
-          },
-        }),
+        ),
       );
     }
 
@@ -567,10 +650,14 @@ export class FillwrightWidget {
           : `Fill ${count} ready`,
       'primary',
       () => {
-        const entries = plan.entries.map((entry) => ({
-          ...entry,
-          selected: this.selection.has(entry.fieldId),
-        }));
+        const entries = plan.entries.map((entry) => {
+          const edit = this.edits.get(entry.fieldId);
+          return {
+            ...entry,
+            ...(edit === undefined ? {} : { newValue: edit }),
+            selected: this.selection.has(entry.fieldId),
+          };
+        });
         this.callbacks.onFill(entries);
       },
     );

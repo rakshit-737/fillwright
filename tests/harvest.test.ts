@@ -1,5 +1,10 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { harvestFields, labelForControl } from '@/field-detection/harvest';
+import {
+  assessVisibility,
+  harvestFields,
+  labelForControl,
+  obscuredBy,
+} from '@/field-detection/harvest';
 import { classifyField } from '@/field-detection/classify';
 
 function render(html: string): Document {
@@ -301,5 +306,161 @@ describe('realistic application forms', () => {
     const result = classifyField(field.signals);
     expect(result.isOpenQuestion).toBe(true);
     expect(result.field).toBe('unknown');
+  });
+});
+
+describe('visibility assessment', () => {
+  /** jsdom has no layout, so each test states the box it wants. */
+  function box(node: Element, rect = { left: 10, top: 10, width: 200, height: 30 }): void {
+    const full = {
+      ...rect,
+      x: rect.left,
+      y: rect.top,
+      right: rect.left + rect.width,
+      bottom: rect.top + rect.height,
+    };
+    (node as HTMLElement).getClientRects = () =>
+      (rect.width || rect.height ? [full] : []) as unknown as DOMRectList;
+    (node as HTMLElement).getBoundingClientRect = () =>
+      ({ ...full, toJSON: () => full }) as DOMRect;
+  }
+  const control = (id = 'f') => document.getElementById(id) as HTMLElement;
+
+  it('passes a plain field with a real box', () => {
+    render('<label for="f">Name</label><input id="f">');
+    box(control());
+    expect(assessVisibility(control())).toEqual({ visible: true, reason: null });
+  });
+
+  it('rejects a field with no box at all', () => {
+    render('<input id="f">');
+    box(control(), { left: 0, top: 0, width: 0, height: 0 });
+    expect(assessVisibility(control()).visible).toBe(false);
+  });
+
+  it('rejects opacity:0 on the field or any ancestor', () => {
+    render('<div style="opacity:0.5"><div style="opacity:0"><input id="f"></div></div>');
+    box(control());
+    expect(assessVisibility(control())).toMatchObject({
+      visible: false,
+      reason: expect.stringMatching(/transparent/),
+    });
+  });
+
+  it('keeps a half-transparent field', () => {
+    render('<div style="opacity:0.5"><input id="f"></div>');
+    box(control());
+    expect(assessVisibility(control()).visible).toBe(true);
+  });
+
+  it('rejects a field moved off-screen', () => {
+    render('<input id="f" style="position:absolute;left:-9999px">');
+    box(control(), { left: -9999, top: 10, width: 200, height: 30 });
+    expect(assessVisibility(control())).toMatchObject({
+      visible: false,
+      reason: expect.stringMatching(/off-screen/),
+    });
+  });
+
+  it('rejects a 1px field', () => {
+    render('<input id="f" style="width:1px;height:1px">');
+    box(control(), { left: 10, top: 10, width: 1, height: 1 });
+    expect(assessVisibility(control())).toMatchObject({
+      visible: false,
+      reason: expect.stringMatching(/too small/),
+    });
+  });
+
+  it('rejects a field clipped to nothing', () => {
+    render('<input id="f" style="position:absolute;clip:rect(0px, 0px, 0px, 0px)">');
+    box(control());
+    expect(assessVisibility(control())).toMatchObject({
+      visible: false,
+      reason: expect.stringMatching(/clipped/),
+    });
+  });
+
+  it('rejects a field inside a clipping container with no room', () => {
+    render('<div id="c" style="height:0;overflow:hidden"><input id="f"></div>');
+    box(control('c'), { left: 10, top: 10, width: 300, height: 0 });
+    box(control());
+    expect(assessVisibility(control())).toMatchObject({
+      visible: false,
+      reason: expect.stringMatching(/clipped/),
+    });
+  });
+
+  it('rejects a field under an aria-hidden ancestor', () => {
+    render('<div aria-hidden="true"><input id="f"></div>');
+    box(control());
+    expect(assessVisibility(control())).toMatchObject({
+      visible: false,
+      reason: expect.stringMatching(/aria-hidden/),
+    });
+  });
+
+  it('rejects a field under an inert ancestor', () => {
+    render('<div inert><input id="f"></div>');
+    box(control());
+    expect(assessVisibility(control())).toMatchObject({
+      visible: false,
+      reason: expect.stringMatching(/inert/),
+    });
+  });
+
+  it('rejects visibility:hidden', () => {
+    render('<input id="f" style="visibility:hidden">');
+    box(control());
+    expect(assessVisibility(control()).visible).toBe(false);
+  });
+
+  it('keeps a visually hidden checkbox whose styled label is visible', () => {
+    render(
+      '<label id="l"><input id="f" type="checkbox" style="position:absolute;opacity:0;width:1px;height:1px"> I agree</label>',
+    );
+    box(control(), { left: 10, top: 10, width: 1, height: 1 });
+    box(control('l'));
+    expect(assessVisibility(control()).visible).toBe(true);
+  });
+
+  it('does not extend the label exception to text fields', () => {
+    render('<label id="l">Name <input id="f" style="opacity:0"></label>');
+    box(control());
+    box(control('l'));
+    expect(assessVisibility(control()).visible).toBe(false);
+  });
+
+  it('a hidden field is harvested as not visible, with a reason', () => {
+    render('<label for="f">Email</label><input id="f" name="email" style="opacity:0">');
+    box(control());
+    const field = harvestFields(document).fields[0]!;
+    expect(field.visible).toBe(false);
+    expect(field.hiddenReason).toMatch(/transparent/);
+  });
+});
+
+describe('fill-time presence check', () => {
+  it('passes when the control itself is at its centre', () => {
+    render('<input id="f">');
+    const input = document.getElementById('f')!;
+    expect(obscuredBy(input, () => [input])).toBeNull();
+  });
+
+  it('passes when the control sits under the Fillwright panel', () => {
+    render('<div data-fillwright-ui id="p"></div><input id="f">');
+    const input = document.getElementById('f')!;
+    expect(obscuredBy(input, () => [document.getElementById('p')!, input])).toBeNull();
+  });
+
+  it('passes a hidden checkbox when its label is what is there', () => {
+    render('<label id="l"><input id="f" type="checkbox"> Yes</label>');
+    const input = document.getElementById('f')!;
+    expect(obscuredBy(input, () => [document.getElementById('l')!])).toBeNull();
+  });
+
+  it('fails when something else covers the control', () => {
+    render('<div id="cover"></div><input id="f">');
+    const input = document.getElementById('f')!;
+    expect(obscuredBy(input, () => [document.getElementById('cover')!, input])).toMatch(/covered/);
   });
 });

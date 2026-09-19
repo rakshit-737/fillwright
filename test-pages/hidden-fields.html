@@ -1,0 +1,99 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Apply — Support Engineer</title>
+    <link rel="stylesheet" href="./shared.css" />
+    <style>
+      .hp-opacity {
+        opacity: 0;
+      }
+      .hp-offscreen {
+        position: absolute;
+        left: -9999px;
+      }
+      .hp-clip {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip: rect(0 0 0 0);
+        white-space: nowrap;
+      }
+      .hp-zero {
+        height: 0;
+        overflow: hidden;
+      }
+      .hp-covered {
+        position: relative;
+      }
+      .hp-cover {
+        position: absolute;
+        inset: 0;
+        background: #fff;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Apply: Support Engineer</h1>
+    <p class="lead">
+      Expected: only "First Name" and "Email" are filled. Every other field below is hidden from a
+      person (opacity 0, moved off-screen, clipped to 1px, under aria-hidden, under inert, covered by
+      another element, and a honeypot in a zero-height box) and must stay empty. The panel reports
+      the hidden ones as ignored; the covered one is refused at fill time.
+    </p>
+    <form>
+      <label for="h-first">First Name</label>
+      <input id="h-first" name="first_name" autocomplete="given-name" />
+
+      <label for="h-email">Email</label>
+      <input id="h-email" name="email" type="email" autocomplete="email" />
+
+      <!-- 1. opacity: 0 -->
+      <div class="hp-opacity">
+        <label for="h-last">Last Name</label>
+        <input id="h-last" name="last_name" autocomplete="family-name" />
+      </div>
+
+      <!-- 2. moved off-screen -->
+      <div class="hp-offscreen">
+        <label for="h-phone">Phone</label>
+        <input id="h-phone" name="phone" type="tel" autocomplete="tel" />
+      </div>
+
+      <!-- 3. clipped to 1px (the screen-reader-only pattern) -->
+      <div class="hp-clip">
+        <label for="h-linkedin">LinkedIn Profile</label>
+        <input id="h-linkedin" name="linkedin" />
+      </div>
+
+      <!-- 4. aria-hidden ancestor -->
+      <div aria-hidden="true">
+        <label for="h-email2">Email Address</label>
+        <input id="h-email2" name="email_address" type="email" />
+      </div>
+
+      <!-- 5. inert ancestor -->
+      <div inert>
+        <label for="h-first2">Given Name</label>
+        <input id="h-first2" name="given_name" />
+      </div>
+
+      <!-- 6. covered by an opaque element: passes style checks, refused at fill time -->
+      <div class="hp-covered">
+        <label for="h-family">Surname</label>
+        <input id="h-family" name="surname" />
+        <div class="hp-cover"></div>
+      </div>
+
+      <!-- the named honeypot: looks like a real field to a bot -->
+      <div class="hp-zero">
+        <label for="h-honeypot">Phone Number</label>
+        <input id="h-honeypot" name="website_hp_phone" type="tel" tabindex="-1" />
+      </div>
+
+      <button type="submit">Submit application</button>
+    </form>
+    <script src="./shared.js"></script>
+  </body>
+</html>

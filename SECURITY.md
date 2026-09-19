@@ -309,6 +309,7 @@ These are enforced in code, not merely documented:
 | Apply a US work-authorisation answer to a UK question | The country is read from the question; a mismatch fills nothing |
 | Overwrite something you typed | Off by default; and your edits set `provenance.source = 'user'`, which the resume merge never overwrites |
 | Consent to a background check or drug test unattended | `ALWAYS_CONFIRM` — re-confirmed on every application even with a saved answer |
+| Tick a box that certifies, agrees, consents or declares | `src/autofill/plan.ts` — a checkbox whose label matches `CONSENT_REQUIRED_HINT_RE` is always "needs your answer", whatever it matched or was taught |
 | Attach a file | Browsers forbid it, and Fillwright does not attempt workarounds |
 | Write plaintext while the vault is locked | Storage throws `ELOCKED` rather than falling back |
 | Store or log a passphrase | It is used to derive a key and then discarded |

@@ -286,15 +286,15 @@ Summarised here; the full threat model is in [SECURITY.md](./SECURITY.md).
    extension pages, never on web pages) but reports it unavailable on machines
    without the model; 131 does not expose it at all. Generation with a real
    on-device model has not been verified — see `npm run probe:ai`.
+8. **Exports are not encrypted.** The export warns about this before saving.
+9. **Step progress is per tab and per session.** It lives in memory-only
+   session storage and resets when the browser closes.
 10. **ATS layouts change.** The `test-pages/ats/` fixtures reproduce each
     system's DOM patterns as of this release; they are not copies of the live
     sites, which change without notice.
 11. **Searchable dropdowns see a short prefix.** To find an option in a list
     that loads as you type, Fillwright types up to six characters of the value
     into the site's search box, which the site can observe.
-8. **Exports are not encrypted.** The export warns about this before saving.
-9. **Step progress is per tab and per session.** It lives in memory-only
-   session storage and resets when the browser closes.
 
 ---
 

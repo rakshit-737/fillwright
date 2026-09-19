@@ -2,6 +2,36 @@
 
 Notable changes, newest first. Versions follow semantic versioning.
 
+## Unreleased
+
+### Security
+
+- **Certify / agree / consent / declare checkboxes are never ticked.** They
+  are listed as "Needs your answer", even when a saved rule or a strong match
+  points at them.
+
+### Changed
+
+- **Every switch in Settings now does something.** The on-page panel follows
+  the Theme and Reduce motion settings (motion is reduced when either the
+  setting or the system asks). "Show the on-page prompt in Assist and Smart"
+  now has a control. Removed with a settings migration to version 3, because
+  nothing read them: "Fill empty fields only" (the overwrite switch is what
+  decides), "Show a preview before filling" (the panel always previews),
+  `ai.assistFieldMapping` and `privacy.encryptionEnabled`.
+- **Learned fields count their uses.** After a fill, the content script sends
+  the ids of remembered rules it wrote — ids only — and the worker counts only
+  active rules saved for that site.
+- `npm run check` runs `scripts/check-settings.mjs`, which fails on a default
+  setting that nothing outside `src/types` and `src/options` reads.
+
+### Docs
+
+- PRIVACY.md names the current version; CONTRIBUTING.md lists the audit and
+  settings steps of `npm run check`; README's known limitations are numbered
+  in order; the ESLint `fetch` message no longer points at a file that does
+  not exist.
+
 ## 0.5.0
 
 From feature-complete to shippable: verified in a real browser against

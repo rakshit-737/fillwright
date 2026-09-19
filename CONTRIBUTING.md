@@ -9,7 +9,7 @@ sits.
 ```bash
 npm install
 npm run build          # writes dist/
-npm run check          # typecheck → lint → test → build → verify
+npm run check          # typecheck → lint → audit → check:settings → test → build → verify
 npm run test:e2e       # the real-browser suite
 ```
 

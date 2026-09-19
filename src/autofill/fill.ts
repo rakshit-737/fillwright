@@ -230,7 +230,9 @@ export function verify(elements: HTMLElement[], intended: string): Verdict {
   }
 
   // Truncation is not success: a cut-off URL or email is a different value.
-  if (actual.length < intended.length && intended.startsWith(actual)) {
+  // A page trimming trailing whitespace has not cut anything.
+  const wanted = intended.trimEnd();
+  if (actual.length < wanted.length && wanted.startsWith(actual)) {
     const limit =
       (first instanceof HTMLInputElement || first instanceof HTMLTextAreaElement) &&
       first.maxLength > 0

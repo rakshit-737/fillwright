@@ -53,6 +53,12 @@ describe('verify: url', () => {
   });
 });
 
+describe('verify: trailing whitespace', () => {
+  it('does not call a trimmed trailing space a cut', () => {
+    expect(check('text', 'Rakshit', 'Rakshit ').ok).toBe(true);
+  });
+});
+
 describe('verify: email', () => {
   it('rejects a truncated email (reproduction)', () => {
     const verdict = check('email', 'rakshit.r@gma', 'rakshit.r@gmail.com');

@@ -1,4 +1,4 @@
-import { containsWords, sameByAlias } from './aliases';
+import { containsWords, monthNumber, sameByAlias } from './aliases';
 import type { CanonicalField, DetectedField, FieldOption } from '@/types/fields';
 import type { Profile, TriState } from '@/types/profile';
 import { formatDate } from '@/parser/dates';
@@ -88,6 +88,20 @@ export function resolveValue(
       return fromTracked(profile.personal.email);
     case 'personal.phone':
       return fromTracked(profile.personal.phone);
+    case 'personal.phoneCountryCode':
+    case 'personal.phoneNational': {
+      const stored = fromTracked(profile.personal.phone);
+      if (!stored.value) return stored;
+      const parts = splitPhone(stored.value);
+      // Without a written "+CC" the split would be a guess: "9845012345" could
+      // be Indian, or an American number missing its area code.
+      if (!parts) return none('your saved phone does not start with a +country code');
+      return {
+        ...stored,
+        value: field === 'personal.phoneCountryCode' ? `+${parts.code}` : parts.national,
+        note: `${stored.note}, split from your saved phone`,
+      };
+    }
     case 'personal.dateOfBirth':
       return fromTracked(profile.personal.dateOfBirth);
 
@@ -162,6 +176,19 @@ export function resolveValue(
         education,
         'your most recent education entry',
       );
+    case 'education.startMonth':
+    case 'education.startYear':
+      return datePart(field, education?.startDate, education, 'your most recent education entry');
+    case 'education.endMonth':
+    case 'education.endYear':
+      return datePart(
+        field,
+        education?.graduationDate || education?.endDate,
+        education,
+        'your most recent education entry',
+      );
+    case 'education.location':
+      return fromEntry(education?.location, education, 'your most recent education entry');
 
     /* ---------------------------------------------------------- experience */
     case 'experience.company':
@@ -171,7 +198,25 @@ export function resolveValue(
     case 'experience.startDate':
       return fromEntry(experience?.startDate, experience, 'your current or most recent role');
     case 'experience.endDate':
-      return fromEntry(experience?.endDate, experience, 'your current or most recent role');
+    case 'experience.endMonth':
+    case 'experience.endYear':
+      // A current role has no end date. Whatever the profile holds there — a
+      // stale date, or "Present" — is not written.
+      if (experience?.current) return none('you currently work here, so the end date stays empty');
+      return field === 'experience.endDate'
+        ? fromEntry(experience?.endDate, experience, 'your current or most recent role')
+        : datePart(field, experience?.endDate, experience, 'your current or most recent role');
+    case 'experience.startMonth':
+    case 'experience.startYear':
+      return datePart(field, experience?.startDate, experience, 'your current or most recent role');
+    case 'experience.current':
+      if (!experience) return none('not stored in your profile');
+      return {
+        ...fromEntry('set', experience, 'your current or most recent role'),
+        value: experience.current ? 'Yes' : 'No',
+      };
+    case 'experience.location':
+      return fromEntry(experience?.location, experience, 'your current or most recent role');
     case 'experience.description':
       return fromEntry(experience?.description, experience, 'your current or most recent role');
     case 'experience.yearsOfExperience': {
@@ -309,6 +354,37 @@ export function resolveForField(
     resolved = { ...resolved, value: formatDate(resolved.value) };
   }
 
+  // A lone checkbox's "option" is its own label; the Yes/No is its state.
+  if (field === 'experience.current') return resolved;
+
+  if (detected.options.length > 0 && isMonthField(field)) {
+    const wanted = Number(resolved.value);
+    return pickOption(resolved, detected.options, (option) => {
+      const month = option.label.trim() ? monthNumber(option.label) : monthNumber(option.value);
+      return month === wanted;
+    });
+  }
+
+  if (detected.options.length > 0 && field === 'personal.phoneCountryCode') {
+    const code = resolved.value.replace(/^\+/, '');
+    const byCode = detected.options.filter(
+      (option) => dialCode(option.label) === code || dialCode(option.value) === code,
+    );
+    // Countries that share a code (+1, +7, +44) are told apart by the saved
+    // country, or not at all.
+    const country = profile.address.country.value.trim();
+    const narrowed =
+      byCode.length > 1
+        ? byCode.filter(
+            (option) =>
+              country !== '' &&
+              (containsWords(option.label, country) ||
+                sameByAlias(option.label.replace(/[\s(]*\+.*$/, ''), country)),
+          )
+        : byCode;
+    return pickOption(resolved, detected.options, (option) => narrowed.includes(option));
+  }
+
   if (detected.options.length > 0) {
     const match = matchOption(resolved.value, detected.options);
     if (!match) {
@@ -329,6 +405,76 @@ export function resolveForField(
   }
 
   return resolved;
+}
+
+const MONTH_FIELDS: ReadonlySet<CanonicalField> = new Set<CanonicalField>([
+  'education.startMonth',
+  'education.endMonth',
+  'experience.startMonth',
+  'experience.endMonth',
+]);
+
+function isMonthField(field: CanonicalField): boolean {
+  return MONTH_FIELDS.has(field);
+}
+
+/** Exactly one option may satisfy `test`; otherwise nothing is chosen. */
+function pickOption(
+  resolved: ResolvedValue,
+  options: FieldOption[],
+  test: (option: FieldOption) => boolean,
+): ResolvedValue & { optionValue?: string } {
+  const hits = options.filter(
+    (option) => (option.value !== '' || option.label.trim() !== '') && test(option),
+  );
+  if (hits.length !== 1) {
+    return {
+      ...resolved,
+      value: '',
+      confidence: 0,
+      note: `none of the available options match "${resolved.value}"`,
+    };
+  }
+  const option = hits[0]!;
+  return { ...resolved, value: option.label, optionValue: option.value };
+}
+
+/** The dialling code written in an option, e.g. "India (+91)" → "91". */
+function dialCode(text: string): string | null {
+  const match = text.match(/\+\s?(\d{1,4})\b/) ?? text.trim().match(/^(\d{1,4})$/);
+  return match ? match[1]! : null;
+}
+
+/**
+ * Splits a stored phone written as "+CC rest" into its code and national part.
+ * Returns null unless the code is written with a "+" and set apart from the
+ * rest — "+919845012345" could be split several ways, so it is not split.
+ */
+export function splitPhone(phone: string): { code: string; national: string } | null {
+  const match = phone.trim().match(/^\+(\d{1,3})[\s.-]+(\(?\d[\d\s().-]*)$/);
+  if (!match) return null;
+  const national = match[2]!.trim();
+  if (national.replace(/\D/g, '').length < 4) return null;
+  return { code: match[1]!, national };
+}
+
+/**
+ * The month ("08") or year ("2022") part of a stored "YYYY-MM" date. A
+ * year-only date has no month, and none is invented.
+ */
+function datePart<T extends { provenance: { confidence: number; source: string } }>(
+  field: CanonicalField,
+  date: string | undefined,
+  entry: T | undefined,
+  note: string,
+): ResolvedValue {
+  const base = fromEntry(date, entry, note);
+  if (!base.value) return base;
+  const match = base.value.match(/^(\d{4})(?:-(\d{1,2}))?/);
+  if (!match) return none('the stored date is not in a form Fillwright can split');
+  if (field.endsWith('Year')) return { ...base, value: match[1]! };
+  if (!match[2]) return none('the stored date has a year but no month');
+  return { ...base, value: match[2].padStart(2, '0') };
 }
 
 /* ---------------------------------------------------------- authorisation */

@@ -3,6 +3,7 @@ import { collectPageSignals, guessPosting } from './page-signals';
 import { fillFields, undoFill, type UndoRecord } from '@/autofill/fill';
 import { collectPostingText, type JobMatch } from '@/autofill/job-match';
 import { addEntries, findAddControls } from '@/autofill/repeat';
+import { secondPassTargets } from '@/autofill/second-pass';
 import { FillwrightWidget, type AddOffer, type FillSummary, type ProfileChoice } from './widget';
 import type { DraftFact } from './review';
 import { applyAdapter, detectAdapter } from '@/adapters';
@@ -358,6 +359,56 @@ async function runFill(entries: FillPlanEntry[]): Promise<void> {
   widget.renderFilling();
   const summary = await applyFill(entries);
   widget.markFilled(summary);
+  // A dependent list usually loads within a moment of its parent changing.
+  // The mutation observer catches most; this catches a page that swapped
+  // options without changing their count.
+  window.setTimeout(() => void checkSecondPass(), 1_200);
+}
+
+let checkingSecondPass = false;
+
+/**
+ * After a fill: reads the page again, and if dropdowns that were empty or
+ * unmatched now have options that fit, offers "N more fields can be filled
+ * now". It never fills them — the user opens the list and chooses. Returns
+ * true when an offer was made.
+ */
+async function checkSecondPass(): Promise<boolean> {
+  if (!session?.plan || !widget || checkingSecondPass) return false;
+  if (widget.state !== 'success' && widget.state !== 'partial') return false;
+  checkingSecondPass = true;
+  try {
+    const { fields } = harvestFields(document);
+    const visible = fields.filter((field) => field.visible && !field.disabled);
+    const targets = secondPassTargets([...session.fields.values()], visible, session.plan);
+    if (targets.length === 0) return false;
+
+    const response = await request<{ plan: FillPlan }>({
+      type: 'content:request-mappings',
+      scan: {
+        url: location.href,
+        pageKey: location.href,
+        adapterId: null,
+        scannedAt: new Date().toISOString(),
+        fields: visible,
+        mappings: [],
+      },
+      overrides: [...overrides].map(([fingerprint, canonical]) => ({ fingerprint, canonical })),
+    });
+    if (!response.ok) return false;
+    const ids = new Set(targets.map((field) => field.id));
+    const fillable = response.data.plan.entries.filter(
+      (entry) =>
+        ids.has(entry.fieldId) &&
+        entry.newValue !== '' &&
+        (entry.status === 'ready' || entry.status === 'review'),
+    ).length;
+    if (fillable === 0) return false;
+    widget?.offerSecondPass(fillable);
+    return true;
+  } finally {
+    checkingSecondPass = false;
+  }
 }
 
 async function applyFill(entries: FillPlanEntry[]): Promise<FillSummary & { ok: true }> {
@@ -618,6 +669,11 @@ async function onFormChanged(): Promise<void> {
   // Mid-review, or mid-fill: say the page changed and let the user refresh.
   if (widget.state === 'review' || widget.state === 'filling' || widget.drafts.size > 0) {
     widget.markStale();
+    return;
+  }
+  // Straight after a fill, a changed dropdown is offered rather than rescanned
+  // under the user's summary.
+  if ((widget.state === 'success' || widget.state === 'partial') && (await checkSecondPass())) {
     return;
   }
   // Otherwise refresh quietly, so the next step's fields are ready.

@@ -133,6 +133,22 @@ controlled by someone else.
   regenerated. Imports add alongside existing data and never replace it. Vault
   state and the active profile are never imported.
 
+- **Handler payloads.** Everything a handler stores is checked first by
+  `src/security/boundary.ts`, and a malformed payload is rejected with a code
+  and nothing is written: `ui:save-profile` (plain object, a safe id, at most
+  2 MB, rebuilt against the current schema with its ids kept),
+  `ui:set-settings` (known keys only, types and enums checked, numbers
+  clamped; `privacy.encryptionEnabled` and `version` can only be set by the
+  worker itself) and `content:save-mapping` (the field must be in the catalog
+  and assignable, so a page cannot teach a mapping to a demographic field).
+
+- **Records from older releases.** Every profile read goes through
+  `migrateProfile()` (`src/profile/migrate.ts`): version-stepped migrations,
+  then a rebuild against the current template, so a key a newer release added
+  is present rather than undefined. Encrypted records migrate only after
+  unlock. IndexedDB schema changes go through the step table in
+  `src/storage/idb.ts`.
+
 ### 3.2 A malicious resume file
 
 A resume is an untrusted file from a third party (a template, an agency, an

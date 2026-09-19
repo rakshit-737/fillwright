@@ -2,6 +2,25 @@
 
 Notable changes, newest first. Versions follow semantic versioning.
 
+## Unreleased
+
+### Security
+
+- **Every handler that stores something validates it first.** A malformed
+  `ui:save-profile`, `ui:set-settings` or `content:save-mapping` payload is
+  rejected with a code (`EBADPROFILE`, `EBADSETTINGS`, `EBADFIELD`) and
+  nothing is stored. Settings are type- and enum-checked and clamped; a
+  settings page can no longer flip `privacy.encryptionEnabled` directly; a
+  page can no longer save a mapping to a field outside the catalog.
+
+### Fixed
+
+- **Profiles written by an older release load.** Stored records are migrated
+  and rebuilt against the current schema on read (ids and provenance kept),
+  so a field added later is empty rather than undefined in the editor.
+- IndexedDB now has a versioned upgrade path (database version 2 repairs
+  missing stores or indexes), tested by upgrading a real v1 database.
+
 ## 0.5.0
 
 From feature-complete to shippable: verified in a real browser against

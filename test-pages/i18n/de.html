@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <title>Bewerbung — Softwareentwickler</title>
+    <link rel="stylesheet" href="../shared.css" />
+  </head>
+  <body>
+    <h1>Bewerbung — Softwareentwickler</h1>
+    <p class="lead" lang="en">
+      Expected (locale pack "de"): every label is in this language and the name attributes
+      carry no English, so only the de vocabulary can identify the fields. First name, last
+      name, email and phone fill from the profile. The gender question is recognised as sensitive
+      and is left for you. The referee's email is someone else's and stays empty. The form is
+      never submitted.
+    </p>
+    <form id="app">
+      <label for="f1">Vorname</label>
+      <input id="f1" name="f1" />
+      <label for="f2">Nachname</label>
+      <input id="f2" name="f2" />
+      <label for="f3">E-Mail-Adresse</label>
+      <input id="f3" name="f3" type="email" />
+      <label for="f4">Telefonnummer</label>
+      <input id="f4" name="f4" type="tel" />
+      <label for="f5">Geschlecht</label>
+      <select id="f5" name="f5">
+        <option value="">Bitte wählen</option>
+        <option value="Weiblich">Weiblich</option>
+        <option value="Männlich">Männlich</option>
+        <option value="Divers">Divers</option>
+      </select>
+      <label for="f6">E-Mail-Adresse der Referenzperson</label>
+      <input id="f6" name="f6" type="email" />
+      <button type="submit">Bewerbung absenden</button>
+    </form>
+    <script src="../shared.js"></script>
+  </body>
+</html>

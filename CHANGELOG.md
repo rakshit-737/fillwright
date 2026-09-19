@@ -149,6 +149,24 @@ Notable changes, newest first. Versions follow semantic versioning.
   offers "N more fields can be filled now". Nothing is filled until you review
   them and press Fill.
 - All of the above are in the "What is this field?" picker.
+- **Forms in German, French, Spanish, Portuguese, Dutch and Italian.** Locale
+  vocabulary packs (`src/field-detection/locales.ts`) are merged into the
+  field rules under the English rules' negative discipline: every locale rule
+  inherits the English `not` list for its field. The control's `lang`
+  attribute (nearest ancestor) picks the pack; with no supported language,
+  every pack applies except words that are also English ("Note", "Handy",
+  "Via"), which need the page to declare the language.
+- **Safety vocabulary in every language, whatever the page declares.** Each
+  sensitive category (gender, ethnicity, disability, veteran, criminal record,
+  work authorisation, sponsorship, visa/nationality, clearance, relocation,
+  travel, drug test, background check), date of birth and salary are
+  recognised in all six languages even on a page that says it is English. The
+  third-party words (referee, emergency contact, manager…) and company words
+  are recognised in every language too, as are "confirm your email" boxes.
+- Yes/No options in each language (Ja/Nein, Oui/Non, Sí/No, Sim/Não, Ja/Nee,
+  Sì/No), and localised month and country names for dropdown matching.
+- `test-pages/i18n/<lang>.html` per pack, with a Chrome test each, and
+  `tests/i18n.test.ts` with the phrasings that must and must not match.
 
 ### Changed
 
@@ -181,6 +199,12 @@ Notable changes, newest first. Versions follow semantic versioning.
   country code (it used to get the whole stored phone).
 - The form-change signature now counts dropdown options, and an added
   `<option>` counts as a possible form change.
+- **Unicode-aware label normalisation.** Labels are NFKD-folded and
+  diacritics stripped, keeping every letter and digit: "Prénom" is now
+  "prenom" (it was "pr nom"), "Straße" is "strasse", and non-Latin labels
+  are no longer erased. Dropdown option text is folded the same way.
+  A mapping you taught Fillwright on a label with accents is keyed on the
+  new form, so it may need teaching once more.
 
 ### Docs
 

@@ -1199,6 +1199,167 @@ async function main() {
       assert(stored.resumes >= 1, 'the resume file was not kept');
     });
 
+    /* --- re-importing a resume keeps hand-edited entries ------------- */
+
+    await test('Replace with the resume version keeps an edited role and adds a new one', async () => {
+      const RESUME_A = [
+        'Priya Nair',
+        'priya.nair@example.com | +91 98450 11111',
+        '',
+        'EXPERIENCE',
+        'Software Engineer',
+        'Acme Systems | Jun 2023 - Present',
+        '- Built payment APIs',
+        '',
+        'Backend Intern',
+        'Initech Labs | Jan 2022 - May 2022',
+        '- Wrote tests',
+        '',
+        'EDUCATION',
+        'Vellore Institute of Technology',
+        'B.Tech in Computer Science  2019 - 2023',
+      ].join('\n');
+      const RESUME_B = RESUME_A.replace(
+        'EDUCATION',
+        'Research Intern\nGlobex Research | Jun 2021 - Aug 2021\n- Ran experiments\n\nEDUCATION',
+      );
+
+      const page = await browser.newPage();
+      const failures = [];
+      page.on('pageerror', (error) => failures.push(error.message));
+
+      const clickText = (label) =>
+        page.evaluate((text) => {
+          const target = Array.from(document.querySelectorAll('button, label')).find(
+            (el) => (el.textContent || '').trim().indexOf(text) === 0,
+          );
+          if (target) target.click();
+          return Boolean(target);
+        }, label);
+
+      const importText = async (text, replace) => {
+        // A hash-only change would keep the pane's "Profile updated" state.
+        await page.goto('about:blank');
+        await page.goto(`chrome-extension://${extensionId}/options.html#/import`, {
+          waitUntil: 'networkidle0',
+        });
+        await page
+          .waitForSelector('textarea[aria-label="Resume text"]', { timeout: 10_000 })
+          .catch(async () => {
+            const text = await page.evaluate(() => document.body.innerText.slice(-700));
+            throw new Error(`the Resume pane did not offer a text box: ${text}`);
+          });
+        // Set the value through React's own setter so the pane sees it.
+        await page.evaluate((value) => {
+          const area = document.querySelector('textarea[aria-label="Resume text"]');
+          const setter = Object.getOwnPropertyDescriptor(
+            HTMLTextAreaElement.prototype,
+            'value',
+          ).set;
+          setter.call(area, value);
+          area.dispatchEvent(new Event('input', { bubbles: true }));
+        }, text);
+        assert(await clickText('Read pasted text'), 'the Read pasted text button was not found');
+        await page.waitForFunction(
+          () => document.body.innerText.indexOf('Here is what Fillwright read') !== -1,
+          { timeout: 20_000 },
+        );
+        if (replace) {
+          assert(await clickText('Replace with the resume version'), 'Replace option not found');
+        }
+        // Wait for the per-entry preview before saving.
+        await page.waitForFunction(() => document.querySelector('.fw-entrylist'), {
+          timeout: 10_000,
+        });
+        const preview = await page.evaluate(() =>
+          Array.from(document.querySelectorAll('.fw-entry')).map((li) => li.textContent.trim()),
+        );
+        assert(await clickText('Save to my profile'), 'the Save button was not found');
+        await page.waitForFunction(
+          () => document.body.innerText.indexOf('Profile updated') !== -1,
+          { timeout: 20_000 },
+        );
+        return preview;
+      };
+
+      const readProfile = () =>
+        page.evaluate(async () => {
+          const state = await chrome.runtime.sendMessage({ type: 'ui:get-state' });
+          const profile = await chrome.runtime.sendMessage({
+            type: 'ui:get-profile',
+            profileId: state.data.settings.activeProfileId,
+          });
+          return profile.data;
+        });
+
+      // Work in a throwaway profile so later suites still see the seeded one.
+      await page.goto(`chrome-extension://${extensionId}/options.html`, {
+        waitUntil: 'domcontentloaded',
+      });
+      const originalId = await page.evaluate(async () => {
+        const state = await chrome.runtime.sendMessage({ type: 'ui:get-state' });
+        return state.data.settings.activeProfileId;
+      });
+      const scratchId = await page.evaluate(async () => {
+        const created = await chrome.runtime.sendMessage({
+          type: 'ui:create-profile',
+          name: 'Re-import E2E',
+        });
+        await chrome.runtime.sendMessage({
+          type: 'ui:set-active-profile',
+          profileId: created.data.id,
+        });
+        return created.data.id;
+      });
+
+      try {
+        await importText(RESUME_A, false);
+
+        // Edit one role the way the profile editor does: new value, provenance 'user'.
+        let profile = await readProfile();
+        const acme = profile.experience.find((e) => e.company === 'Acme Systems');
+        assert(acme, 'resume A did not produce the Acme role');
+        acme.description = 'Edited by me';
+        acme.provenance = { source: 'user', confidence: 1, updatedAt: new Date().toISOString() };
+        const saved = await page.evaluate(
+          (next) => chrome.runtime.sendMessage({ type: 'ui:save-profile', profile: next }),
+          profile,
+        );
+        assert(saved.ok, `saving the edit failed: ${saved.error}`);
+
+        const preview = await importText(RESUME_B, true);
+        assert(
+          preview.some((row) => row.startsWith('Kept (yours): Software Engineer at Acme Systems')),
+          `the review did not show the edited role as kept: ${preview.join(' | ')}`,
+        );
+        assert(
+          preview.some((row) => row.startsWith('Added: Research Intern at Globex Research')),
+          `the review did not show the new role as added: ${preview.join(' | ')}`,
+        );
+
+        profile = await readProfile();
+        const acmes = profile.experience.filter((e) => e.company === 'Acme Systems');
+        assertEqual(acmes.length, 1, 'the edited role was duplicated or dropped');
+        assertEqual(acmes[0].id, acme.id, 'the edited role lost its id');
+        assertEqual(acmes[0].description, 'Edited by me', 'the edited role was overwritten');
+        assert(
+          profile.experience.some((e) => e.company === 'Globex Research'),
+          'the new role on resume B was not added',
+        );
+        assertEqual(failures.length, 0, `page error: ${failures.join(' | ')}`);
+      } finally {
+        await page.evaluate(
+          async (restore, scratch) => {
+            await chrome.runtime.sendMessage({ type: 'ui:set-active-profile', profileId: restore });
+            await chrome.runtime.sendMessage({ type: 'ui:delete-profile', profileId: scratch });
+          },
+          originalId,
+          scratchId,
+        );
+        await page.close();
+      }
+    });
+
     /* --- v0.5: proactive modes, corrections, SPA, focus, portability --- */
 
     await runV05Suite({

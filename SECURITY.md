@@ -322,7 +322,7 @@ These are enforced in code, not merely documented:
 | Answer a demographic question from an inference | `src/security/sensitive.ts` — the resume parser cannot write to `profile.sensitive` at all |
 | Turn "not answered" into "No" | `TriState` is three-valued; `unset` resolves to no value |
 | Apply a US work-authorisation answer to a UK question | `src/autofill/countries.ts` reads every country the question names. "US"/"U.S."/"USA" match case-sensitively as whole tokens, so the pronoun "us" ("let us know") is never the United States. Exactly one country with a saved answer is filled; none, several ("the United States or Canada") or a mismatch fills nothing and asks you |
-| Overwrite something you typed | Off by default; and your edits set `provenance.source = 'user'`, which the resume merge never overwrites |
+| Overwrite something you typed | Off by default; and your edits set `provenance.source = 'user'`, which the resume merge never overwrites or drops — per field and per list entry (education, experience, projects, skills, certifications, achievements, languages), with either merge strategy |
 | Consent to a background check or drug test unattended | `ALWAYS_CONFIRM` — re-confirmed on every application even with a saved answer |
 | Attach a file | Browsers forbid it, and Fillwright does not attempt workarounds |
 | Write plaintext while the vault is locked | Storage throws `ELOCKED` rather than falling back |

@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { send } from '@/utils/messaging';
 import { describeError, looksTechnical } from '@/utils/errors';
 import { ExtractionError, extractResumeText, parseResume, type ParsedResume } from '@/parser';
-import { mergeResumeIntoProfile, type MergeChange } from '@/profile/merge';
+import { mergeResumeIntoProfile, type EntryChange, type MergeChange } from '@/profile/merge';
 import { assertNoSensitiveInference } from '@/security/sensitive';
 import { newId, now } from '@/profile/factory';
 import { getResume, saveResume } from '@/storage/profiles';
@@ -51,6 +51,10 @@ export function ImportResume({
   const [strategy, setStrategy] = useState<'fill-gaps' | 'replace'>('fill-gaps');
   const [existingResume, setExistingResume] = useState<ResumeAttachment | null>(null);
   const [attachmentWarning, setAttachmentWarning] = useState('');
+  // The stored profile the review preview is computed against, and the list
+  // changes the user unticked. Both reset whenever a new resume is read.
+  const [reviewBase, setReviewBase] = useState<Profile | null>(null);
+  const [skipped, setSkipped] = useState<ReadonlySet<string>>(new Set());
   const fileInput = useRef<HTMLInputElement>(null);
 
   const profileId = settings?.activeProfileId ?? null;
@@ -75,6 +79,27 @@ export function ImportResume({
     };
   }, [profileId, stage.name]);
 
+  // Loads the profile the review screen previews the merge against.
+  useEffect(() => {
+    let cancelled = false;
+    setReviewBase(null);
+    if (stage.name !== 'review' || !profileId) return;
+    void send<Profile>({ type: 'ui:get-profile', profileId }).then((result) => {
+      if (!cancelled && result.ok) setReviewBase(result.data);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [stage.name, profileId]);
+
+  const preview = useMemo(
+    () =>
+      stage.name === 'review' && reviewBase
+        ? mergeResumeIntoProfile(reviewBase, stage.parsed, { strategy }).entries
+        : [],
+    [stage, reviewBase, strategy],
+  );
+
   // Onboarding moves on once the profile is saved.
   useEffect(() => {
     if (stage.name === 'done') onSaved?.();
@@ -86,6 +111,7 @@ export function ImportResume({
       // Defence in depth: fail loudly if the parser ever starts producing
       // sensitive fields, rather than letting them flow into the profile.
       assertNoSensitiveInference(parsed);
+      setSkipped(new Set());
       setStage({ name: 'review', parsed, source });
     } catch {
       setStage({
@@ -148,7 +174,10 @@ export function ImportResume({
         return;
       }
 
-      const { profile, changes } = mergeResumeIntoProfile(current.data, parsed, { strategy });
+      const { profile, changes } = mergeResumeIntoProfile(current.data, parsed, {
+        strategy,
+        skip: Array.from(skipped),
+      });
 
       // Store the original file so it can be re-attached to applications later.
       // The parsed text is already safe in `parsed`, so a failure here costs the
@@ -341,6 +370,16 @@ export function ImportResume({
           fileName={stage.source.fileName}
           strategy={strategy}
           onStrategyChange={setStrategy}
+          entries={preview}
+          skipped={skipped}
+          onToggle={(id) =>
+            setSkipped((prev) => {
+              const next = new Set(prev);
+              if (next.has(id)) next.delete(id);
+              else next.add(id);
+              return next;
+            })
+          }
           onApply={apply}
           onCancel={() => setStage({ name: 'idle' })}
         />
@@ -354,9 +393,15 @@ function ReviewParsed({
   fileName,
   strategy,
   onStrategyChange,
+  entries,
+  skipped,
+  onToggle,
   onApply,
   onCancel,
 }: {
+  entries: EntryChange[];
+  skipped: ReadonlySet<string>;
+  onToggle: (id: string) => void;
   parsed: ParsedResume;
   fileName: string;
   strategy: 'fill-gaps' | 'replace';
@@ -490,8 +535,15 @@ function ReviewParsed({
             <span>Replace with the resume version</span>
           </label>
         </div>
-        <span className="fw-field__hint">Either way, anything you typed by hand is kept.</span>
+        <span className="fw-field__hint">
+          Either way, anything you typed by hand is kept, and new entries on the resume are added.
+          Replace also refreshes entries that came from an earlier resume.
+        </span>
       </fieldset>
+
+      {entries.length > 0 && (
+        <EntryChanges entries={entries} skipped={skipped} onToggle={onToggle} />
+      )}
 
       <div className="fw-actions">
         <button className="fw-btn fw-btn--primary" onClick={onApply}>
@@ -502,6 +554,69 @@ function ReviewParsed({
         </button>
       </div>
     </div>
+  );
+}
+
+const ENTRY_KIND_TEXT: Record<EntryChange['kind'], string> = {
+  added: 'Added',
+  updated: 'Updated',
+  kept: 'Kept (yours)',
+  missing: 'No longer on the resume (kept)',
+};
+
+/**
+ * One row per list entry the import touches or deliberately leaves alone.
+ * Added and updated rows carry a checkbox; unticking one leaves that entry
+ * exactly as it is in the profile.
+ */
+function EntryChanges({
+  entries,
+  skipped,
+  onToggle,
+}: {
+  entries: EntryChange[];
+  skipped: ReadonlySet<string>;
+  onToggle: (id: string) => void;
+}) {
+  return (
+    <section className="fw-section" aria-labelledby="fw-entry-changes">
+      <h3 className="fw-section__title" id="fw-entry-changes">
+        Entries
+      </h3>
+      <ul className="fw-entrylist">
+        {entries.map((entry) => {
+          const changeable = entry.kind === 'added' || entry.kind === 'updated';
+          const text = `${ENTRY_KIND_TEXT[entry.kind]}: ${entry.label}`;
+          const detail =
+            entry.kind === 'updated' && entry.fields.length > 0
+              ? ` (${entry.fields.join(', ')})`
+              : '';
+          return (
+            <li
+              key={entry.id}
+              className={`fw-entry fw-entry--${entry.kind}`}
+              data-kind={entry.kind}
+            >
+              {changeable ? (
+                <label className="fw-check">
+                  <input
+                    type="checkbox"
+                    checked={!skipped.has(entry.id)}
+                    onChange={() => onToggle(entry.id)}
+                  />
+                  <span>
+                    {text}
+                    {detail}
+                  </span>
+                </label>
+              ) : (
+                <span>{text}</span>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+    </section>
   );
 }
 

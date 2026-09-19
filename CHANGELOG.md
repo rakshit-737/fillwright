@@ -27,6 +27,22 @@ Notable changes, newest first. Versions follow semantic versioning.
 - A store left half-encrypted by an earlier version is detected and the
   Security page explains how to recover, instead of showing "locked" forever.
 
+### Fixed
+
+- **Re-importing a resume no longer deletes entries you edited.** "Replace
+  with the resume version" swapped whole list sections, so an education,
+  experience, project, skill, certification, achievement or language entry you
+  had edited by hand was overwritten or dropped, although the screen promised
+  it was kept. Lists are now merged entry by entry on a normalised key
+  (e.g. company + title + start date for a role): your entries are never
+  changed or removed, matched resume entries keep their ids, and entries no
+  longer on the resume are kept and flagged.
+- **"Keep what I have, fill the gaps" now adds new entries.** A new
+  internship on an updated resume used to be ignored once the list had
+  anything in it.
+- The import review lists each entry as added, updated, kept (yours) or no
+  longer on the resume, with a checkbox for every change.
+
 ## 0.5.0
 
 From feature-complete to shippable: verified in a real browser against

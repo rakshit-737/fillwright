@@ -107,6 +107,8 @@ declaration, screenshots and a checklist are in [`store/`](./store).
 npm test             # 326 unit and integration tests (jsdom)
 npm run test:e2e     # 96 end-to-end tests in real Chrome, including axe-core
 npm run perf         # performance budget in Chrome for Testing
+npm run eval         # classifier and parser accuracy vs tests/corpus/baseline.json
+npm run test:coverage # unit tests with coverage thresholds
 npm run check        # typecheck → lint → audit → test → build → verify
 npm run presubmit    # check + package + inspect the zip
 npm run probe:ai     # where Chrome exposes its on-device model

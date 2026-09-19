@@ -2,6 +2,26 @@
 
 Notable changes, newest first. Versions follow semantic versioning.
 
+## Unreleased
+
+### Testing
+
+- **Accuracy is measured, not guessed.** `npm run eval` scores the field
+  classifier on 372 labelled fields and the resume parser on 27 invented
+  resumes across seven layouts, printing per-field precision, recall and a
+  confusion list. CI fails when any number drops below the committed
+  `tests/corpus/baseline.json`. Starting point: 90.3% classifier accuracy;
+  the weakest areas are start/end dates inside repeated blocks, postal codes
+  named only in attributes, and parser recall for names and employers on
+  surname-first, Europass and no-heading layouts.
+- Coverage thresholds (`npm run test:coverage`, `@vitest/coverage-v8`) for
+  `src/autofill`, `src/field-detection`, `src/security` and `src/parser`, run
+  in CI.
+- fast-check property tests: `validateScan`, `conformProfile`,
+  `normalizeLabel` and `matchOption` never throw and return bounded output.
+- New dev-only dependencies: `@vitest/coverage-v8`, `fast-check`. Nothing
+  shipped changes.
+
 ## 0.5.0
 
 From feature-complete to shippable: verified in a real browser against

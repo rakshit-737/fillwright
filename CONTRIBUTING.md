@@ -61,6 +61,32 @@ When adding a field rule, add a case to `tests/classify.test.ts` — including t
 wordings it should *not* match. Add awkward markup to `test-pages/hard-mode.html`
 with a note saying what should happen.
 
+### Measuring accuracy: run `npm run eval` for any rule change
+
+A rule that fixes one form can quietly break three others. **Any change to the
+classifier (`src/field-detection/`), the option matcher or the resume parser
+(`src/parser/`) must be checked with `npm run eval`**, which scores it against
+an invented corpus and prints per-field precision, recall and a confusion list:
+
+- `tests/corpus/fields.json` — labelled `FieldSignals` (ATS fixture labels plus
+  real-world phrasings), each with its expected canonical field or `unknown`.
+- `tests/corpus/resumes/` — resumes in many layouts (single column, LaTeX,
+  two-column, Europass, Indian campus format, no headings, surname first), each
+  `NN-name.txt` next to `NN-name.expected.json`.
+
+CI fails if any metric falls below `tests/corpus/baseline.json`. When your
+change improves a number, run `npm run eval -- --update-baseline` and commit
+the new baseline with the change so the gain cannot silently be lost. Never
+lower the baseline to get a change through; if a trade-off is deliberate, say
+so in the PR. Add a corpus case for the form you are fixing. All corpus data
+must be invented — never paste a real person's resume or a real form's hidden
+field names that identify an employer's internal systems.
+
+`npm run test:coverage` runs the unit tests with coverage thresholds for
+`src/autofill`, `src/field-detection`, `src/security` and `src/parser` (set in
+`vitest.config.ts`); CI runs it too. `tests/properties.test.ts` holds
+fast-check property tests for the untrusted-input boundaries.
+
 ## Reporting a security issue
 
 Please open a private security advisory rather than a public issue. See

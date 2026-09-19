@@ -38,8 +38,11 @@ describe('verify: url', () => {
   });
   it('accepts a case-different host and a trailing slash', () => {
     expect(
-      check('url', 'https://WWW.LinkedIn.com/in/rakshit-r/', 'https://www.linkedin.com/in/rakshit-r')
-        .ok,
+      check(
+        'url',
+        'https://WWW.LinkedIn.com/in/rakshit-r/',
+        'https://www.linkedin.com/in/rakshit-r',
+      ).ok,
     ).toBe(true);
   });
   it('treats a URL in a text box as a URL', () => {

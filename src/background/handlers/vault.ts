@@ -18,13 +18,7 @@ import {
   unlock,
 } from '@/security/vault';
 import type { ContentRequest, UiRequest } from '@/types/messages';
-
-const OPENABLE_ROUTES: ReadonlySet<string> = new Set([
-  'security',
-  'import',
-  'privacy',
-  'assistance',
-]);
+import { openPagePath } from '../open-page';
 
 /**
  * Vault handlers.
@@ -46,9 +40,10 @@ export function registerVaultHandlers(): void {
    * list of routes can be opened, so a page cannot steer the user anywhere else.
    */
   handle('content:open-page', async (request) => {
-    const { route } = request as Extract<ContentRequest, { type: 'content:open-page' }>;
-    if (!OPENABLE_ROUTES.has(route)) return err('Unknown page', 'EBADROUTE');
-    await chrome.tabs.create({ url: chrome.runtime.getURL(`options.html#/${route}`) });
+    const { route, field } = request as Extract<ContentRequest, { type: 'content:open-page' }>;
+    const path = openPagePath(route, field);
+    if (!path) return err('Unknown page', 'EBADROUTE');
+    await chrome.tabs.create({ url: chrome.runtime.getURL(path) });
     return ok({ opened: true });
   });
 

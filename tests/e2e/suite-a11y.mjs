@@ -129,11 +129,75 @@ export async function runA11ySuite(ctx) {
           ?.click();
       });
       await sleep(200);
+      // And the in-row editor for "Edit for this form".
+      await page.evaluate(() => {
+        const root = document.querySelector('[data-fillwright-widget]').shadowRoot;
+        Array.from(root.querySelectorAll('button'))
+          .find((b) => b.textContent === 'Edit for this form')
+          ?.click();
+      });
+      await sleep(200);
       const violations = await audit(page, [['[data-fillwright-widget]', '.fw-widget']]);
       assert(violations.length === 0, describe(violations));
       await page.close();
     });
   }
+
+  await test('a11y: toggling a row by keyboard keeps focus and the list scroll position', async () => {
+    const url = `${server.origin}/perf-fifty.html?a11y-review`;
+    const page = await browser.newPage();
+    await page.goto(url, { waitUntil: 'networkidle0' });
+    await evalInWorker(
+      worker,
+      `(async () => {
+        const [tab] = await chrome.tabs.query({ url: ${JSON.stringify(url)} });
+        await chrome.scripting.executeScript({ target: { tabId: tab.id }, func: () => { globalThis.__fillwrightActivation = Date.now(); } });
+        await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['content.js'] });
+      })()`,
+    );
+    await waitForWidget(page, (s) => s.text.includes('application field'));
+    await clickWidgetButton(page, 'Review');
+    await waitForWidget(page, (s) => s.items.length >= 15);
+
+    // Scroll the 15th checkbox into the list's view and focus it.
+    const before = await page.evaluate(() => {
+      const root = document.querySelector('[data-fillwright-widget]').shadowRoot;
+      const boxes = Array.from(root.querySelectorAll('.fw-list input.fw-check'));
+      const box = boxes[14];
+      if (!box) return { count: boxes.length };
+      const list = root.querySelector('.fw-list');
+      box.scrollIntoView({ block: 'center' });
+      box.focus();
+      return {
+        count: boxes.length,
+        key: box.getAttribute('data-fw-key'),
+        checked: box.checked,
+        scrollTop: list.scrollTop,
+      };
+    });
+    assert(before.count >= 15, `only ${before.count} checkboxes in the list`);
+    assert(before.scrollTop > 0, 'the list did not scroll, so the check would prove nothing');
+
+    await page.keyboard.press('Space');
+    await sleep(150);
+
+    const after = await page.evaluate(() => {
+      const root = document.querySelector('[data-fillwright-widget]').shadowRoot;
+      const active = root.activeElement;
+      return {
+        key: active?.getAttribute('data-fw-key') ?? null,
+        checked: active?.checked ?? null,
+        scrollTop: root.querySelector('.fw-list').scrollTop,
+      };
+    });
+    assert(after.key === before.key, `focus moved to ${after.key}, expected ${before.key}`);
+    assert(after.checked === !before.checked, 'Space did not toggle the checkbox');
+    assert(
+      after.scrollTop === before.scrollTop,
+      `the list scrolled from ${before.scrollTop} to ${after.scrollTop}`,
+    );
+    await page.close();
+  });
 
   await test('a11y: the panel announces its tally once, not on every redraw', async () => {
     const url = `${server.origin}/spa-steps.html?a11y`;

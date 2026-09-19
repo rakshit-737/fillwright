@@ -32,6 +32,8 @@ It never submits an application. That click is always yours.
   well it matches) to edit and use. Never chosen for you.
 - **Explains itself.** Every row in the review list has a "Why?" that says what
   matched and where, and a "Show me" that points at the field on the page.
+  Rows are grouped by section, can be filtered by status, and any proposed
+  value can be edited for just this form.
 - **Leaves hidden fields alone.** Fields a person cannot see — honeypots,
   off-screen or transparent inputs, fields covered by something else — are
   never filled. The panel says how many it ignored and why.

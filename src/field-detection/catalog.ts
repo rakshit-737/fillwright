@@ -134,3 +134,18 @@ export function catalogGroups(): string[] {
 export function isAssignable(field: CanonicalField): boolean {
   return BY_FIELD.has(field);
 }
+
+/** The review-list section a field belongs to. Unrecognised fields go last. */
+export function catalogGroupOf(field: CanonicalField): string {
+  return BY_FIELD.get(field)?.group ?? 'Other questions';
+}
+
+/**
+ * True when `field` may be named in an options.html#/profile deep link.
+ *
+ * The value arrives from a content script, so it is checked against the fixed
+ * catalog by exact key — never interpreted — before it becomes part of a URL.
+ */
+export function isOpenableProfileField(field: unknown): field is CanonicalField {
+  return typeof field === 'string' && BY_FIELD.has(field as CanonicalField);
+}

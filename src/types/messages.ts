@@ -95,7 +95,7 @@ export type ContentRequest =
   | { type: 'content:job-match'; text: string }
   | { type: 'content:list-profiles' }
   /** Opens one of a fixed set of Fillwright pages (import, privacy, …). */
-  | { type: 'content:open-page'; route: string }
+  | { type: 'content:open-page'; route: string; field?: string }
   | { type: 'content:switch-profile'; profileId: string }
   | { type: 'content:draft-facts' }
   | { type: 'content:draft'; question: string; factIds: string[]; maxCharacters?: number }

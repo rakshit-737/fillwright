@@ -53,6 +53,9 @@ Notable changes, newest first. Versions follow semantic versioning.
 - **Certify / agree / consent / declare checkboxes are never ticked.** They
   are listed as "Needs your answer", even when a saved rule or a strong match
   points at them.
+- `content:open-page` now accepts the `profile` route with an optional
+  `field`, validated against `FIELD_CATALOG` in both the content script and
+  the service worker. It still only opens a page.
 
 ### Fixed
 
@@ -127,6 +130,17 @@ Notable changes, newest first. Versions follow semantic versioning.
   active rules saved for that site.
 - `npm run check` runs `scripts/check-settings.mjs`, which fails on a default
   setting that nothing outside `src/types` and `src/options` reads.
+- **The review list keeps your place.** Ticking a box, opening "Why?" or
+  "Change" no longer sends focus to the Fill button and the list back to the
+  top: rows are keyed by field, and focus and scroll position survive every
+  redraw.
+- **Edit for this form.** A proposed value can be changed in its row. The
+  value is marked "your edit", is used for this fill only, and lives only in
+  the tab — your profile is not changed.
+- **"Add it in your profile"** on rows whose value is missing opens the
+  profile editor focused on that field.
+- Rows are grouped by section, each with select all / none, and the list can
+  be filtered by status.
 
 ### Docs
 

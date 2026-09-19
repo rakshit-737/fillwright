@@ -15,6 +15,7 @@ import type { AnswerChoices } from '@/autofill/saved-answers';
 import { applyAdapter, detectAdapter } from '@/adapters';
 import type { CanonicalField, DetectedField, FillPlan, FillPlanEntry } from '@/types/fields';
 import type { AutofillMode } from '@/types/settings';
+import { isOpenableProfileField } from '@/field-detection/catalog';
 import { describeError } from '@/utils/errors';
 import { request, notify } from './transport';
 import { controlSignature, createThrottle, mutationsMayAffectForm } from './observe';
@@ -357,7 +358,7 @@ function createWidget(): FillwrightWidget {
       },
       onAddEntries: (offer) => void addMissingEntries(offer),
       onUnlock: () => openExtensionPage('security'),
-      onOpenPage: (route) => openExtensionPage(route),
+      onOpenPage: (route, field) => openExtensionPage(route, field),
       onReload: () => location.reload(),
       canDraft: () => draftAvailable !== false,
       onDraftStart: (entry) => void startDraft(entry),
@@ -862,11 +863,17 @@ async function send<T = unknown>(message: {
 }
 
 /** Only these extension pages may be opened from a web page. */
-const OPENABLE = new Set(['security', 'import', 'privacy', 'assistance']);
+const OPENABLE = new Set(['security', 'import', 'privacy', 'assistance', 'profile']);
 
-function openExtensionPage(route: string): void {
+/**
+ * Opens a Fillwright page. `field` (profile only) names the profile field to
+ * focus; it must be a FIELD_CATALOG key, and the worker checks it again. This
+ * only navigates — nothing here can read or write the profile.
+ */
+function openExtensionPage(route: string, field?: CanonicalField): void {
   if (!OPENABLE.has(route)) return;
-  notify({ type: 'content:open-page', route });
+  if (field !== undefined && (route !== 'profile' || !isOpenableProfileField(field))) return;
+  notify({ type: 'content:open-page', route, ...(field ? { field } : {}) });
 }
 
 /** True when a same-origin iframe on this page contains form controls. */

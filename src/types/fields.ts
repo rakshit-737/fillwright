@@ -216,6 +216,11 @@ export interface FillPlan {
   blocks: { education: number; experience: number };
   /** Entries the profile holds, for the same comparison. */
   available: { education: number; experience: number };
+  /**
+   * True for a plan prepared before the user engaged (Smart mode): counts and
+   * statuses only, every value and rationale blanked. It cannot fill anything.
+   */
+  withheld?: boolean;
 }
 
 export interface FillPlanEntry {

@@ -271,7 +271,8 @@
 .fw-btn--primary:hover {
   background: #3f33b4;
 }
-.fw-btn[disabled] {
+.fw-btn[disabled],
+.fw-btn[aria-disabled='true'] {
   opacity: 0.5;
   cursor: not-allowed;
 }

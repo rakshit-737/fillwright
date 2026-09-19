@@ -62,6 +62,11 @@ export interface WidgetCallbacks {
   onUndo: () => void;
   onClose: () => void;
   onRescan: () => void;
+  /**
+   * The user opened a panel whose plan was prepared without values (Smart
+   * mode). Fetch the real plan now.
+   */
+  onOpen: () => void;
   /** The user corrected what a field means. */
   onTeach: (entry: FillPlanEntry, field: CanonicalField, remember: boolean) => void;
   onListProfiles: () => Promise<ProfileChoice[]>;
@@ -90,6 +95,39 @@ export interface FillSummary {
 
 const POSITION_KEY = '__fillwrightPanelPosition';
 
+/** How long the panel must be visible and unobscured before Fill arms. */
+export const ARM_DELAY_MS = 500;
+
+/** At most this many top-layer re-assertions per window, so a page cannot loop us. */
+const REASSERT_LIMIT = 3;
+const REASSERT_WINDOW_MS = 10_000;
+
+/** Every event type a panel control acts on. Untrusted ones never reach a handler. */
+const GUARDED_EVENTS = [
+  'click',
+  'dblclick',
+  'auxclick',
+  'pointerdown',
+  'pointerup',
+  'mousedown',
+  'mouseup',
+  'keydown',
+  'keyup',
+  'input',
+  'change',
+  'submit',
+] as const;
+
+export interface WidgetOptions {
+  /**
+   * Decides whether an event came from the user. Always `event.isTrusted` in
+   * the product; a test seam only, because jsdom cannot create trusted events.
+   */
+  trust?: (event: Event) => boolean;
+}
+
+type Visibility = 'unknown' | 'visible' | 'covered';
+
 export class FillwrightWidget {
   private host: HTMLElement;
   private root: ShadowRoot;
@@ -117,6 +155,20 @@ export class FillwrightWidget {
   private suppressFocus = false;
   private lastAnnounced = '';
 
+  /* Click-jacking defences. */
+  private readonly trust: (event: Event) => boolean;
+  /** Fill works only when armed: shown, unobscured, for ARM_DELAY_MS. */
+  private armed = false;
+  private armTimer: ReturnType<typeof setTimeout> | undefined;
+  /** What IntersectionObserver v2 last said; 'visible' when v2 is unavailable. */
+  private visibility: Visibility = 'unknown';
+  private observer: IntersectionObserver | null = null;
+  private reasserts: number[] = [];
+  private readonly onPageTopLayer = (event: Event) => {
+    if (event.target === this.host) return;
+    this.reassertTopLayer();
+  };
+
   /** Rows whose "Why?" explanation is open. */
   private explanations = new Set<string>();
   /** Rows whose correction picker is open. */
@@ -134,15 +186,34 @@ export class FillwrightWidget {
   constructor(
     private callbacks: WidgetCallbacks,
     reducedMotion: boolean,
+    options: WidgetOptions = {},
   ) {
+    this.trust = options.trust ?? ((event) => event.isTrusted);
     this.host = document.createElement('div');
     // data-fillwright-ui marks the subtree so the harvester skips its own
     // controls; data-fillwright-widget identifies THIS element specifically.
     this.host.setAttribute('data-fillwright-ui', '');
     this.host.setAttribute('data-fillwright-widget', '');
     this.host.style.cssText = 'all: initial; position: fixed; z-index: 2147483647;';
+    // A manual popover sits in the top layer, above anything the page can put
+    // in the normal stacking context, and is never light-dismissed.
+    this.host.setAttribute('popover', 'manual');
 
     this.root = this.host.attachShadow({ mode: 'closed' });
+
+    // A page can dispatch events, but it cannot make them trusted. Nothing in
+    // the panel acts on an event the user did not produce.
+    for (const type of GUARDED_EVENTS) {
+      this.root.addEventListener(
+        type,
+        (event) => {
+          if (this.trust(event)) return;
+          event.stopImmediatePropagation();
+          event.preventDefault();
+        },
+        { capture: true },
+      );
+    }
 
     const style = document.createElement('style');
     style.textContent = WIDGET_CSS;
@@ -162,11 +233,125 @@ export class FillwrightWidget {
 
     this.restorePosition();
     document.documentElement.appendChild(this.host);
+    this.showTopLayer();
+    // The page opening a dialog, popover or fullscreen element puts it above
+    // us; take the top back (within a budget) and let the observer decide.
+    document.addEventListener('toggle', this.onPageTopLayer, { capture: true });
+    document.addEventListener('fullscreenchange', this.onPageTopLayer, { capture: true });
+    this.watchVisibility();
   }
 
   destroy(): void {
     this.restoreFocus();
+    this.observer?.disconnect();
+    clearTimeout(this.armTimer);
+    document.removeEventListener('toggle', this.onPageTopLayer, { capture: true });
+    document.removeEventListener('fullscreenchange', this.onPageTopLayer, { capture: true });
     this.host.remove();
+  }
+
+  /* ------------------------------------------------------- click-jacking */
+
+  private showTopLayer(): void {
+    const host = this.host as HTMLElement & { showPopover?: () => void };
+    if (typeof host.showPopover !== 'function') return;
+    try {
+      if (!host.matches(':popover-open')) host.showPopover();
+    } catch {
+      // Not connected, or the page is mid-transition. The observer still guards.
+    }
+  }
+
+  private reassertTopLayer(): void {
+    const host = this.host as HTMLElement & { hidePopover?: () => void };
+    if (typeof host.hidePopover !== 'function') return;
+    const now = Date.now();
+    this.reasserts = this.reasserts.filter((at) => now - at < REASSERT_WINDOW_MS);
+    if (this.reasserts.length >= REASSERT_LIMIT) return;
+    this.reasserts.push(now);
+    try {
+      if (host.matches(':popover-open')) host.hidePopover();
+    } catch {
+      // Fall through to show.
+    }
+    this.showTopLayer();
+  }
+
+  /**
+   * IntersectionObserver v2 reports whether the panel is actually visible:
+   * not covered by anything, not faded, not filtered. Fill arms only after a
+   * continuous ARM_DELAY_MS of that. Without v2 (not Chrome), time alone arms.
+   */
+  private watchVisibility(): void {
+    const Observer = globalThis.IntersectionObserver;
+    const Entry = globalThis.IntersectionObserverEntry;
+    const v2 = Boolean(Observer && Entry && 'isVisible' in Entry.prototype);
+    if (!v2) {
+      this.visibility = 'visible';
+      return;
+    }
+    const options = { trackVisibility: true, delay: 100, threshold: [1] };
+    this.observer = new Observer((entries) => {
+      const entry = entries[entries.length - 1] as
+        (IntersectionObserverEntry & { isVisible?: boolean }) | undefined;
+      if (!entry) return;
+      const next: Visibility = entry.isVisible ? 'visible' : 'covered';
+      if (next === this.visibility) return;
+      this.visibility = next;
+      if (next === 'covered') {
+        this.disarm();
+        this.reassertTopLayer();
+      } else this.scheduleArm();
+    }, options as IntersectionObserverInit);
+    this.observer.observe(this.panel);
+  }
+
+  private scheduleArm(): void {
+    clearTimeout(this.armTimer);
+    this.armTimer = undefined;
+    if (this.armed || this.visibility !== 'visible') {
+      this.syncGuard();
+      return;
+    }
+    this.armTimer = setTimeout(() => {
+      this.armTimer = undefined;
+      if (this.visibility !== 'visible') return;
+      this.armed = true;
+      this.syncGuard();
+    }, ARM_DELAY_MS);
+    this.syncGuard();
+  }
+
+  private disarm(): void {
+    clearTimeout(this.armTimer);
+    this.armTimer = undefined;
+    this.armed = false;
+    this.syncGuard();
+  }
+
+  /** What the panel shows changed: the user must see it again before Fill. */
+  private rearm(): void {
+    this.armed = false;
+    this.scheduleArm();
+  }
+
+  /** Updates the Fill button and its note in place, without moving focus. */
+  private syncGuard(): void {
+    const fill = this.root.querySelector<HTMLButtonElement>('[data-fw-fill]');
+    // Not yet armed is aria-disabled, not disabled: the button keeps focus
+    // for keyboard users, and a press simply does nothing until it arms.
+    if (fill) {
+      if (this.armed) fill.removeAttribute('aria-disabled');
+      else fill.setAttribute('aria-disabled', 'true');
+    }
+    const note = this.root.querySelector<HTMLElement>('[data-fw-guard]');
+    if (note) {
+      const covered = this.visibility === 'covered';
+      note.hidden = !covered;
+      note.textContent = covered
+        ? 'Something on this page is covering Fillwright, so Fill is paused until the panel is fully visible.'
+        : '';
+    }
   }
 
   /** For the end-to-end harness and tests; the page itself cannot call this. */
@@ -251,6 +436,7 @@ export class FillwrightWidget {
     this.state = state;
     this.minimized = false;
     this.draw();
+    this.rearm();
     this.announce();
   }
 
@@ -344,8 +530,14 @@ export class FillwrightWidget {
       ),
     );
     pill.addEventListener('click', () => {
+      // A plan prepared before the user engaged holds no values; get them now.
+      if (this.plan?.withheld && (this.state === 'ready' || this.state === 'review')) {
+        this.callbacks.onOpen();
+        return;
+      }
       this.minimized = false;
       this.draw();
+      this.rearm();
       this.focusFirst();
     });
     this.panel.appendChild(pill);
@@ -524,6 +716,16 @@ export class FillwrightWidget {
 
     if (this.meta.jobMatch) body.appendChild(this.jobMatch(this.meta.jobMatch));
 
+    if (plan.withheld) {
+      const actions = el('div', 'fw-actions');
+      actions.appendChild(this.button('Close', 'ghost', () => this.callbacks.onClose()));
+      actions.appendChild(
+        this.button('Review with Fillwright', 'primary', () => this.callbacks.onOpen()),
+      );
+      body.appendChild(actions);
+      return;
+    }
+
     if (reviewing) {
       body.appendChild(
         renderReviewList(plan.entries, this.selection, this.explanations, this.teaching, {
@@ -567,6 +769,8 @@ export class FillwrightWidget {
           : `Fill ${count} ready`,
       'primary',
       () => {
+        // Belt and braces: a disabled button fires nothing, but re-check.
+        if (!this.armed) return;
         const entries = plan.entries.map((entry) => ({
           ...entry,
           selected: this.selection.has(entry.fieldId),
@@ -574,9 +778,17 @@ export class FillwrightWidget {
         this.callbacks.onFill(entries);
       },
     );
+    fill.setAttribute('data-fw-fill', '');
     if (count === 0) fill.disabled = true;
     actions.appendChild(fill);
     body.appendChild(actions);
+
+    const guard = el('p', 'fw-note fw-note--warn');
+    guard.setAttribute('data-fw-guard', '');
+    guard.setAttribute('role', 'status');
+    guard.hidden = true;
+    body.appendChild(guard);
+    this.syncGuard();
 
     body.appendChild(
       el('p', 'fw-note', 'Fillwright never submits an application. That is always your click.'),

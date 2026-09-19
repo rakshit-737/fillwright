@@ -2,6 +2,34 @@
 
 Notable changes, newest first. Versions follow semantic versioning.
 
+## Unreleased
+
+### Security
+
+- **The panel can no longer be click-jacked.** A page could cover the panel
+  with a see-through, `pointer-events: none` element in the top layer and bait
+  a click straight through to "Fill N ready", or dispatch a synthetic click.
+  Now: every panel control ignores untrusted events (`isTrusted`); the panel
+  is shown as a manual popover so it sits in the top layer, and takes the top
+  back (at most three times in ten seconds) when the page opens a dialog,
+  popover or fullscreen element; and Fill arms only after the panel has been
+  continuously visible and unobscured for about 500 ms, measured with
+  IntersectionObserver v2. When something covers the panel, Fill is paused and
+  the panel says so. Until armed the button is `aria-disabled`, so keyboard
+  focus still lands on it.
+- **Smart mode no longer puts values in the page before you open the panel.**
+  The plan it prepares in advance now carries counts and statuses only; the
+  worker blanks every proposed value and rationale. Opening the pill fetches
+  the real plan.
+
+### Tests
+
+- New hostile fixture `test-pages/clickjack.html` and Chrome case: a synthetic
+  click and a click through a pointer-events:none overlay both leave the form
+  untouched; a normal click after the arming delay fills it.
+- The end-to-end harness now drives the panel with real (trusted) input
+  (`trustedClick`), since `element.click()` from page script is ignored.
+
 ## 0.5.0
 
 From feature-complete to shippable: verified in a real browser against

@@ -79,8 +79,10 @@ declaration, screenshots and a checklist are in [`store/`](./store).
    its title) and minimised with `Esc`.
    Under **Settings → When Fillwright appears** you can choose Assist (it offers
    help on pages that clearly are applications) or Smart (it also prepares the
-   plan in advance). Both need site access, which Chrome asks you for. Neither
-   fills or submits anything without you.
+   plan in advance, as counts only — values are fetched when you open it).
+   Both need site access, which Chrome asks you for. Neither fills or submits
+   anything without you. "Fill" becomes active about half a second after the
+   panel is fully visible, and pauses if anything on the page covers it.
 6. **Review, then Fill.** Every row shows what will change, how confident
    Fillwright is, and — behind "Why?" — what it matched on.
 7. **Correct anything it got wrong.** "Change" (or "Set what this is") lets you
@@ -183,6 +185,7 @@ npx serve test-pages     # then open http://localhost:3000
 | `spa-steps.html`, `add-another.html`, `one-off.html`, `rejecting.html`, `frame-host.html` | Router navigation, adding blocks, one-off corrections, a form that rejects every write, a form in someone else's frame |
 | `newsletter.html`, `login.html` | Pages that are *not* applications, where proactive modes must stay silent |
 | `hostile-roles.html` | Submit buttons and links disguised as dropdowns, options and radios |
+| `clickjack.html` | A page that fires synthetic clicks at Fill and covers the panel with a see-through, pointer-events:none overlay |
 
 Every fixture states its expected behaviour at the top of the page.
 

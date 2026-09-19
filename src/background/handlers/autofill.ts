@@ -3,7 +3,7 @@ import { getProfile } from '@/storage/profiles';
 import { getSettings } from '@/storage/settings';
 import { listMappings, saveMapping } from '@/storage/mappings';
 import { logApplication } from '@/storage/history';
-import { buildMappings, buildFillPlan } from '@/autofill/plan';
+import { buildMappings, buildFillPlan, withoutValues } from '@/autofill/plan';
 import { originFromUrl, pageKeyFromUrl, sanitizeString } from '@/security/validate';
 import { validateScan } from '@/security/scan-guard';
 import { classifyField } from '@/field-detection/classify';
@@ -133,7 +133,7 @@ export function registerAutofillHandlers(): void {
    * This is the only path by which profile data reaches a page.
    */
   handle('content:request-mappings', async (request, sender) => {
-    const { scan, overrides } = request as Extract<
+    const { scan, overrides, withholdValues } = request as Extract<
       ContentRequest,
       { type: 'content:request-mappings' }
     >;
@@ -169,11 +169,14 @@ export function registerAutofillHandlers(): void {
       mappings,
     };
 
+    const plan = buildFillPlan(resolved, `${Date.now()}`, {
+      education: profile.education.length,
+      experience: profile.experience.length,
+    });
     return ok({
-      plan: buildFillPlan(resolved, `${Date.now()}`, {
-        education: profile.education.length,
-        experience: profile.experience.length,
-      }),
+      // Smart mode prepares a plan before the user has engaged. Until they
+      // open the panel, only counts and statuses cross into the page.
+      plan: withholdValues === true ? withoutValues(plan) : plan,
       // The name only, so the panel can say which profile it is using.
       profileName: profile.name,
       settings: {

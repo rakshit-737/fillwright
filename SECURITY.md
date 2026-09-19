@@ -108,6 +108,26 @@ controlled by someone else.
   verifier fails if the shipped bundle attaches an open root; only the
   never-shipped end-to-end build reopens it for the test harness.
 
+- **Click-jacking the panel.** A page cannot press Fillwright's buttons for
+  you (`src/content/widget.ts`):
+  - every panel control ignores events that are not `isTrusted`, so a
+    script-dispatched click, key or change does nothing;
+  - the panel host is a `popover="manual"` shown in the top layer, above
+    anything in the page's normal stacking context. When the page opens a
+    dialog, popover or fullscreen element, the panel takes the top back — at
+    most three times in ten seconds, so a page cannot loop it;
+  - "Fill" arms only after the panel has been continuously visible and
+    unobscured for about 500 ms, as reported by IntersectionObserver v2
+    (`trackVisibility`). Anything covering the panel, even a see-through
+    `pointer-events: none` overlay, disarms it at once and the panel says why.
+    Every change of what the panel shows (a new state, reopening from the
+    pill) restarts the delay;
+  - in Smart mode the plan prepared before you open the panel contains counts
+    and statuses only — the worker blanks every value and rationale — and
+    cannot fill anything. Values are requested when you open the panel.
+  Covered by `tests/clickjack.test.ts` and the Chrome case against
+  `test-pages/clickjack.html`.
+
 - **A subverted content script.** Message types are split by trust. `ui:*`
   messages can read and write the whole profile, so the router accepts them only
   from Fillwright's own extension pages (`senderMayCall` in
@@ -396,7 +416,13 @@ field-mapping defect that 173 jsdom tests had missed. See §6.6.
 8. **Assist and Smart read every https page you visit** — locally, and only
    labels, headings and button text — to decide whether to offer help. Manual
    mode (the default) reads nothing until you click.
-9. **On-device drafting is not verified against a real model.** Chrome for
+9. **Click-jacking defences are strongest in Chrome.** Arming uses
+   IntersectionObserver v2, which only Chromium implements; where it is
+   missing, Fill arms on the 500 ms delay alone and the untrusted-event and
+   top-layer defences still apply. A page that keeps re-raising its own
+   top-layer element can keep Fill paused (the panel says so) — it cannot make
+   a click fill.
+10. **On-device drafting is not verified against a real model.** Chrome for
    Testing 153 exposes the API in the worker but has no model on the test
    machine; the flow is tested with a stand-in model.
 

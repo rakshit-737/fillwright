@@ -240,6 +240,8 @@ async function runScan(quiet: boolean): Promise<void> {
       mappings: [],
     },
     overrides: [...overrides].map(([fingerprint, canonical]) => ({ fingerprint, canonical })),
+    // Before the user has opened the panel, only counts and statuses come back.
+    withholdValues: quiet && !engaged,
   });
 
   if (!response.ok) {
@@ -319,6 +321,7 @@ function createWidget(): FillwrightWidget {
         void applyUndo().then((result) => widget?.markUndone(result.restored));
       },
       onRescan: () => void open(),
+      onOpen: () => void open(),
       onClose: () => teardown(),
       onTeach: (entry, field, remember) => void teachMapping(entry, field, remember),
       onListProfiles: async () =>
@@ -347,6 +350,8 @@ function createWidget(): FillwrightWidget {
 
 async function runFill(entries: FillPlanEntry[]): Promise<void> {
   if (!widget) return;
+  // A values-free plan (Smart mode, not yet opened) can never fill anything.
+  if (session?.plan?.withheld) return;
   // The plan holds values read while the vault was open. If it has locked
   // since, those values are not written: the user unlocks and scans again.
   const gate = await request<{ locked: boolean }>({ type: 'content:vault-state' });

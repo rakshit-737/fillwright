@@ -309,6 +309,19 @@ export function fingerprintOf(field: DetectedField): string {
   return parts.join('|').slice(0, 240);
 }
 
+/**
+ * The values-free variant of a plan, for a panel the user has not opened yet.
+ * Counts and statuses survive so the pill can say "4 ready"; the proposed
+ * values and the rationales (which can quote them) do not leave the worker.
+ */
+export function withoutValues(plan: FillPlan): FillPlan {
+  return {
+    ...plan,
+    withheld: true,
+    entries: plan.entries.map((entry) => ({ ...entry, newValue: '', rationale: '' })),
+  };
+}
+
 /** Assembles the preview the user reviews before anything is written. */
 export function buildFillPlan(
   scan: ScanResult,

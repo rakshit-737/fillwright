@@ -70,6 +70,7 @@ const widget = new FillwrightWidget(
     },
     onClose: () => widget.minimize(),
     onRescan: () => void scan(),
+    onOpen: () => void scan(),
     onTeach: () => void scan(),
     onListProfiles: async () => [],
     onSwitchProfile: () => undefined,

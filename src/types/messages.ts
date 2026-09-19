@@ -68,6 +68,11 @@ export type ContentRequest =
        * to remember them. Applied like saved mappings, never persisted.
        */
       overrides?: Array<{ fingerprint: string; canonical: CanonicalField; customKey?: string }>;
+      /**
+       * Counts and statuses only (Smart mode, before the user opened the
+       * panel). The worker blanks every proposed value.
+       */
+      withholdValues?: boolean;
     }
   | {
       type: 'content:fill-complete';

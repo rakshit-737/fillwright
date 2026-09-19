@@ -4,7 +4,14 @@
  * Each fixture states its expected behaviour at the top of the page; these
  * tests assert exactly that. Trust note: drives the TEST build only.
  */
-import { readWidget, clickWidgetButton, waitForWidget, sleep, ATS_TEST_HOST } from './harness.mjs';
+import {
+  readWidget,
+  clickWidgetButton,
+  trustedClick,
+  waitForWidget,
+  sleep,
+  ATS_TEST_HOST,
+} from './harness.mjs';
 
 export async function runAtsSuite(ctx) {
   const { secure, browser, extensionId, server, test, assert, assertEqual, worker, evalInWorker } =
@@ -175,7 +182,11 @@ export async function runAtsSuite(ctx) {
     assertEqual(got['#emp_start_year'], role.startDate.slice(0, 4), 'role start year');
     assertEqual(current, role.current, 'the current-role box');
     assertEqual(got['#emp_end_month'], role.current ? '' : month(role.endDate), 'role end month');
-    assertEqual(got['#emp_end_year'], role.current ? '' : role.endDate.slice(0, 4), 'role end year');
+    assertEqual(
+      got['#emp_end_year'],
+      role.current ? '' : role.endDate.slice(0, 4),
+      'role end year',
+    );
     await page.close();
   });
 
@@ -306,7 +317,9 @@ export async function runAtsSuite(ctx) {
       const block = document.querySelector('[data-automation-id="workExperience-1"]');
       const v = (id) => block.querySelector(`[data-automation-id="${id}"]`);
       const date = (key, part) =>
-        block.querySelector(`[data-automation-id="formField-${key}"] [data-automation-id="dateSection${part}-input"]`).value;
+        block.querySelector(
+          `[data-automation-id="formField-${key}"] [data-automation-id="dateSection${part}-input"]`,
+        ).value;
       return {
         title: v('jobTitle').value,
         company: v('company').value,
@@ -383,12 +396,11 @@ export async function runAtsSuite(ctx) {
       ),
     );
     assertEqual(topPanel, false, 'the outer page showed its own empty panel');
-    await frame.evaluate(() => {
-      const button = Array.from(
+    await trustedClick(frame, () =>
+      Array.from(
         document.querySelector('[data-fillwright-widget]').shadowRoot.querySelectorAll('button'),
-      ).find((b) => b.textContent.startsWith('Fill'));
-      button.click();
-    });
+      ).find((b) => b.textContent.startsWith('Fill')),
+    );
     await frame.waitForFunction(
       () => document.getElementById('PersonProfileFields.Email').value !== '',
       { timeout: 15_000 },
@@ -477,12 +489,19 @@ export async function runAtsSuite(ctx) {
     await waitForWidget(page, (s) => s.text.includes('application field'), 15_000);
     await reviewItems(page);
     // Tick everything that can be ticked, then fill.
-    await page.evaluate(() => {
-      const root = document.querySelector('[data-fillwright-widget]').shadowRoot;
-      root.querySelectorAll('input.fw-check').forEach((box) => {
-        if (!box.checked) box.click();
-      });
-    });
+    // Each tick redraws the list, so find the next unticked box every time.
+    for (let guard = 0; guard < 200; guard += 1) {
+      const clicked = await trustedClick(
+        page,
+        () =>
+          Array.from(
+            document
+              .querySelector('[data-fillwright-widget]')
+              .shadowRoot.querySelectorAll('input.fw-check'),
+          ).find((box) => !box.checked && !box.disabled) ?? null,
+      );
+      if (!clicked) break;
+    }
     await fill(page);
     const after = await page.evaluate(() => ({
       submitted: window.__submitted,

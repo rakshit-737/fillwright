@@ -198,6 +198,11 @@ export function renderReviewList(
   return wrap;
 }
 
+const FILE_FIELDS: ReadonlySet<CanonicalField> = new Set<CanonicalField>([
+  'documents.resume',
+  'documents.coverLetter',
+]);
+
 function isFillable(entry: FillPlanEntry, state: ReviewState): boolean {
   if (entry.newValue === '') return false;
   return entry.status !== 'manual-required' || state.edits.has(entry.fieldId);
@@ -325,7 +330,13 @@ function renderRow(
 
   // A value for this form only. Offered wherever Fillwright would write, or
   // could write if it had a value — never on a field the user already filled.
-  if (entry.status !== 'skipped-existing' && !state.editing.has(entry.fieldId)) {
+  // File inputs are excluded: a browser never lets an extension attach a file,
+  // so a typed value there could not be used.
+  if (
+    entry.status !== 'skipped-existing' &&
+    !FILE_FIELDS.has(entry.canonical) &&
+    !state.editing.has(entry.fieldId)
+  ) {
     const edit = button('Edit for this form', 'fw-link', () =>
       callbacks.onEditStart?.(entry.fieldId),
     );

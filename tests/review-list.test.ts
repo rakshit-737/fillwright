@@ -117,6 +117,19 @@ describe('review list keeps your place', () => {
     widget.destroy();
   });
 
+  it('does not offer "Edit for this form" on a file upload', () => {
+    const widget = new FillwrightWidget(callbacks(), true);
+    const upload = { ...entry(0, 'manual-required', 'documents.resume'), newValue: '' };
+    const root = open(widget, planOf([upload, entry(1)]));
+    expect(
+      buttonNamed(root.querySelector('[data-fw-row="f0"]') as HTMLElement, 'Edit for this form'),
+    ).toBeFalsy();
+    expect(
+      buttonNamed(root.querySelector('[data-fw-row="f1"]') as HTMLElement, 'Edit for this form'),
+    ).toBeTruthy();
+    widget.destroy();
+  });
+
   it('lets you edit a proposed value for this form only, marked as yours', () => {
     const onFill = vi.fn();
     const widget = new FillwrightWidget(callbacks({ onFill }), true);

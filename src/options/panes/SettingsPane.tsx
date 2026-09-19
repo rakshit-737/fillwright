@@ -258,10 +258,10 @@ function AutofillModeSection({
     if (mode !== 'manual') {
       let ok = false;
       try {
-        // Any site already granted is enough; otherwise ask for the job-site
+        // Any https site already granted is enough (localhost alone is not); otherwise ask for the job-site
         // tier only. Every https site is a separate, explicit step below.
         ok =
-          (await grantedSiteOrigins()).length > 0 ||
+          (await grantedSiteOrigins()).some((o) => o.startsWith('https://')) ||
           (await chrome.permissions.request({ origins: [...ATS_ORIGINS] }));
       } catch {
         ok = false;

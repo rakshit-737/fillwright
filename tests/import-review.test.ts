@@ -41,7 +41,7 @@ function exportFile(): ExportFile {
       autofill: { ...DEFAULT_SETTINGS.autofill, allowOverwrite: true, mode: 'assist' },
       ui: DEFAULT_SETTINGS.ui,
       ai: DEFAULT_SETTINGS.ai,
-      privacy: { keepApplicationHistory: false, autoLockMinutes: 30 },
+      privacy: { keepApplicationHistory: false, historyRetentionMonths: 0, autoLockMinutes: 30 },
     },
   };
 }

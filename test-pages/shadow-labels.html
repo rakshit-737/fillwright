@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Apply — shadow DOM labels</title>
+    <link rel="stylesheet" href="./shared.css" />
+  </head>
+  <body>
+    <h1>Apply: Frontend Engineer (web components)</h1>
+    <p class="lead">
+      Expected: every field below lives inside an open shadow root, and none of the labels is the
+      input's previous sibling. Fillwright reads all three labels: "First Name" (a label[for]
+      nested in a different wrapper), "Email" (aria-labelledby inside the shadow root) and
+      "GitHub" (aria-label on the custom element host). The id "outside-label" in the main
+      document must NOT label anything inside a shadow root.
+    </p>
+    <span id="outside-label">Outside decoy</span>
+    <form id="app">
+      <div id="host-first"></div>
+      <div id="host-email"></div>
+      <x-field id="host-github" aria-label="GitHub"></x-field>
+    </form>
+    <script>
+      function field(host, build) {
+        const root = document.getElementById(host).attachShadow({ mode: 'open' });
+        build(root);
+      }
+      field('host-first', (root) => {
+        const labelWrap = document.createElement('div');
+        const label = document.createElement('label');
+        label.htmlFor = 'first';
+        label.textContent = 'First Name';
+        labelWrap.append(label);
+        const inputWrap = document.createElement('div');
+        const input = document.createElement('input');
+        input.id = 'first';
+        inputWrap.append(input);
+        root.append(labelWrap, inputWrap);
+      });
+      field('host-email', (root) => {
+        const span = document.createElement('span');
+        span.id = 'email-label';
+        span.textContent = 'Email';
+        const wrap = document.createElement('div');
+        const input = document.createElement('input');
+        input.type = 'email';
+        input.setAttribute('aria-labelledby', 'email-label outside-label');
+        wrap.append(input);
+        root.append(span, wrap);
+      });
+      field('host-github', (root) => {
+        const wrap = document.createElement('div');
+        wrap.append(document.createElement('input'));
+        root.append(wrap);
+      });
+    </script>
+  </body>
+</html>

@@ -176,15 +176,22 @@ export function resolveValue(
     case 'experience.description':
       return fromEntry(experience?.description, experience, 'your current or most recent role');
     case 'experience.yearsOfExperience': {
-      const years = totalYearsOfExperience(profile);
-      return years
-        ? {
-            value: years,
-            confidence: 0.7,
-            note: 'calculated from your work history',
-            needsConsent: false,
-          }
-        : none('no work history is stored');
+      const months = totalMonthsOfExperience(profile);
+      if (months === 0) return none('no work history is stored');
+      // Whole years completed, never rounded up. Under a year there is no
+      // honest number to write, so the question goes to review.
+      if (months < 12) {
+        return {
+          ...none('your work history adds up to less than one year'),
+          needsConsent: true,
+        };
+      }
+      return {
+        value: String(Math.floor(months / 12)),
+        confidence: 0.7,
+        note: 'calculated from your work history',
+        needsConsent: false,
+      };
     }
 
     /* ------------------------------------------------------------- profile */
@@ -655,22 +662,34 @@ function plural(count: number, one: string, many: string): string {
   return count === 1 ? one : many;
 }
 
-/** Rough total years across all roles, used for "years of experience" fields. */
-function totalYearsOfExperience(profile: Profile): string {
-  let months = 0;
+/**
+ * Total months across all roles, with overlapping roles (two concurrent
+ * internships) merged so no month is counted twice.
+ */
+function totalMonthsOfExperience(profile: Profile): number {
+  const intervals: [number, number][] = [];
   for (const entry of profile.experience) {
     const start = parseYearMonth(entry.startDate);
     if (!start) continue;
     const end = entry.current ? new Date() : parseYearMonth(entry.endDate);
     if (!end) continue;
-    months += Math.max(
-      0,
-      (end.getFullYear() - start.getFullYear()) * 12 + (end.getMonth() - start.getMonth()),
-    );
+    const from = start.getFullYear() * 12 + start.getMonth();
+    const to = end.getFullYear() * 12 + end.getMonth();
+    if (to > from) intervals.push([from, to]);
   }
-  if (months === 0) return '';
-  const years = months / 12;
-  return years < 1 ? '1' : String(Math.round(years));
+  intervals.sort((a, b) => a[0] - b[0]);
+  let months = 0;
+  let current: [number, number] | null = null;
+  for (const [from, to] of intervals) {
+    if (current && from <= current[1]) {
+      current[1] = Math.max(current[1], to);
+    } else {
+      if (current) months += current[1] - current[0];
+      current = [from, to];
+    }
+  }
+  if (current) months += current[1] - current[0];
+  return months;
 }
 
 function parseYearMonth(value: string): Date | null {

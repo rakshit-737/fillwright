@@ -82,6 +82,17 @@ Notable changes, newest first. Versions follow semantic versioning.
   per month or per year and your saved figure says something else (or no
   unit), the field is declined with the reason. Number inputs get the bare
   number, without currency symbols or separators.
+- **Labels inside shadow roots.** `aria-labelledby`, `aria-describedby` and
+  `label[for]` ids are now resolved in the control's own tree (its shadow root)
+  instead of the document, which cannot see in. A document id can no longer
+  label a field inside a shadow root. A shadow-DOM control with no label of its
+  own falls back to its host element's `aria-label`, `label` attribute or
+  `<label for>` — where form-associated custom elements put it.
+- **Whole-phrase matching checks every occurrence.** "username or first name"
+  now contains "name"; only the first hit used to be tested.
+- **Years of experience is no longer inflated.** Overlapping roles are merged
+  before summing, the total is whole years completed (never rounded up), and
+  under one year goes to review instead of writing an invented "1".
 
 ### Added
 

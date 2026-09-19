@@ -376,7 +376,7 @@ export function labelForControl(element: HTMLElement): string {
   if (labelledBy) {
     const text = labelledBy
       .split(/\s+/)
-      .map((id) => ownerDocument(element).getElementById(id)?.textContent ?? '')
+      .map((id) => idScope(element).getElementById(id)?.textContent ?? '')
       .join(' ')
       .trim();
     if (text) return clean(text);
@@ -385,7 +385,7 @@ export function labelForControl(element: HTMLElement): string {
   // 2. <label for="id">
   if (element.id) {
     const escaped = cssEscape(element.id);
-    const label = ownerDocument(element).querySelector<HTMLLabelElement>(`label[for="${escaped}"]`);
+    const label = idScope(element).querySelector<HTMLLabelElement>(`label[for="${escaped}"]`);
     if (label?.textContent?.trim()) return clean(label.textContent);
   }
 
@@ -418,6 +418,16 @@ export function labelForControl(element: HTMLElement): string {
     if (text && text.length <= 120) return text;
   }
 
+  // 6. Inside a shadow root with nothing else: form-associated custom
+  // elements carry the label on the host, not on the inner control.
+  const root = element.getRootNode();
+  if (root instanceof ShadowRoot) {
+    const host = root.host as HTMLElement;
+    const own = host.getAttribute('aria-label') || host.getAttribute('label');
+    if (own?.trim()) return clean(own);
+    return labelForControl(host);
+  }
+
   return '';
 }
 
@@ -435,7 +445,7 @@ function groupLabel(element: HTMLElement): string {
   if (labelledBy) {
     const text = labelledBy
       .split(/\s+/)
-      .map((id) => ownerDocument(element).getElementById(id)?.textContent ?? '')
+      .map((id) => idScope(element).getElementById(id)?.textContent ?? '')
       .join(' ');
     if (text.trim()) return clean(text);
   }
@@ -458,7 +468,7 @@ function describedByText(element: HTMLElement): string {
   return clean(
     describedBy
       .split(/\s+/)
-      .map((id) => ownerDocument(element).getElementById(id)?.textContent ?? '')
+      .map((id) => idScope(element).getElementById(id)?.textContent ?? '')
       .join(' '),
   );
 }
@@ -844,6 +854,17 @@ function radioGroupMembers(
 
 function ownerDocument(element: HTMLElement | Element): Document {
   return element.ownerDocument ?? document;
+}
+
+/**
+ * The tree that ids referenced by this element live in. Inside a shadow root
+ * that is the shadow root itself — the document cannot see in, and an id in
+ * the document must not label a control inside the shadow tree.
+ */
+function idScope(element: Element): Document | ShadowRoot {
+  const root = element.getRootNode();
+  if (root instanceof ShadowRoot) return root;
+  return ownerDocument(element);
 }
 
 function clean(text: string): string {

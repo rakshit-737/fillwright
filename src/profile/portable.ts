@@ -496,5 +496,16 @@ function conformSettings(raw: Record<string, unknown>): DeepPartial<Settings> {
   if (!['system', 'light', 'dark'].includes(shaped.ui.theme)) shaped.ui.theme = 'system';
   if (![0, 5, 15, 30, 60].includes(shaped.privacy.autoLockMinutes))
     shaped.privacy.autoLockMinutes = 30;
-  return shaped;
+  // Keep only what the file states. A key it leaves out is not a request to
+  // reset that setting to its default, and must not show up as a change.
+  const stated: Record<string, Record<string, unknown>> = {};
+  for (const [group, values] of Object.entries(shaped)) {
+    const given = raw[group];
+    if (!isPlainObject(given)) continue;
+    for (const [key, value] of Object.entries(values)) {
+      if (!Object.prototype.hasOwnProperty.call(given, key)) continue;
+      (stated[group] ??= {})[key] = value;
+    }
+  }
+  return stated as DeepPartial<Settings>;
 }

@@ -106,6 +106,16 @@ describe('import review', () => {
     expect(preview.settingsChanges.some((c) => c.path === 'ui.theme')).toBe(false);
   });
 
+  it('lists only settings the file actually states, not defaults for missing ones', () => {
+    const current = {
+      ...DEFAULT_SETTINGS,
+      ui: { ...DEFAULT_SETTINGS.ui, theme: 'dark' as const },
+    };
+    const file = { ...exportFile(), settings: { autofill: { allowOverwrite: true } } };
+    const preview = previewImport(parseImport(file), current);
+    expect(preview.settingsChanges.map((c) => c.path)).toEqual(['autofill.allowOverwrite']);
+  });
+
   it('applies only what was ticked; nothing is ticked for settings or mappings by default', () => {
     const plan = parseImport(exportFile());
     const none = applyImportSelection(plan, { profiles: [0], mappings: [], settings: [] });

@@ -107,12 +107,19 @@ export function applySynonyms(value: string): string {
 /** Whole-word containment: "name" must not match inside "username". */
 export function containsPhrase(haystack: string, phrase: string): boolean {
   if (!haystack || !phrase) return false;
-  const index = haystack.indexOf(phrase);
-  if (index === -1) return false;
-  const before = index === 0 ? ' ' : haystack[index - 1];
-  const afterIndex = index + phrase.length;
-  const after = afterIndex >= haystack.length ? ' ' : haystack[afterIndex];
-  return before === ' ' && after === ' ';
+  // Check every occurrence: "username or first name" contains "name" as a
+  // whole phrase even though the first hit is inside "username".
+  for (
+    let index = haystack.indexOf(phrase);
+    index !== -1;
+    index = haystack.indexOf(phrase, index + 1)
+  ) {
+    const before = index === 0 ? ' ' : haystack[index - 1];
+    const afterIndex = index + phrase.length;
+    const after = afterIndex >= haystack.length ? ' ' : haystack[afterIndex];
+    if (before === ' ' && after === ' ') return true;
+  }
+  return false;
 }
 
 /** True when the text reads as an open question rather than a field label. */

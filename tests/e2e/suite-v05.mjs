@@ -802,5 +802,19 @@ export async function runV05Suite(ctx) {
     await popup.close();
   });
 
+  await test('shadow DOM: labels resolve inside the shadow root and from the host', async () => {
+    const page = await openAndReview('shadow-labels.html');
+    const widget = await readWidget(page);
+    const labels = widget.items.map((item) => item.label);
+    for (const expected of ['First Name', 'Email', 'GitHub']) {
+      assert(itemFor(widget, expected), `no row for ${expected}: ${JSON.stringify(labels)}`);
+    }
+    assert(
+      !labels.some((label) => label.includes('Outside decoy')),
+      `a document id labelled a shadow field: ${JSON.stringify(labels)}`,
+    );
+    await page.close();
+  });
+
   await control.close();
 }

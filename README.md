@@ -172,6 +172,7 @@ npx serve test-pages     # then open http://localhost:3000
 | `workday.html` | No `<label>` elements at all, `aria-labelledby`, ids with colons and brackets, a collapsed section |
 | `react-form.html` | Controlled inputs that revert any write not made through the native setter |
 | `edge-cases.html` | Prefilled fields, referee details, credentials, demographics, two-country work authorisation, shadow DOM, dynamically added fields, prompt injection |
+| `shadow-labels.html` | Labels inside shadow roots: nested `label[for]`, `aria-labelledby`, a label on the custom-element host, and a document id that must not leak in |
 | `hard-mode.html` | The regression playground: 50+ controls, repeated education and experience blocks, three custom dropdowns (including one in a portal and one deliberately ambiguous), a field that rejects writes, aria-only labels |
 | `ats/greenhouse.html` | Greenhouse job board: `job_application[...]` names, React-Select school and degree, EEO section |
 | `ats/lever.html` | Lever: labels in sibling divs, `urls[...]` names, a written "Additional information" |

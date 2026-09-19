@@ -1,7 +1,8 @@
 import type { CanonicalField, FieldSignals, FillPlan, FillPlanEntry } from '@/types/fields';
 import type { JobMatch } from '@/autofill/job-match';
 import type { RepeatKind } from '@/autofill/repeat';
-import { renderReviewList, type DraftView } from './review';
+import { renderReviewList, type DraftView, type SavedAnswerView } from './review';
+import type { AnswerChoices } from '@/autofill/saved-answers';
 import { WIDGET_CSS } from './styles';
 import type { UserError } from '@/utils/errors';
 
@@ -63,7 +64,12 @@ export interface WidgetCallbacks {
   onClose: () => void;
   onRescan: () => void;
   /** The user corrected what a field means. */
-  onTeach: (entry: FillPlanEntry, field: CanonicalField, remember: boolean) => void;
+  onTeach: (
+    entry: FillPlanEntry,
+    field: CanonicalField,
+    remember: boolean,
+    customKey?: string,
+  ) => void;
   onListProfiles: () => Promise<ProfileChoice[]>;
   onSwitchProfile: (profileId: string) => void;
   onAddEntries: (offer: AddOffer) => void;
@@ -76,6 +82,9 @@ export interface WidgetCallbacks {
   onDraftStart: (entry: FillPlanEntry) => void;
   onDraftGenerate: (entry: FillPlanEntry, factIds: string[]) => void;
   onDraftUse: (entry: FillPlanEntry, text: string) => void;
+  onSavedAnswerStart?: (entry: FillPlanEntry) => void;
+  onSavedAnswerPick?: (entry: FillPlanEntry, id: string) => void;
+  onSavedAnswerUse?: (entry: FillPlanEntry, text: string) => void;
 }
 
 export interface FillSummary {
@@ -123,6 +132,10 @@ export class FillwrightWidget {
   private teaching = new Set<string>();
   /** Drafting panels, per field. */
   drafts = new Map<string, DraftView>();
+  /** "Use a saved answer" panels, per field. */
+  savedAnswers = new Map<string, SavedAnswerView>();
+  /** Titles of the user's custom fields and saved answers. Never values. */
+  choices: AnswerChoices | null = null;
   private profiles: ProfileChoice[] | null = null;
   private showProfiles = false;
   private showMatch = false;
@@ -223,6 +236,9 @@ export class FillwrightWidget {
     // Drafts and pickers refer to fields of the previous scan.
     const ids = new Set(plan.entries.map((entry) => entry.fieldId));
     for (const id of [...this.drafts.keys()]) if (!ids.has(id)) this.drafts.delete(id);
+    for (const id of [...this.savedAnswers.keys()]) {
+      if (!ids.has(id)) this.savedAnswers.delete(id);
+    }
     this.go(keepReview ? 'review' : 'ready');
   }
 
@@ -529,15 +545,24 @@ export class FillwrightWidget {
         renderReviewList(plan.entries, this.selection, this.explanations, this.teaching, {
           diagnostics: this.diagnostics ? this.signals : null,
           drafts: this.drafts,
+          choices: this.choices,
+          savedAnswers: this.savedAnswers,
+          onSavedAnswerStart: (entry) => this.callbacks.onSavedAnswerStart?.(entry),
+          onSavedAnswerPick: (entry, id) => this.callbacks.onSavedAnswerPick?.(entry, id),
+          onSavedAnswerUse: (entry, text) => this.callbacks.onSavedAnswerUse?.(entry, text),
+          onSavedAnswerCancel: (entry) => {
+            this.savedAnswers.delete(entry.fieldId);
+            this.draw();
+          },
           canDraft: (entry) => this.callbacks.canDraft(entry),
           onToggle: (fieldId, selected) => {
             if (selected) this.selection.add(fieldId);
             else this.selection.delete(fieldId);
             this.draw();
           },
-          onTeach: (entry, field, remember) => {
+          onTeach: (entry, field, remember, customKey) => {
             this.teaching.delete(entry.fieldId);
-            this.callbacks.onTeach(entry, field, remember);
+            this.callbacks.onTeach(entry, field, remember, customKey);
           },
           onExplainToggle: () => this.draw(),
           onDraftStart: (entry) => this.callbacks.onDraftStart(entry),

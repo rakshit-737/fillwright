@@ -4,6 +4,7 @@ import { getSettings, setSettings } from '@/storage/settings';
 import { matchJobDescription } from '@/autofill/job-match';
 import { getProvider } from '@/ai/provider';
 import { sanitizeString } from '@/security/validate';
+import { answerChoices, savedAnswerText } from '@/autofill/saved-answers';
 import type { ContentRequest } from '@/types/messages';
 import type { Profile } from '@/types/profile';
 
@@ -52,6 +53,27 @@ export function registerAssistHandlers(): void {
       return err('Profile not found', 'ENOTFOUND');
     await setSettings({ activeProfileId: id });
     return ok({ switched: true });
+  });
+
+  /**
+   * Custom fields and saved answers, by title only. Like `content:draft-facts`
+   * this is the listing half of a two-step exchange: nothing the user wrote
+   * crosses to the page until they pick one item.
+   */
+  handle('content:answer-choices', async (request) => {
+    const { question } = request as Extract<ContentRequest, { type: 'content:answer-choices' }>;
+    const profile = await activeProfile();
+    if (!profile) return err('No active profile.', 'ENOPROFILE');
+    return ok(answerChoices(profile, sanitizeString(question ?? '', 1_000)));
+  });
+
+  /** The one saved answer the user picked. It is shown for editing first. */
+  handle('content:saved-answer', async (request) => {
+    const { id } = request as Extract<ContentRequest, { type: 'content:saved-answer' }>;
+    const profile = await activeProfile();
+    if (!profile) return err('No active profile.', 'ENOPROFILE');
+    const text = savedAnswerText(profile, sanitizeString(id, 64));
+    return text === null ? err('That saved answer no longer exists.', 'ENOTFOUND') : ok({ text });
   });
 
   /**
@@ -110,6 +132,11 @@ export function registerAssistHandlers(): void {
       ? ok({ text: result.text })
       : err(result.error ?? 'No draft was produced.', 'EDRAFT');
   });
+}
+
+async function activeProfile(): Promise<Profile | undefined> {
+  const settings = await getSettings();
+  return settings.activeProfileId ? getProfile(settings.activeProfileId) : undefined;
 }
 
 export interface DraftFact {

@@ -5,6 +5,7 @@ import { collectPostingText, type JobMatch } from '@/autofill/job-match';
 import { addEntries, findAddControls } from '@/autofill/repeat';
 import { FillwrightWidget, type AddOffer, type FillSummary, type ProfileChoice } from './widget';
 import type { DraftFact } from './review';
+import type { AnswerChoices } from '@/autofill/saved-answers';
 import { applyAdapter, detectAdapter } from '@/adapters';
 import type { CanonicalField, DetectedField, FillPlan, FillPlanEntry } from '@/types/fields';
 import type { AutofillMode } from '@/types/settings';
@@ -74,7 +75,7 @@ const passiveThrottle = createThrottle(() => evaluatePassive(), {
 });
 
 /** Corrections for this page only, never saved. Keyed by field fingerprint. */
-const overrides = new Map<string, CanonicalField>();
+const overrides = new Map<string, { canonical: CanonicalField; customKey?: string }>();
 
 function boot(): void {
   const activated = consumeActivation();
@@ -239,7 +240,7 @@ async function runScan(quiet: boolean): Promise<void> {
       fields: visible,
       mappings: [],
     },
-    overrides: [...overrides].map(([fingerprint, canonical]) => ({ fingerprint, canonical })),
+    overrides: [...overrides].map(([fingerprint, correction]) => ({ fingerprint, ...correction })),
   });
 
   if (!response.ok) {
@@ -286,10 +287,13 @@ async function runScan(quiet: boolean): Promise<void> {
 }
 
 async function loadExtras(): Promise<void> {
-  const [progress, match] = await Promise.all([
+  const [progress, match, choices] = await Promise.all([
     send<{ steps: Record<string, number>; filled: number }>({ type: 'content:get-progress' }),
     loadJobMatch(),
+    // Titles only, so the picker and essay rows can offer them.
+    send<AnswerChoices>({ type: 'content:answer-choices' }),
   ]);
+  if (widget) widget.choices = choices;
   widget?.setMeta({
     progress: progress
       ? { steps: Object.keys(progress.steps).length, filled: progress.filled }
@@ -320,7 +324,8 @@ function createWidget(): FillwrightWidget {
       },
       onRescan: () => void open(),
       onClose: () => teardown(),
-      onTeach: (entry, field, remember) => void teachMapping(entry, field, remember),
+      onTeach: (entry, field, remember, customKey) =>
+        void teachMapping(entry, field, remember, customKey),
       onListProfiles: async () =>
         (await send<ProfileChoice[]>({ type: 'content:list-profiles' })) ?? [],
       onSwitchProfile: (profileId) => {
@@ -337,6 +342,9 @@ function createWidget(): FillwrightWidget {
       onDraftStart: (entry) => void startDraft(entry),
       onDraftGenerate: (entry, factIds) => void generateDraft(entry, factIds),
       onDraftUse: (entry, text) => void applyDraft(entry, text),
+      onSavedAnswerStart: (entry) => void startSavedAnswer(entry),
+      onSavedAnswerPick: (entry, id) => void pickSavedAnswer(entry, id),
+      onSavedAnswerUse: (entry, text) => void applySavedAnswer(entry, text),
     },
     matchMedia('(prefers-reduced-motion: reduce)').matches,
   );
@@ -431,23 +439,25 @@ async function teachMapping(
   entry: FillPlanEntry,
   field: CanonicalField,
   remember: boolean,
+  customKey?: string,
 ): Promise<void> {
   if (!entry.fingerprint) return;
+  const correction = { canonical: field, ...(customKey ? { customKey } : {}) };
   if (remember) {
     overrides.delete(entry.fingerprint);
     const saved = await request({
       type: 'content:save-mapping',
-      mapping: { fingerprint: entry.fingerprint, label: entry.label, canonical: field },
+      mapping: { fingerprint: entry.fingerprint, label: entry.label, ...correction },
     });
     if (!saved.ok) {
       // Still apply it for this form, and say it was not remembered.
-      overrides.set(entry.fingerprint, field);
+      overrides.set(entry.fingerprint, correction);
       widget?.setMeta({
         notice: 'Applied to this form, but Fillwright could not remember it for next time.',
       });
     }
   } else {
-    overrides.set(entry.fingerprint, field);
+    overrides.set(entry.fingerprint, correction);
   }
   await scan({ quiet: true });
 }
@@ -547,6 +557,57 @@ async function applyDraft(entry: FillPlanEntry, text: string): Promise<void> {
   await runFill([{ ...entry, newValue: text, status: 'ready', selected: true }]);
 }
 
+/* ---------------------------------------------------------- saved answers */
+
+/**
+ * "Use a saved answer": the worker returns titles ranked against this
+ * question; the text of one answer crosses only after the user picks it, and
+ * is written only after "Use this answer".
+ */
+async function startSavedAnswer(entry: FillPlanEntry): Promise<void> {
+  if (!widget) return;
+  widget.savedAnswers.set(entry.fieldId, { phase: 'loading' });
+  widget.refresh();
+  const field = session?.fields.get(entry.fieldId);
+  const question = field?.signals.labelText || field?.signals.ariaLabel || entry.label;
+  const response = await request<AnswerChoices>({ type: 'content:answer-choices', question });
+  widget.savedAnswers.set(
+    entry.fieldId,
+    response.ok && response.data.answers.length > 0
+      ? { phase: 'choose', answers: response.data.answers }
+      : {
+          phase: 'error',
+          message: response.ok
+            ? 'You have no saved answers yet. Add them under Preferences in Fillwright.'
+            : `${describeError(response.code, response.error).message} Nothing on the form was changed.`,
+        },
+  );
+  widget.refresh();
+}
+
+async function pickSavedAnswer(entry: FillPlanEntry, id: string): Promise<void> {
+  const current = widget?.savedAnswers.get(entry.fieldId);
+  if (!widget || !current || current.phase !== 'choose') return;
+  widget.savedAnswers.set(entry.fieldId, { ...current, busy: true });
+  widget.refresh();
+  const response = await request<{ text: string }>({ type: 'content:saved-answer', id });
+  widget.savedAnswers.set(
+    entry.fieldId,
+    response.ok
+      ? { phase: 'result', text: String(response.data.text ?? ''), answers: current.answers }
+      : {
+          phase: 'error',
+          message: `${describeError(response.code, response.error).message} Nothing on the form was changed.`,
+        },
+  );
+  widget.refresh();
+}
+
+async function applySavedAnswer(entry: FillPlanEntry, text: string): Promise<void> {
+  widget?.savedAnswers.delete(entry.fieldId);
+  await runFill([{ ...entry, newValue: text, status: 'ready', selected: true }]);
+}
+
 /* ------------------------------------------------ dynamic forms & routing */
 
 /**
@@ -616,7 +677,12 @@ async function onFormChanged(): Promise<void> {
   if (!widget || scanning) return;
 
   // Mid-review, or mid-fill: say the page changed and let the user refresh.
-  if (widget.state === 'review' || widget.state === 'filling' || widget.drafts.size > 0) {
+  if (
+    widget.state === 'review' ||
+    widget.state === 'filling' ||
+    widget.drafts.size > 0 ||
+    widget.savedAnswers.size > 0
+  ) {
     widget.markStale();
     return;
   }

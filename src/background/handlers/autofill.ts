@@ -10,6 +10,7 @@ import { classifyField } from '@/field-detection/classify';
 import { scoreApplicationContext } from '@/field-detection/context';
 import { describeError, unsupportedPageCode } from '@/utils/errors';
 import { FIELD_CATALOG } from '@/field-detection/catalog';
+import { isValidCustomKey } from '@/autofill/saved-answers';
 import type { CanonicalField, SavedMapping, ScanResult } from '@/types/fields';
 import type { ContentRequest, UiRequest } from '@/types/messages';
 
@@ -103,20 +104,41 @@ async function readProgress(tabId: number, origin: string): Promise<StepProgress
   return stored;
 }
 
+const ASSIGNABLE = new Set<string>(FIELD_CATALOG.map((entry) => entry.field));
+
+/**
+ * A correction arriving from a page: one of the picker's fields, or `custom`
+ * with a key naming one of the user's custom fields or saved answers. Anything
+ * else (a demographic, `unknown`, a malformed key) is refused.
+ */
+export function sanitizeCorrection(
+  canonicalRaw: unknown,
+  customKeyRaw: unknown,
+): { canonical: CanonicalField; customKey?: string } | null {
+  const canonical = sanitizeString(canonicalRaw, 64);
+  if (canonical === 'custom') {
+    const customKey = sanitizeString(customKeyRaw, 80);
+    return isValidCustomKey(customKey) ? { canonical: 'custom', customKey } : null;
+  }
+  return ASSIGNABLE.has(canonical) ? { canonical: canonical as CanonicalField } : null;
+}
+
 function sanitizeOverrides(raw: unknown, origin: string): SavedMapping[] {
   if (!Array.isArray(raw)) return [];
-  const known = new Set<string>(FIELD_CATALOG.map((entry) => entry.field));
   return raw.slice(0, 100).flatMap((item, index) => {
     const fingerprint = sanitizeString((item as { fingerprint?: unknown })?.fingerprint, 240);
-    const canonical = sanitizeString((item as { canonical?: unknown })?.canonical, 64);
-    if (!fingerprint || !known.has(canonical)) return [];
+    const correction = sanitizeCorrection(
+      (item as { canonical?: unknown })?.canonical,
+      (item as { customKey?: unknown })?.customKey,
+    );
+    if (!fingerprint || !correction) return [];
     return [
       {
         id: `override-${index}`,
         origin,
         fingerprint,
         label: '',
-        canonical: canonical as CanonicalField,
+        ...correction,
         createdAt: '',
         useCount: 0,
       },
@@ -191,13 +213,15 @@ export function registerAutofillHandlers(): void {
     const { mapping } = request as Extract<ContentRequest, { type: 'content:save-mapping' }>;
     const origin = originFromUrl(sender.tab?.url ?? sender.url ?? '');
     if (!origin) return err('Unknown sender', 'ENOSENDER');
+    const correction = sanitizeCorrection(mapping?.canonical, mapping?.customKey);
+    const fingerprint = sanitizeString(mapping?.fingerprint, 240);
+    if (!correction || !fingerprint) return err('Not a field Fillwright can assign', 'EBADMAPPING');
 
     const saved = await saveMapping({
       origin,
-      fingerprint: sanitizeString(mapping.fingerprint, 240),
+      fingerprint,
       label: sanitizeString(mapping.label, 120),
-      canonical: mapping.canonical,
-      ...(mapping.customKey ? { customKey: sanitizeString(mapping.customKey, 80) } : {}),
+      ...correction,
     });
     return ok(saved);
   });

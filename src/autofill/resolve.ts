@@ -3,6 +3,7 @@ import type { CanonicalField, DetectedField, FieldOption } from '@/types/fields'
 import type { Profile, TriState } from '@/types/profile';
 import { formatDate } from '@/parser/dates';
 import { isSensitiveField } from '@/security/sensitive';
+import { resolveCustom } from './saved-answers';
 
 export interface ResolvedValue {
   value: string;
@@ -287,11 +288,14 @@ export function resolveForField(
   detected: DetectedField,
   profile: Profile,
   entryIndex = 0,
+  customKey?: string,
 ): ResolvedValue & { optionValue?: string } {
   let resolved =
     field === 'sensitive.workAuthorization' || field === 'sensitive.requiresSponsorship'
       ? resolveAuthorization(field, detected, profile)
-      : resolveValue(field, profile, entryIndex);
+      : field === 'custom'
+        ? fromCustom(profile, customKey)
+        : resolveValue(field, profile, entryIndex);
 
   if (!resolved.value) return resolved;
 
@@ -329,6 +333,15 @@ export function resolveForField(
   }
 
   return resolved;
+}
+
+/**
+ * A custom field or saved answer the user pointed this field at. Only ever
+ * reached through a mapping the user chose; never inferred.
+ */
+function fromCustom(profile: Profile, customKey: string | undefined): ResolvedValue {
+  const { value, note } = resolveCustom(profile, customKey);
+  return value ? { value, confidence: 1, note, needsConsent: false } : none(note);
 }
 
 /* ---------------------------------------------------------- authorisation */

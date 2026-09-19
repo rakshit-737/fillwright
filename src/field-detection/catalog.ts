@@ -116,6 +116,7 @@ const BY_FIELD = new Map(FIELD_CATALOG.map((entry) => [entry.field, entry]));
 
 /** A user-facing name for a canonical field, for labels and explanations. */
 export function catalogLabel(field: CanonicalField): string {
+  if (field === 'custom') return 'One of your custom fields or saved answers';
   return BY_FIELD.get(field)?.label ?? 'Something else';
 }
 

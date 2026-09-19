@@ -127,7 +127,13 @@ export function buildMappings(
 
     /* --- resolve a value ------------------------------------------------ */
 
-    const resolved = resolveForField(classification.field, field, profile, group.index);
+    const resolved = resolveForField(
+      classification.field,
+      field,
+      profile,
+      group.index,
+      saved?.customKey,
+    );
     const sensitive = isSensitiveField(classification.field);
 
     if (resolved.needsConsent || (sensitive && !resolved.value)) {

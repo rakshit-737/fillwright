@@ -90,13 +90,17 @@ const TITLES = new Set(['mr', 'mr.', 'ms', 'ms.', 'mrs', 'mrs.', 'dr', 'dr.', 'p
  * considered for the name. Scanning the whole document finds a hiring manager's
  * name in a reference line just as happily as the candidate's.
  */
-export function parseContact(sections: ResumeSection[], fullText: string): ParsedContact {
+export function parseContact(
+  sections: ResumeSection[],
+  fullText: string,
+  fileLinks: readonly string[] = [],
+): ParsedContact {
   const header = sections.find((section) => section.kind === 'header');
   const headerLines = (header?.lines ?? []).map((line) => normalizeWhitespace(stripBullet(line)));
 
   const email = findEmail(fullText, headerLines);
   const phone = findPhone(headerLines, fullText);
-  const links = findLinks(fullText);
+  const links = findLinks(fullText, fileLinks);
   const name = findName(headerLines, email.value);
   const location = findLocation(headerLines);
 
@@ -155,8 +159,17 @@ function normalizePhone(value: string): string {
 
 /* ----------------------------------------------------------------- links */
 
-function findLinks(fullText: string): ParsedContact['links'] {
-  const urls = [...matchAll(fullText, URL_RE), ...matchAll(fullText, BARE_PROFILE_RE)]
+/**
+ * Links written in the text come first; `fileLinks` (PDF link annotations,
+ * DOCX hyperlink targets) fill in what a clickable "LinkedIn" hid. Both are
+ * untrusted and go through the same cleanUrl() validation.
+ */
+function findLinks(fullText: string, fileLinks: readonly string[] = []): ParsedContact['links'] {
+  const urls = [
+    ...matchAll(fullText, URL_RE),
+    ...matchAll(fullText, BARE_PROFILE_RE),
+    ...fileLinks.slice(0, 50).filter((link) => typeof link === 'string' && link.length <= 2048),
+  ]
     .map(cleanUrl)
     .filter(Boolean);
 
@@ -271,6 +284,11 @@ function findName(headerLines: string[], email: string): NameParts {
   return splitName(line, confidence, note);
 }
 
+/** A name word in any script: letters, combining marks, apostrophes, hyphens. */
+const NAME_WORD_RE = /^\p{L}[\p{L}\p{M}'’-]*$/u;
+/** "S." or "S.R." — initials, each an upper-case letter followed by a dot. */
+const INITIALS_RE = /^(?:\p{Lu}\.)+$/u;
+
 function isNameShaped(line: string): boolean {
   const value = line.replace(/[|·•].*$/, '').trim();
   if (!value || value.length > 48) return false;
@@ -281,12 +299,17 @@ function isNameShaped(line: string): boolean {
   const words = value.replace(/,/g, ' ').split(/\s+/).filter(Boolean);
   if (words.length < 2 || words.length > 5) return false;
 
-  // Every word should read as a name: capitalised, all-caps, or a particle.
+  // At least one word must be more than an initial: "S. R." alone is not a name.
+  if (words.every((word) => INITIALS_RE.test(word))) return false;
+
+  // Every word should read as a name: capitalised, all-caps, an initial, or a
+  // particle. Letters are any script's (\p{L}), so "José Álvarez" is a name.
   return words.every((word) => {
     const bare = word.replace(/[.,']/g, '').toLowerCase();
     if (NAME_PARTICLES.has(bare) || SUFFIXES.has(bare) || TITLES.has(bare)) return true;
-    if (!/^[A-Za-z][A-Za-z'’-]*$/.test(word)) return false;
-    return word === word.toUpperCase() || /^[A-Z]/.test(word);
+    if (INITIALS_RE.test(word)) return true;
+    if (!NAME_WORD_RE.test(word)) return false;
+    return word === word.toUpperCase() || /^\p{Lu}/u.test(word);
   });
 }
 
@@ -368,7 +391,7 @@ function toDisplayCase(value: string): string {
     .map((word) => {
       if (NAME_PARTICLES.has(word)) return word;
       return word.replace(
-        /(^|[-'’])([a-z])/g,
+        /(^|[-'’])(\p{Ll})/gu,
         (_, prefix: string, letter: string) => prefix + letter.toUpperCase(),
       );
     })

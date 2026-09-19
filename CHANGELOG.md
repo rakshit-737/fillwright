@@ -2,6 +2,28 @@
 
 Notable changes, newest first. Versions follow semantic versioning.
 
+## Unreleased
+
+### Fixed
+
+- Two-column (sidebar) PDF resumes are read column by column. A per-page gutter
+  is found from a histogram of text extents; the header above the columns is
+  read first. Single-column pages, including right-aligned date columns, are
+  read exactly as before.
+- Profile links that exist only as clickable words are now found: PDF link
+  annotations and DOCX hyperlink relationships (`http(s)` only) are passed to
+  the link matcher.
+- DOCX text boxes are no longer read twice (`mc:Fallback` is skipped).
+- Names with non-ASCII letters ("José Álvarez") or initials ("S. R. Jeevan")
+  are recognised.
+
+### Security
+
+- DOCX parts are capped at 8 MB each and 16 MB in total, checked against the
+  declared sizes before anything is inflated. fflate never inflates past a
+  declared size, so a ZIP bomb is refused quickly and a lying header only
+  truncates its entry.
+
 ## 0.5.0
 
 From feature-complete to shippable: verified in a real browser against

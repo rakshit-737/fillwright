@@ -227,7 +227,12 @@ or a location.
 For PDFs, pdf.js returns positioned glyph runs rather than lines, so Fillwright
 reconstructs lines from baseline positions and re-inserts spacing from the gaps.
 Tabs are preserved through parsing because they are the only surviving trace of
-a two-column layout.
+a table-like row. Sidebar templates are detected per page: when a vertical
+gutter separates two independently flowing columns, the header is read first,
+then each column in turn. Links that exist only as clickable words ("LinkedIn |
+GitHub") are read from PDF link annotations and DOCX hyperlink relationships;
+only `http(s)` targets are kept. Names are matched in any script ("José
+Álvarez", "S. R. Jeevan").
 
 ### How field detection works
 

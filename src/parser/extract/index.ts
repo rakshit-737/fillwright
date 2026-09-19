@@ -43,7 +43,7 @@ export function extractTxt(bytes: ArrayBuffer): ExtractedText {
   // UTF-8 with a lenient decoder: a stray invalid byte should not lose a resume.
   const text = new TextDecoder('utf-8', { fatal: false }).decode(bytes).replace(BOM_RE, '');
   if (!text.trim()) throw new ExtractionError('This file is empty.', 'EEMPTY');
-  return { format: 'txt', text, warnings: [], pageCount: 1 };
+  return { format: 'txt', text, warnings: [], pageCount: 1, links: [] };
 }
 
 /**

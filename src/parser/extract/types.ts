@@ -8,6 +8,12 @@ export interface ExtractedText {
   warnings: string[];
   /** Page count for PDFs; 1 otherwise. */
   pageCount: number;
+  /**
+   * http(s) URLs the file carries outside its text: PDF link annotations and
+   * DOCX hyperlink relationships ("LinkedIn" as a clickable word). Untrusted;
+   * the link matcher re-validates every one.
+   */
+  links: string[];
 }
 
 export class ExtractionError extends Error {

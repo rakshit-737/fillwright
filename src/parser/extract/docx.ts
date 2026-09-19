@@ -12,12 +12,34 @@ import { ExtractionError, type ExtractedText } from './types';
  */
 export function extractDocx(bytes: ArrayBuffer): ExtractedText {
   let files: Record<string, Uint8Array>;
+  let declaredTotal = 0;
   try {
     files = unzipSync(new Uint8Array(bytes), {
-      filter: (file) => DOC_PARTS.test(file.name),
+      // A resume is an untrusted file (SECURITY.md §3.2), and a ZIP entry can
+      // inflate a thousandfold. fflate inflates each entry into a buffer of its
+      // declared size and no larger, so capping the declared sizes caps the
+      // output — a header that lies about its size only truncates the entry.
+      filter: (file) => {
+        if (!DOC_PARTS.test(file.name)) return false;
+        declaredTotal += file.originalSize;
+        if (file.originalSize > MAX_PART_BYTES || declaredTotal > MAX_TOTAL_BYTES) {
+          throw new ExtractionError(TOO_LARGE, 'ETOOLARGE');
+        }
+        return true;
+      },
     });
-  } catch {
+  } catch (cause) {
+    if (cause instanceof ExtractionError) throw cause;
     throw new ExtractionError('This file could not be read as a Word document.', 'ECORRUPT');
+  }
+
+  // Belt and braces: never trust more output than the caps allow.
+  let total = 0;
+  for (const data of Object.values(files)) {
+    total += data.length;
+    if (data.length > MAX_PART_BYTES || total > MAX_TOTAL_BYTES) {
+      throw new ExtractionError(TOO_LARGE, 'ETOOLARGE');
+    }
   }
 
   const main = files['word/document.xml'];
@@ -50,10 +72,39 @@ export function extractDocx(bytes: ArrayBuffer): ExtractedText {
     );
   }
 
-  return { format: 'docx', text, warnings, pageCount: 1 };
+  const rels = files['word/_rels/document.xml.rels'];
+  const links = rels ? hyperlinkTargets(strFromU8(rels)) : [];
+
+  return { format: 'docx', text, warnings, pageCount: 1, links };
 }
 
-const DOC_PARTS = /^word\/(document|header\d*|footer\d*)\.xml$/;
+const DOC_PARTS = /^word\/(?:(?:document|header\d*|footer\d*)\.xml|_rels\/document\.xml\.rels)$/;
+
+/** No real resume part comes near this once inflated. */
+const MAX_PART_BYTES = 8 * 1024 * 1024;
+const MAX_TOTAL_BYTES = 16 * 1024 * 1024;
+const MAX_LINKS = 50;
+const TOO_LARGE =
+  'This Word document expands to far more data than a resume holds, so it was not opened.';
+
+/**
+ * External http(s) hyperlink targets from a relationships part. "LinkedIn" as
+ * a clickable word keeps its URL here, not in the text. Anything that is not a
+ * web link (file:, mailto:, internal anchors) is dropped.
+ */
+export function hyperlinkTargets(xml: string): string[] {
+  const out: string[] = [];
+  for (const match of xml.matchAll(/<Relationship\s([^>]*)>/g)) {
+    const attrs = match[1] ?? '';
+    const type = /\bType="([^"]*)"/.exec(attrs)?.[1] ?? '';
+    const target = decodeEntities(/\bTarget="([^"]*)"/.exec(attrs)?.[1] ?? '').trim();
+    if (!/\/hyperlink$/.test(type)) continue;
+    if (target.length > 2048 || !/^https?:\/\//i.test(target)) continue;
+    if (!out.includes(target)) out.push(target);
+    if (out.length >= MAX_LINKS) break;
+  }
+  return out;
+}
 
 /**
  * Converts WordprocessingML to plain text.
@@ -69,9 +120,15 @@ export function xmlToText(xml: string): string {
   let match: RegExpExecArray | null;
   /** Only text inside <w:t> is real content; <w:instrText> etc. is machinery. */
   let inTextRun = false;
+  /**
+   * Depth inside <mc:Fallback>. Word stores a text box twice — the modern shape
+   * in mc:Choice and a VML copy in mc:Fallback — so reading both duplicates the
+   * contact block a designed resume keeps there.
+   */
+  let fallbackDepth = 0;
 
   while ((match = tag.exec(xml)) !== null) {
-    if (inTextRun) {
+    if (inTextRun && fallbackDepth === 0) {
       out += decodeEntities(xml.slice(lastIndex, match.index));
     }
     lastIndex = tag.lastIndex;
@@ -80,6 +137,13 @@ export function xmlToText(xml: string): string {
     const name = raw.replace(/^\//, '').split(/[\s/>]/)[0] ?? '';
     const closing = raw.startsWith('/');
     const selfClosing = raw.endsWith('/');
+
+    if (name === 'mc:Fallback') {
+      if (closing) fallbackDepth = Math.max(0, fallbackDepth - 1);
+      else if (!selfClosing) fallbackDepth++;
+      continue;
+    }
+    if (fallbackDepth > 0) continue;
 
     switch (name) {
       case 'w:t':

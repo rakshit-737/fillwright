@@ -73,6 +73,28 @@ function fail(code: string) {
   return err(describeError(code).message, code);
 }
 
+/**
+ * Injects the panel bundle (`panel.js`) into the frame that asked for it.
+ *
+ * A content script cannot inject a file itself, so it asks here. The target is
+ * taken from the sender alone — never from anything in the message — so a page
+ * that subverted its content script can still only reach its own frame, and
+ * the only file this will ever run is one of ours, bundled, by name.
+ */
+export async function injectPanel(sender: chrome.runtime.MessageSender) {
+  const tabId = sender.tab?.id;
+  if (typeof tabId !== 'number') return fail('ENOTAB');
+  try {
+    await chrome.scripting.executeScript({
+      target: { tabId, frameIds: [sender.frameId ?? 0] },
+      files: ['panel.js'],
+    });
+    return ok({ loaded: true });
+  } catch {
+    return fail('EINJECT');
+  }
+}
+
 export interface StepProgress {
   origin: string;
   /** Fields filled per step, keyed by a page-derived step identity. */
@@ -275,6 +297,8 @@ export function registerAutofillHandlers(): void {
   });
 
   handle('content:ready', async () => ok({ acknowledged: true }));
+
+  handle('content:load-panel', async (_request, sender) => injectPanel(sender));
 
   /**
    * A script that arrived by itself (Assist/Smart registration) asks whether to

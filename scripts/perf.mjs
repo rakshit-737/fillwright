@@ -8,9 +8,9 @@
  *   FW_DIST=<dir> node scripts/perf.mjs --no-budget   measure another build
  *
  * Budgets:
- *   content.js (shipped)                ≤ 128 KB (0.6.0: six locale packs, the
- *                                       country table, click-jacking guard,
- *                                       saved answers and the review list tools)
+ *   content.js (shipped)                ≤ 100 KB (the panel and the review list
+ *                                       live in panel.js, injected on first
+ *                                       open, and are not counted here)
  *   inject content.js, 50-field form    < 50 ms  (median of 7)
  *   harvest + classify, hard-mode.html  < 120 ms (median of 9)
  *   MutationObserver callback           < 2 ms   (2,000-node burst)
@@ -25,7 +25,7 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const enforce = !process.argv.includes('--no-budget');
 
 const BUDGET = {
-  bundleKB: 128,
+  bundleKB: 100,
   injectMs: 50,
   harvestMs: 120,
   observerMs: 2,

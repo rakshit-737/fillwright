@@ -4,13 +4,14 @@ import { fillFields, undoFill, type UndoRecord } from '@/autofill/fill';
 import { collectPostingText, type JobMatch } from '@/autofill/job-match';
 import { addEntries, findAddControls } from '@/autofill/repeat';
 import { secondPassTargets } from '@/autofill/second-pass';
-import {
+import type {
   FillwrightWidget,
-  type AddOffer,
-  type FillSummary,
-  type HiddenField,
-  type ProfileChoice,
+  AddOffer,
+  FillSummary,
+  HiddenField,
+  ProfileChoice,
 } from './widget';
+import type { PanelExports } from './panel-entry';
 import type { DraftFact } from './review';
 import type { AnswerChoices } from '@/autofill/saved-answers';
 import { applyAdapter, detectAdapter } from '@/adapters';
@@ -48,7 +49,11 @@ const ACTIVATION_WINDOW_MS = 10_000;
 /** How long after the last keystroke the user counts as still typing. */
 const TYPING_GRACE_MS = 1_500;
 
-type Scope = typeof globalThis & { [MARKER]?: boolean; [ACTIVATION]?: number };
+type Scope = typeof globalThis & {
+  [MARKER]?: boolean;
+  [ACTIVATION]?: number;
+  __fillwrightPanel?: PanelExports;
+};
 const scope = globalThis as Scope;
 
 interface Session {
@@ -167,13 +172,14 @@ async function evaluatePassive(): Promise<void> {
   const worthy = verdict.level === 'likely' || (mode === 'smart' && verdict.level === 'possible');
   if (!worthy) return;
 
-  widget ??= createWidget();
+  const panel = await ensureWidget();
+  if (!panel) return;
   if (mode === 'smart') {
     // Smart prepares the plan ahead of time. It still fills nothing.
     await scan({ quiet: true });
     widget?.minimize();
-  } else if (widget.state === 'idle' || widget.state === 'detected') {
-    widget.renderDetected(visible.length);
+  } else if (panel.state === 'idle' || panel.state === 'detected') {
+    panel.renderDetected(visible.length);
   }
 }
 
@@ -206,8 +212,9 @@ async function scan({ quiet }: { quiet: boolean }): Promise<void> {
 }
 
 async function runScan(quiet: boolean): Promise<void> {
-  widget ??= createWidget();
-  if (!quiet) widget.renderAnalyzing();
+  const panel = await ensureWidget();
+  if (!panel) return;
+  if (!quiet) panel.renderAnalyzing();
 
   // Site-specific adapters only prepare the DOM (expanding collapsed sections,
   // for example). They never supply values and never bypass any safety rule.
@@ -221,7 +228,7 @@ async function runScan(quiet: boolean): Promise<void> {
   lastSignature = `${location.href}#${controlSignature(document)}`;
   const visible = fields.filter((field) => field.visible && !field.disabled);
   const fieldMap = new Map(visible.map((field) => [field.id, field]));
-  widget.setHidden(hiddenFieldsOf(fields));
+  panel.setHidden(hiddenFieldsOf(fields));
 
   // Nothing here, but the form is in a same-origin frame that has its own
   // copy of this script (explicit activation injects into every frame): stay
@@ -234,7 +241,7 @@ async function runScan(quiet: boolean): Promise<void> {
   // Nothing to read here, but a cross-origin frame fills the page: the form
   // is almost certainly inside it, where this script cannot go.
   if (visible.length === 0 && hasUnreachableFormFrame()) {
-    if (!quiet) widget.renderError(describeError('EFRAME', undefined, true));
+    if (!quiet) panel.renderError(describeError('EFRAME', undefined, true));
     return;
   }
 
@@ -264,13 +271,13 @@ async function runScan(quiet: boolean): Promise<void> {
 
   if (!response.ok) {
     if (response.code === 'ELOCKED') {
-      widget.renderLocked();
+      panel.renderLocked();
       // Uninvited, a locked vault is shown as the small pill, not a dialog.
-      if (quiet && !engaged) widget.minimize();
+      if (quiet && !engaged) panel.minimize();
       return;
     }
     if (quiet) return;
-    widget.renderError(describeError(response.code, response.error, true));
+    panel.renderError(describeError(response.code, response.error, true));
     return;
   }
 
@@ -284,27 +291,27 @@ async function runScan(quiet: boolean): Promise<void> {
   };
 
   const theme = response.data.settings?.theme;
-  widget.setAppearance({
+  panel.setAppearance({
     theme: theme === 'light' || theme === 'dark' ? theme : 'system',
     reducedMotion: Boolean(response.data.settings?.reducedMotion),
   });
 
   // Diagnostics are read from the harvested fields, which stay in this page —
   // they are never sent to the worker and never persisted.
-  widget.setDiagnostics(
+  panel.setDiagnostics(
     Boolean(response.data.settings?.diagnostics),
     new Map(visible.map((field) => [field.id, field.signals])),
   );
 
-  widget.setMeta({
+  panel.setMeta({
     title: pageTitle(),
     profileName: String(response.data.profileName ?? ''),
     addOffers: addOffersFor(plan),
   });
-  widget.renderPlan(plan);
+  panel.renderPlan(plan);
 
   if (truncated && !quiet) {
-    widget.setMeta({ title: 'Large form — first 400 fields shown' });
+    panel.setMeta({ title: 'Large form — first 400 fields shown' });
   }
 
   // Secondary information arrives after the plan so it never delays it.
@@ -340,8 +347,43 @@ async function loadJobMatch(): Promise<JobMatch | null> {
   return jobMatchCache;
 }
 
-function createWidget(): FillwrightWidget {
-  const instance = new FillwrightWidget(
+/**
+ * The panel bundle, fetched once per frame.
+ *
+ * The panel is the bulk of the on-page code and most pages never open it, so
+ * it ships as a second file. The worker injects it into this frame (the
+ * content script cannot inject anything itself), and it publishes the widget
+ * constructor on the isolated world's global. Injecting it twice is harmless:
+ * panel-entry.ts keeps the first copy.
+ */
+let panelLoad: Promise<PanelExports | null> | null = null;
+
+async function loadPanel(): Promise<PanelExports | null> {
+  if (scope.__fillwrightPanel) return scope.__fillwrightPanel;
+  panelLoad ??= (async () => {
+    const reply = await request({ type: 'content:load-panel' });
+    if (!reply.ok) {
+      // A failed injection must not be cached: the next activation may carry
+      // the access this one lacked.
+      panelLoad = null;
+      return null;
+    }
+    return scope.__fillwrightPanel ?? null;
+  })();
+  return panelLoad;
+}
+
+/** The live panel, creating it (and loading its bundle) the first time. */
+async function ensureWidget(): Promise<FillwrightWidget | null> {
+  if (widget) return widget;
+  const panel = await loadPanel();
+  if (!panel) return null;
+  widget ??= createWidget(panel.FillwrightWidget);
+  return widget;
+}
+
+function createWidget(Widget: PanelExports['FillwrightWidget']): FillwrightWidget {
+  const instance = new Widget(
     {
       onFill: (entries) => void runFill(entries),
       onUndo: () => {

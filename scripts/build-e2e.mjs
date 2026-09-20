@@ -49,7 +49,7 @@ writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`);
 // The shipped panel uses a closed shadow root so page scripts cannot read it.
 // The harness drives the panel from the page's world, so the test build — and
 // only the test build — reopens it.
-const contentPath = resolve(target, 'content.js');
+const contentPath = resolve(target, 'panel.js');
 const content = readFileSync(contentPath, 'utf8');
 const reopened = content.replace(
   /attachShadow\(\{(\s*)mode:(\s*)(["'`])closed\3/,
@@ -58,7 +58,7 @@ const reopened = content.replace(
 const alreadyOpen = /attachShadow\(\{\s*mode:\s*["'`]open/.test(content);
 if (reopened === content && !(process.env.FW_SOURCE_DIST && alreadyOpen)) {
   // Only an older build measured for comparison may already be open.
-  console.error('[fillwright] could not find the closed shadow root in content.js');
+  console.error('[fillwright] could not find the closed shadow root in panel.js');
   process.exit(1);
 }
 writeFileSync(contentPath, reopened);

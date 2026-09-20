@@ -60,7 +60,7 @@ Fillwright requests three permissions, and notably does **not** request
 |---|---|---|
 | `storage` | Settings and the active profile pointer | Read other extensions' or sites' storage |
 | `activeTab` | Read the form on the tab you activated | Touch any tab you did not activate; see browsing history |
-| `scripting` | Inject the bundled content script into that tab | Load remote code — `executeScript` is used with `files`, never `func` from a string |
+| `scripting` | Inject the bundled content script into that tab, and its panel when you open one | Load remote code — `executeScript` is used with `files`, never `func` from a string |
 
 Optional, requested at runtime and only if you enable the feature:
 
@@ -178,6 +178,12 @@ controlled by someone else.
     cannot fill anything. Values are requested when you open the panel.
   Covered by `tests/clickjack.test.ts` and the Chrome case against
   `test-pages/clickjack.html`.
+
+- **A subverted content script asking for the panel.** `content:load-panel`
+  injects one bundled file, `panel.js`, by name. The target frame comes from
+  the sender Chrome reports and never from the message, so a page that
+  subverted its content script can still only load our own panel into its own
+  frame.
 
 - **A subverted content script.** Message types are split by trust. `ui:*`
   messages can read and write the whole profile, so the router accepts them only
@@ -552,7 +558,7 @@ field-mapping defect that 173 jsdom tests had missed. See §6.6.
 - a non-empty `host_permissions`, or `<all_urls>` anywhere;
 - a CSP missing `script-src 'self'` / `connect-src 'self'`, or allowing
   `unsafe-eval` / `unsafe-inline`;
-- an ES module `import` surviving into `content.js`;
+- an ES module `import` surviving into `content.js` or `panel.js`;
 - a panel shadow root that is not closed.
 
 ---

@@ -6,9 +6,10 @@
   "type": "module",
   "scripts": {
     "dev": "vite build --mode development --watch",
-    "build": "npm run build:pages && npm run build:content",
+    "build": "npm run build:pages && npm run build:content && npm run build:panel",
     "build:pages": "vite build",
     "build:content": "vite build --config vite.content.config.ts",
+    "build:panel": "vite build --config vite.panel.config.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",

@@ -193,16 +193,20 @@ with the prefix (after `npm run build:e2e`).
 failing if any figure is over budget. Measured on Chrome for Testing 131 (median
 runs, one Windows 11 laptop), comparing the v0.4.0 tag with this release:
 
-| Measurement | Budget | v0.4.0 | v0.5.0 | v0.6.0 |
-|---|---|---|---|---|
-| `content.js` size | ≤ 128 KB | 92.4 KB | 82.0 KB | 120.7 KB |
-| Inject `content.js`, 50-field form | < 50 ms | 32.4 ms | 21.8 ms | 67.9 ms |
-| Harvest + classify, `hard-mode.html` | < 120 ms | 8.5 ms | 9.5 ms | 49.5 ms |
-| MutationObserver callback, 2,000-node burst | < 2 ms | 9.8 ms | < 0.01 ms | < 0.01 ms |
+| Measurement | Budget | v0.4.0 | v0.5.0 | v0.6.0 | v0.6.1 |
+|---|---|---|---|---|---|
+| `content.js` size | ≤ 100 KB | 92.4 KB | 82.0 KB | 120.7 KB | 69.1 KB |
+| Inject `content.js`, 50-field form | < 50 ms | 32.4 ms | 21.8 ms | 67.9 ms | 61.7 ms |
+| Harvest + classify, `hard-mode.html` | < 120 ms | 8.5 ms | 9.5 ms | 49.5 ms | 49.9 ms |
+| MutationObserver callback, 2,000-node burst | < 2 ms | 9.8 ms | < 0.01 ms | < 0.01 ms | < 0.01 ms |
+
+The panel, its stylesheet and the review list moved into `panel.js` (58 KB) in
+0.6.1. That file is injected into the frame the first time a panel is shown, so
+a page nobody asks about never parses it, and it is not counted above.
 
 The v0.4.0 and v0.5.0 columns were measured on Chrome for Testing 131; the
-v0.6.0 column on Chrome for Testing 153, where the v0.5.0 build measures
-81.7 KB, 11.8 ms, 6.4 ms and < 0.01 ms. The inject figure is over budget on
+v0.6.0 and v0.6.1 columns on Chrome for Testing 153, where the v0.5.0 build
+measures 81.7 KB, 11.8 ms, 6.4 ms and < 0.01 ms. The inject figure is over budget on
 this laptop and needs confirming on a clean runner.
 
 Passive checks in Assist/Smart mode run at most once every 1.5 s and never

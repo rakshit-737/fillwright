@@ -60,23 +60,31 @@ for (const file of referenced) {
   }
 }
 
-/* ------------------------- the content script must be injectable standalone */
+/* --------------------- the injected scripts must be injectable standalone */
 
-if (!existsSync(resolve(dist, 'content.js'))) {
-  fail('dist/content.js is missing — the content script build did not run');
-} else {
-  const content = readFileSync(resolve(dist, 'content.js'), 'utf8');
+// Both are injected with chrome.scripting.executeScript: content.js on
+// activation, panel.js when the panel is first opened.
+for (const name of ['content.js', 'panel.js']) {
+  if (!existsSync(resolve(dist, name))) {
+    fail(`dist/${name} is missing — the ${name === 'content.js' ? 'content script' : 'panel'} build did not run`);
+    continue;
+  }
+  const source = readFileSync(resolve(dist, name), 'utf8');
   // executeScript cannot resolve ES module imports, so the bundle must be flat.
-  if (/^\s*import\s|^\s*export\s/m.test(content)) {
-    fail('content.js contains ES module syntax; it must be a self-contained IIFE');
+  if (/^\s*import\s|^\s*export\s/m.test(source)) {
+    fail(`${name} contains ES module syntax; it must be a self-contained IIFE`);
   }
   // The panel shows values before the user approves them. A closed shadow root
   // keeps the page's own scripts from reading that preview.
-  if (!/attachShadow\(\{\s*mode:\s*(["'`])closed/.test(content)) {
-    fail('content.js must attach the panel to a closed shadow root');
+  if (/attachShadow\(\{\s*mode:\s*["'`]open["'`]/.test(source)) {
+    fail(`${name} attaches an open shadow root; page scripts could read the preview`);
   }
-  if (/attachShadow\(\{\s*mode:\s*["'`]open["'`]/.test(content)) {
-    fail('content.js attaches an open shadow root; page scripts could read the preview');
+}
+
+if (existsSync(resolve(dist, 'panel.js'))) {
+  const panel = readFileSync(resolve(dist, 'panel.js'), 'utf8');
+  if (!/attachShadow\(\{\s*mode:\s*(["'`])closed/.test(panel)) {
+    fail('panel.js must attach the panel to a closed shadow root');
   }
 }
 

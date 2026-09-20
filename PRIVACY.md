@@ -6,7 +6,7 @@ personal information.**
 That is the entire policy. The rest of this document explains how that is true
 architecturally, so you do not have to take it on trust.
 
-_Last updated: 2026-09-19. Applies to Fillwright 0.5.0 and later._
+_Last updated: 2026-09-20. Applies to Fillwright 0.6.0 and later._
 
 ---
 

@@ -2,7 +2,7 @@
 
 Notable changes, newest first. Versions follow semantic versioning.
 
-## Unreleased
+## 0.6.0 — 2026-09-20
 
 ### Security
 

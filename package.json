@@ -1,7 +1,7 @@
 {
   "name": "fillwright",
   "private": true,
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "Fillwright — privacy-first, local-only resume autofill for job applications.",
   "type": "module",
   "scripts": {

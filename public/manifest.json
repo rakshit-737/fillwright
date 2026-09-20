@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Fillwright — Local Resume Autofill",
   "short_name": "Fillwright",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "description": "Import your resume once, then fill job applications from a profile that never leaves your device.",
   "minimum_chrome_version": "116",
   "icons": {

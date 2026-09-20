@@ -110,6 +110,13 @@ Notable changes, newest first. Versions follow semantic versioning.
 
 ### Fixed
 
+- **A click in the drafting panel is no longer swallowed.** The job match and
+  the progress of earlier steps are fetched after the plan is shown, and
+  applying them rebuilt the whole review list. When that round-trip finished
+  while a row's drafting or saved-answer panel was open, the control the user
+  was reaching for was replaced underneath them and their click did nothing.
+  Late page information now waits for the next redraw whenever a row panel is
+  open.
 - **Re-importing a resume no longer deletes entries you edited.** "Replace
   with the resume version" swapped whole list sections, so an education,
   experience, project, skill, certification, achievement or language entry you

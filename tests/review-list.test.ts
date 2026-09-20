@@ -244,3 +244,69 @@ describe('profile deep links', () => {
     expect(isOpenableProfileField('../security')).toBe(false);
   });
 });
+
+describe('late page information leaves an open sub-panel alone', () => {
+  beforeEach(() => {
+    document.querySelectorAll('[data-fillwright-widget]').forEach((node) => node.remove());
+  });
+
+  const MATCH = {
+    present: ['TypeScript'],
+    missing: ['Rust'],
+    yearsRequired: 3,
+    looksLikePosting: true,
+  };
+
+  it('does not rebuild the list under an open drafting panel', () => {
+    const widget = new FillwrightWidget(callbacks(), true, { trust: () => true });
+    const root = open(widget, planOf([entry(0), entry(1)]));
+    widget.drafts.set('f0', {
+      phase: 'facts',
+      facts: [{ id: 'skills', label: 'Skills', value: 'TypeScript' }],
+      chosen: new Set(),
+    });
+    widget.refresh();
+    const box = root.querySelector<HTMLInputElement>('.fw-facts input')!;
+    expect(box).toBeTruthy();
+
+    // The job match and step progress are fetched after the plan is shown, so
+    // they land at an arbitrary moment — here, while the user is choosing
+    // facts. Redrawing now would replace the checkbox they are about to click.
+    widget.setMeta({ progress: { steps: 2, filled: 4 }, jobMatch: MATCH });
+    expect(box.isConnected).toBe(true);
+    widget.destroy();
+  });
+
+  it('does not rebuild the list under an open saved-answer panel', () => {
+    const widget = new FillwrightWidget(callbacks(), true, { trust: () => true });
+    const root = open(widget, planOf([entry(0), entry(1)]));
+    widget.savedAnswers.set('f0', {
+      phase: 'choose',
+      answers: [{ id: 'a1', label: 'Why this company' }],
+    });
+    widget.refresh();
+    const panel = root.querySelector('[data-fw-row="f0"] .fw-teach')!;
+    expect(panel).toBeTruthy();
+
+    widget.setMeta({ jobMatch: MATCH });
+    expect(panel.isConnected).toBe(true);
+    widget.destroy();
+  });
+
+  it('shows the late information at the next redraw', () => {
+    const widget = new FillwrightWidget(callbacks(), true, { trust: () => true });
+    const root = open(widget, planOf([entry(0), entry(1)]));
+    widget.drafts.set('f0', {
+      phase: 'facts',
+      facts: [{ id: 'skills', label: 'Skills', value: 'TypeScript' }],
+      chosen: new Set(),
+    });
+    widget.refresh();
+    widget.setMeta({ jobMatch: MATCH });
+
+    widget.drafts.delete('f0');
+    widget.refresh();
+    expect(root.textContent).toContain('Posting mentions');
+    widget.destroy();
+  });
+});

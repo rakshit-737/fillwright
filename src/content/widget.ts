@@ -438,9 +438,31 @@ export class FillwrightWidget {
     this.hiddenFields = fields;
   }
 
+  /**
+   * Page information that arrives after the plan is on screen: the job match,
+   * the progress of earlier steps, a non-blocking notice. All of it decorates
+   * the panel, and the worker round-trip it comes from finishes at an
+   * arbitrary moment — including while the user is halfway through a row's
+   * drafting or saved-answer panel. A redraw then replaces the very control
+   * they are reaching for, so the click lands on a detached node and does
+   * nothing. The metadata is kept and appears at the next draw, which any
+   * further action in the panel causes.
+   */
   setMeta(patch: Partial<PageMeta>): void {
     this.meta = { ...this.meta, ...patch };
-    if (this.state === 'ready' || this.state === 'review') this.draw();
+    if (this.state !== 'ready' && this.state !== 'review') return;
+    if (this.subPanelOpen()) return;
+    this.draw();
+  }
+
+  /** True while a row has a drafting, saved-answer, teach or edit panel open. */
+  private subPanelOpen(): boolean {
+    return (
+      this.drafts.size > 0 ||
+      this.savedAnswers.size > 0 ||
+      this.teaching.size > 0 ||
+      this.editing.size > 0
+    );
   }
 
   /** The page changed under a plan the user is looking at. */

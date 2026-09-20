@@ -112,6 +112,11 @@ export type ContentRequest =
       origin: string;
       fieldsFilled: number;
     }
+  /**
+   * Inject the panel bundle into the calling frame. The panel is loaded only
+   * when it is first shown, so a page nobody asks about never parses it.
+   */
+  | { type: 'content:load-panel' }
   /** Passive (Assist/Smart) boot: what should an uninvited script do here? */
   | { type: 'content:get-mode' }
   /** Passive check: is this page an application? Signals only, no values. */

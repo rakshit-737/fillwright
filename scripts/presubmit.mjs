@@ -63,6 +63,7 @@ if (manifest.externally_connectable) fail('externally_connectable must stay abse
 for (const required of [
   'background.js',
   'content.js',
+  'panel.js',
   'popup.html',
   'options.html',
   'practice.html',
@@ -108,13 +109,16 @@ for (const name of names) {
   }
 }
 
-const content = text('content.js');
-if (!/attachShadow\(\{\s*mode:\s*(["'`])closed/.test(content)) {
-  fail('content.js does not use a closed shadow root');
+// The panel lives in panel.js, injected into the page when it is first
+// opened; that is where the closed shadow root now is.
+const panel = text('panel.js');
+if (!/attachShadow\(\{\s*mode:\s*(["'`])closed/.test(panel)) {
+  fail('panel.js does not use a closed shadow root');
 }
 const contentKB = files['content.js'].length / 1024;
+const panelKB = files['panel.js'].length / 1024;
 // Same budget as scripts/perf.mjs.
-if (contentKB > 128) fail(`content.js is ${contentKB.toFixed(1)} KB (budget 128 KB)`);
+if (contentKB > 100) fail(`content.js is ${contentKB.toFixed(1)} KB (budget 100 KB)`);
 
 const zipMB = statSync(zipPath).size / (1024 * 1024);
 if (zipMB > 10) fail(`package is ${zipMB.toFixed(1)} MB`);
@@ -123,7 +127,7 @@ if (zipMB > 10) fail(`package is ${zipMB.toFixed(1)} MB`);
 
 console.log(`\n[presubmit] ${zipPath}`);
 console.log(
-  `  ${names.length} files, ${zipMB.toFixed(2)} MB, content.js ${contentKB.toFixed(1)} KB`,
+  `  ${names.length} files, ${zipMB.toFixed(2)} MB, content.js ${contentKB.toFixed(1)} KB, panel.js ${panelKB.toFixed(1)} KB`,
 );
 for (const note of notes) console.log(`  note: ${note}`);
 if (problems.length) {

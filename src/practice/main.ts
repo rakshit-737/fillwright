@@ -63,13 +63,14 @@ const widget = new FillwrightWidget(
       );
     },
     onUndo: () => {
-      void undoFill(undo).then((restored) => {
+      void undoFill(undo).then(({ restored, notRestored }) => {
         undo = [];
-        widget.markUndone(restored);
+        widget.markUndone(restored, notRestored);
       });
     },
     onClose: () => widget.minimize(),
     onRescan: () => void scan(),
+    onOpen: () => void scan(),
     onTeach: () => void scan(),
     onListProfiles: async () => [],
     onSwitchProfile: () => undefined,

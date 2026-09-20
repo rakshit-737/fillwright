@@ -11,7 +11,14 @@
 import { mkdtempSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { readWidget, clickWidgetButton, waitForWidget, sleep } from './harness.mjs';
+import {
+  readWidget,
+  clickWidgetButton,
+  trustedClick,
+  waitForWidget,
+  sleep,
+  evalInWorker,
+} from './harness.mjs';
 
 export async function runV05Suite(ctx) {
   const { browser, extensionId, server, test, assert, assertEqual, scanPage, worker } = ctx;
@@ -44,18 +51,25 @@ export async function runV05Suite(ctx) {
 
   /** Clicks a row link, with the remember box set as asked, and confirms. */
   async function correct(page, label, field, remember) {
-    return page.evaluate(
-      (prefix, target, keep) => {
+    const opened = await trustedClick(
+      page,
+      (prefix) => {
         const root = document.querySelector('[data-fillwright-widget]').shadowRoot;
         const row = Array.from(root.querySelectorAll('.fw-item')).find((item) =>
           item.querySelector('.fw-item__label')?.textContent.trim().startsWith(prefix),
         );
-        if (!row) return 'no row';
-        const open = Array.from(row.querySelectorAll('button')).find((button) =>
-          ['Set what this is', 'Change'].includes(button.textContent.trim()),
+        return (
+          Array.from(row?.querySelectorAll('button') ?? []).find((button) =>
+            ['Set what this is', 'Change'].includes(button.textContent.trim()),
+          ) ?? null
         );
-        if (!open) return 'no change link';
-        open.click();
+      },
+      label,
+    );
+    if (!opened) return 'no change link';
+    const picked = await page.evaluate(
+      (prefix, target, keep) => {
+        const root = document.querySelector('[data-fillwright-widget]').shadowRoot;
         const fresh = Array.from(root.querySelectorAll('.fw-item')).find((item) =>
           item.querySelector('.fw-item__label')?.textContent.trim().startsWith(prefix),
         );
@@ -64,16 +78,29 @@ export async function runV05Suite(ctx) {
         if (!select || !box) return 'no picker';
         select.value = target;
         box.checked = keep;
-        const use = Array.from(fresh.querySelectorAll('button')).find(
-          (button) => button.textContent.trim() === 'Use this',
-        );
-        use.click();
         return 'ok';
       },
       label,
       field,
       remember,
     );
+    if (picked !== 'ok') return picked;
+    const used = await trustedClick(
+      page,
+      (prefix) => {
+        const root = document.querySelector('[data-fillwright-widget]').shadowRoot;
+        const row = Array.from(root.querySelectorAll('.fw-item')).find((item) =>
+          item.querySelector('.fw-item__label')?.textContent.trim().startsWith(prefix),
+        );
+        return (
+          Array.from(row?.querySelectorAll('button') ?? []).find(
+            (button) => button.textContent.trim() === 'Use this',
+          ) ?? null
+        );
+      },
+      label,
+    );
+    return used ? 'ok' : 'no Use this';
   }
 
   /* --- deterministic profile for this suite ------------------------- */
@@ -163,6 +190,21 @@ export async function runV05Suite(ctx) {
         null,
     );
     assertEqual(dialog, false, 'smart mode must not open the full panel uninvited');
+
+    // The prepared plan carries counts only. Opening the pill fetches values.
+    assert(
+      await trustedClick(page, () =>
+        document.querySelector('[data-fillwright-widget]').shadowRoot.querySelector('.fw-pill'),
+      ),
+      'no pill to open',
+    );
+    await waitForWidget(page, (s) => s.text.includes('application field'));
+    assert(await clickWidgetButton(page, 'Review'), 'no Review button');
+    const opened = await waitForWidget(page, (s) => s.items.some((item) => item.value !== ''));
+    assert(
+      opened.items.some((item) => item.value.includes('@')),
+      'opening the panel did not bring the values',
+    );
     await page.close();
   });
 
@@ -183,6 +225,75 @@ export async function runV05Suite(ctx) {
     await sleep(3_000);
     assertEqual(await hasPanel(page), false, 'manual mode showed a panel without a click');
     await page.close();
+  });
+
+  /* --- per-site access (test-pages/site-access.html) -------------------- */
+
+  await test('site access: one granted origin registers there only; revoking unregisters', async () => {
+    const site = 'https://fillwright-e2e.example';
+    const pattern = `${site}/*`;
+    const registered = () =>
+      evalInWorker(
+        worker,
+        `chrome.scripting.getRegisteredContentScripts({ ids: ['fillwright-auto-detect'] })
+           .then((scripts) => (scripts[0] ? scripts[0].matches : []))`,
+      );
+    // Headless Chrome cannot accept a permission prompt, so the test build
+    // (scripts/build-e2e.mjs) grants this one origin at install instead.
+    await ui({ type: 'ui:set-settings', patch: { autofill: { mode: 'assist' } } });
+    try {
+      await ui({ type: 'ui:sync-auto-detect' });
+      const matches = await registered();
+      assert(matches.includes(pattern), `not registered for the granted site: ${matches}`);
+      assert(!matches.includes('https://*/*'), `registered for every https site: ${matches}`);
+      assert(
+        matches.every(
+          (m) =>
+            m === pattern ||
+            m === 'https://acme.myworkdayjobs.com/*' ||
+            /^http:\/\/(localhost|127\.0\.0\.1)\//.test(m),
+        ),
+        `registered beyond what was granted: ${matches}`,
+      );
+
+      // Revoke from the Permissions pane, the way a user does.
+      const pane = await browser.newPage();
+      await pane.goto(optionsUrl('#/permissions'), { waitUntil: 'domcontentloaded' });
+      await pane.waitForSelector('[data-testid="granted-sites"]', { timeout: 10_000 });
+      const clicked = await pane.evaluate((name) => {
+        const row = Array.from(document.querySelectorAll('[data-testid="granted-sites"] li')).find(
+          (li) => li.textContent.includes(name),
+        );
+        const button = row?.querySelector('button');
+        button?.click();
+        return Boolean(button);
+      }, 'fillwright-e2e.example');
+      assert(clicked, 'the granted site is not listed with a Revoke button');
+      const notice = await pane
+        .waitForFunction(
+          () => document.querySelector('.fw-section [role="status"]')?.textContent || false,
+          { timeout: 10_000 },
+        )
+        .then((handle) => handle.jsonValue());
+      let after = await registered();
+      for (let i = 0; i < 20 && after.includes(pattern); i += 1) {
+        await sleep(100);
+        after = await registered();
+      }
+      await pane.close();
+      if (/removed\.$/.test(notice)) {
+        assert(!after.includes(pattern), `still registered after revoke: ${after}`);
+      } else {
+        // Chrome refuses to remove an origin granted at install, which is how
+        // this headless build has to grant it. The pane must then say so
+        // rather than claim success, and nothing may change. The unregister
+        // path itself is covered in tests/auto-detect.test.ts.
+        assert(/didn’t remove/.test(notice), `unexpected revoke notice: ${notice}`);
+        assert(after.includes(pattern), `registration changed without a revoke: ${after}`);
+      }
+    } finally {
+      await ui({ type: 'ui:set-settings', patch: { autofill: { mode: 'manual' } } });
+    }
   });
 
   /* --- add another entry ---------------------------------------------- */
@@ -213,6 +324,63 @@ export async function runV05Suite(ctx) {
     );
     assertEqual(degrees[1], DEGREES[1], 'block 2 degree came from the wrong entry');
     assertEqual(await page.evaluate(() => window.__submitted), false, 'the form was submitted');
+    await page.close();
+  });
+
+  /* --- hidden fields and honeypots ------------------------------------ */
+
+  await test('hidden fields and honeypots are never filled; visible ones are', async () => {
+    const page = await openAndReview('hidden-fields.html');
+    const widget = await readWidget(page);
+    // Six style-hidden fields are counted; the covered one passes the scan
+    // and is refused at fill time instead.
+    assert(
+      /6 hidden fields ignored/.test(widget.text),
+      `no hidden-field note: ${widget.text.slice(0, 400)}`,
+    );
+    assert(
+      widget.buttons.filter((label) => label === 'Show me').length >= 2,
+      `no Show me on the rows: ${widget.buttons.join(', ')}`,
+    );
+    assert(await clickWidgetButton(page, 'Fill'), 'the Fill button was not found');
+    await waitForWidget(page, (s) => /updated|No fields were changed/.test(s.text));
+    const values = await page.evaluate(() =>
+      Object.fromEntries(
+        Array.from(document.querySelectorAll('input')).map((input) => [input.id, input.value]),
+      ),
+    );
+    assertEqual(values['h-first'], profile.personal.firstName.value, 'visible first name');
+    assertEqual(values['h-email'], PROFILE_EMAIL, 'visible email');
+    for (const id of [
+      'h-last',
+      'h-phone',
+      'h-linkedin',
+      'h-email2',
+      'h-first2',
+      'h-family',
+      'h-honeypot',
+    ]) {
+      assertEqual(values[id], '', `hidden field ${id} received a value`);
+    }
+    await page.close();
+  });
+
+  await test('Show me scrolls to and outlines the field a row refers to', async () => {
+    const page = await openAndReview('hidden-fields.html');
+    const found = await trustedClick(page, () => {
+      const root = document.querySelector('[data-fillwright-widget]').shadowRoot;
+      const row = Array.from(root.querySelectorAll('.fw-item')).find((item) =>
+        item.querySelector('.fw-item__label')?.textContent.trim().startsWith('Email'),
+      );
+      return (
+        Array.from(row?.querySelectorAll('button') ?? []).find(
+          (button) => button.textContent.trim() === 'Show me',
+        ) ?? null
+      );
+    });
+    assert(found, 'no Show me');
+    const outlined = await page.evaluate(() => document.getElementById('h-email').style.outline);
+    assert(/solid/.test(outlined), `the field was not outlined: ${outlined}`);
     await page.close();
   });
 
@@ -516,11 +684,45 @@ export async function runV05Suite(ctx) {
     const importFile = join(dir, 'to-import.json');
     writeFileSync(importFile, JSON.stringify(exported));
     const before = (await ui({ type: 'ui:list-profiles' })).data.length;
+    const settingsBefore = (await ui({ type: 'ui:get-settings' })).data;
     const input = await page.$('input[type="file"]');
     await input.uploadFile(importFile);
+    await page.waitForFunction(() => document.body.innerText.includes('Review this import'), {
+      timeout: 15_000,
+    });
+    // Nothing is stored until the user confirms, and only profiles start ticked.
+    assertEqual(
+      (await ui({ type: 'ui:list-profiles' })).data.length,
+      before,
+      'the import was applied before review',
+    );
+    const ticks = await page.evaluate(() =>
+      Array.from(document.querySelectorAll('input[data-import]')).map((box) => ({
+        kind: box.dataset.import,
+        checked: box.checked,
+      })),
+    );
+    assert(
+      ticks.some((t) => t.kind === 'profile' && t.checked),
+      `profiles should start ticked: ${JSON.stringify(ticks)}`,
+    );
+    assert(
+      ticks.filter((t) => t.kind !== 'profile').every((t) => !t.checked),
+      `settings and mappings must start unticked: ${JSON.stringify(ticks)}`,
+    );
+    await page.evaluate(() =>
+      Array.from(document.querySelectorAll('button'))
+        .find((b) => b.textContent.trim() === 'Import selected')
+        .click(),
+    );
     await page.waitForFunction(() => document.body.innerText.includes('Imported'), {
       timeout: 15_000,
     });
+    assertEqual(
+      JSON.stringify((await ui({ type: 'ui:get-settings' })).data.autofill),
+      JSON.stringify(settingsBefore.autofill),
+      'unticked settings were applied',
+    );
     const after = await ui({ type: 'ui:list-profiles' });
     assertEqual(after.data.length, before + exported.profiles.length, 'profiles were not added');
     assert(
@@ -530,20 +732,154 @@ export async function runV05Suite(ctx) {
     await page.close();
   });
 
+  await test('encrypted export: wrong passphrase refused, imported rule is review-only', async () => {
+    // Teach a rule, export with a passphrase, forget the rule, import it back.
+    const taught = await openAndReview('imported-mapping.html');
+    assertEqual(await correct(taught, 'Applicant Token', 'personal.email', true), 'ok', 'teach');
+    await waitForWidget(taught, (s) => itemFor(s, 'Applicant Token')?.value !== '');
+    await taught.close();
+
+    const dir = mkdtempSync(join(tmpdir(), 'fw-sealed-'));
+    const page = await browser.newPage();
+    const dialogs = [];
+    page.on('dialog', (dialog) => {
+      dialogs.push(dialog.message());
+      void dialog.accept();
+    });
+    const cdp = await page.createCDPSession();
+    await cdp.send('Browser.setDownloadBehavior', { behavior: 'allow', downloadPath: dir });
+    await page.goto(optionsUrl('#/privacy'), { waitUntil: 'networkidle0' });
+
+    const PASS = 'a long export passphrase 42';
+    const labelled = (text) =>
+      page.evaluateHandle(
+        (wanted) =>
+          Array.from(document.querySelectorAll('label')).find((l) =>
+            l.textContent.includes(wanted),
+          ),
+        text,
+      );
+    await (await labelled('Protect the export with a passphrase')).click();
+    await page.type('input[autocomplete="new-password"]', PASS);
+    const boxes = await page.$$('input[autocomplete="new-password"]');
+    await boxes[1].type(PASS);
+    await page.evaluate(() =>
+      Array.from(document.querySelectorAll('button'))
+        .find((b) => b.textContent.trim() === 'Export a local copy')
+        .click(),
+    );
+    const deadline = Date.now() + 30_000;
+    let file = '';
+    while (!file && Date.now() < deadline) {
+      file = readdirSync(dir).find((name) => name.endsWith('.json')) ?? '';
+      if (!file) await sleep(200);
+    }
+    assert(file, 'no sealed export was downloaded');
+    await sleep(300);
+    const raw = readFileSync(join(dir, file), 'utf8');
+    const sealed = JSON.parse(raw);
+    assertEqual(sealed.format, 'fillwright-export-encrypted', 'sealed format marker');
+    assert(!raw.includes(PROFILE_EMAIL), 'the sealed file holds readable profile data');
+    assert(!raw.includes('Applicant Token'), 'the sealed file holds a readable mapping');
+    assert(
+      !dialogs.some((m) => m.includes('It is not encrypted')),
+      'the plaintext warning was shown for a sealed export',
+    );
+
+    await ui({ type: 'ui:clear-saved-mappings' });
+    const input = await page.$('input[type="file"]');
+    await input.uploadFile(join(dir, file));
+    await page.waitForFunction(() => document.body.innerText.includes('This export is protected'), {
+      timeout: 15_000,
+    });
+    await page.type('input[autocomplete="off"]', 'not the passphrase');
+    await page.evaluate(() =>
+      Array.from(document.querySelectorAll('button'))
+        .find((b) => b.textContent.trim() === 'Open file')
+        .click(),
+    );
+    await page.waitForFunction(
+      () => document.querySelector('.fw-formerror')?.textContent.includes('passphrase'),
+      { timeout: 30_000 },
+    );
+    await page.evaluate(() => {
+      const box = document.querySelector('input[autocomplete="off"]');
+      const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set;
+      setter.call(box, '');
+      box.dispatchEvent(new Event('input', { bubbles: true }));
+    });
+    await page.type('input[autocomplete="off"]', PASS);
+    await page.evaluate(() =>
+      Array.from(document.querySelectorAll('button'))
+        .find((b) => b.textContent.trim() === 'Open file')
+        .click(),
+    );
+    await page.waitForFunction(() => document.body.innerText.includes('Review this import'), {
+      timeout: 30_000,
+    });
+    // Keep only the learned rule for this site: untick profiles, tick the site.
+    await page.evaluate(() => {
+      for (const box of document.querySelectorAll('input[data-import="profile"]'))
+        if (box.checked) box.click();
+      const site = Array.from(document.querySelectorAll('.fw-import-site')).find((node) =>
+        node.textContent.includes('127.0.0.1'),
+      );
+      site.querySelector('input[data-import="site"]').click();
+    });
+    await page.evaluate(() =>
+      Array.from(document.querySelectorAll('button'))
+        .find((b) => b.textContent.trim() === 'Import selected')
+        .click(),
+    );
+    await page.waitForFunction(() => document.body.innerText.includes('Imported'), {
+      timeout: 15_000,
+    });
+    await page.close();
+
+    const stored = (await ui({ type: 'ui:list-saved-mappings', origin: server.origin })).data;
+    const rule = stored.find((m) => m.label.startsWith('Applicant Token'));
+    assert(rule?.imported === true, `imported rule not marked: ${JSON.stringify(stored)}`);
+
+    const form = await openAndReview('imported-mapping.html?imported');
+    const row = await form.evaluate(() => {
+      const root = document.querySelector('[data-fillwright-widget]').shadowRoot;
+      const item = Array.from(root.querySelectorAll('.fw-item')).find((node) =>
+        node.querySelector('.fw-item__label')?.textContent.trim().startsWith('Applicant Token'),
+      );
+      return item
+        ? {
+            chips: Array.from(item.querySelectorAll('.fw-chip')).map((c) => c.textContent),
+            checked: Boolean(item.querySelector('input.fw-check')?.checked),
+          }
+        : null;
+    });
+    assert(row, 'the imported rule was not applied at all');
+    assert(row.chips.includes('imported'), `no "imported" chip: ${row.chips.join(',')}`);
+    assertEqual(row.checked, false, 'an imported rule started ticked');
+
+    // Confirming it on the real form clears the mark.
+    assertEqual(await correct(form, 'Applicant Token', 'personal.email', true), 'ok', 'confirm');
+    await waitForWidget(form, (s) => itemFor(s, 'Applicant Token')?.value !== '');
+    await form.close();
+    const confirmed = (await ui({ type: 'ui:list-saved-mappings', origin: server.origin })).data;
+    assert(
+      !confirmed.find((m) => m.label.startsWith('Applicant Token'))?.imported,
+      'confirming on a real form did not clear the imported mark',
+    );
+    await ui({ type: 'ui:clear-saved-mappings' });
+  });
+
   /* --- undo across two fills ------------------------------------------- */
 
   await test('undo after two consecutive fills restores both', async () => {
     // A unique URL: other greenhouse tabs are still open from earlier tests.
     const page = await openAndReview('greenhouse.html?undo');
-    const unticked = await page.evaluate(() => {
+    const unticked = await trustedClick(page, () => {
       const root = document.querySelector('[data-fillwright-widget]').shadowRoot;
       const row = Array.from(root.querySelectorAll('.fw-item')).find((item) =>
         item.querySelector('.fw-item__label')?.textContent.trim().startsWith('Email'),
       );
-      const box = row?.querySelector('input.fw-check');
-      if (!box) return false;
-      box.click();
-      return true;
+      return row?.querySelector('input.fw-check') ?? null;
     });
     assert(unticked, 'could not untick the email row');
     assert(await clickWidgetButton(page, 'Fill'), 'no Fill button');
@@ -580,18 +916,18 @@ export async function runV05Suite(ctx) {
   /* --- on-device drafting --------------------------------------------- */
 
   const clickRowLinkIn = (page, prefix, text) =>
-    page.evaluate(
+    trustedClick(
+      page,
       (p, t) => {
         const root = document.querySelector('[data-fillwright-widget]').shadowRoot;
         const row = Array.from(root.querySelectorAll('.fw-item')).find((item) =>
           item.querySelector('.fw-item__label')?.textContent.trim().startsWith(p),
         );
-        const link = Array.from(row?.querySelectorAll('button') ?? []).find(
-          (b) => b.textContent.trim() === t,
+        return (
+          Array.from(row?.querySelectorAll('button') ?? []).find(
+            (b) => b.textContent.trim() === t,
+          ) ?? null
         );
-        if (!link) return false;
-        link.click();
-        return true;
       },
       prefix,
       text,
@@ -688,7 +1024,7 @@ export async function runV05Suite(ctx) {
       () =>
         document
           .querySelector('[data-fillwright-widget]')
-          .shadowRoot.querySelector('.fw-draft textarea') !== null,
+          .shadowRoot.querySelector('.fw-draft textarea:not([readonly])') !== null,
       { timeout: 10_000 },
     );
     assertEqual(
@@ -716,7 +1052,400 @@ export async function runV05Suite(ctx) {
     await page.close();
   });
 
+  // A streaming stand-in: yields `word ` every 25 ms, forever when `hang` is
+  // set, and records whether the signal it was given was aborted.
+  const installStreamingModel = (hang) =>
+    ctx.evalInWorker(
+      worker,
+      `(() => {
+        globalThis.__prompts = [];
+        globalThis.__aborted = false;
+        globalThis.LanguageModel = {
+          availability: async () => 'available',
+          create: async () => ({
+            prompt: async () => 'unused',
+            promptStreaming(text, options = {}) {
+              globalThis.__prompts.push(text);
+              options.signal?.addEventListener('abort', () => { globalThis.__aborted = true; });
+              return (async function* () {
+                for (let i = 0; ${hang ? 'true' : 'i < 60'}; i += 1) {
+                  if (options.signal?.aborted) throw new DOMException('aborted', 'AbortError');
+                  yield 'word ';
+                  await new Promise((r) => setTimeout(r, 25));
+                }
+              })();
+            },
+            destroy() {},
+          }),
+        };
+        return true;
+      })()`,
+    );
+
+  const tickFact = (page, prefix) =>
+    trustedClick(
+      page,
+      (p) => {
+        const root = document.querySelector('[data-fillwright-widget]').shadowRoot;
+        const label = Array.from(root.querySelectorAll('.fw-facts label')).find((l) =>
+          l.textContent.trim().startsWith(p),
+        );
+        return label?.querySelector('input') ?? null;
+      },
+      prefix,
+    );
+
+  const factStates = (page) =>
+    page.evaluate(() =>
+      Array.from(
+        document
+          .querySelector('[data-fillwright-widget]')
+          .shadowRoot.querySelectorAll('.fw-facts label'),
+      ).map((l) => ({ text: l.textContent.trim(), checked: l.querySelector('input').checked })),
+    );
+
+  await test('streamed drafting: posting excerpt is optional, fenced, and the limit holds while streaming', async () => {
+    await installStreamingModel(false);
+    const page = await openAndReview('draft-posting.html');
+    assert(
+      await clickRowLinkIn(page, 'Why do you want', 'Draft with on-device AI'),
+      'no draft link',
+    );
+    await page.waitForFunction(
+      () =>
+        document
+          .querySelector('[data-fillwright-widget]')
+          .shadowRoot.querySelector('.fw-draft .fw-facts') !== null,
+      { timeout: 10_000 },
+    );
+    const facts = await factStates(page);
+    const posting = facts.find((fact) => fact.text.startsWith('An excerpt of this job posting'));
+    assert(posting, `posting not offered: ${JSON.stringify(facts)}`);
+    assertEqual(posting.checked, false, 'the posting excerpt was ticked for the user');
+
+    assert(await tickFact(page, 'An excerpt of this job posting'), 'could not tick the posting');
+    assert(await clickRowLinkIn(page, 'Why do you want', 'Write a draft'), 'no Write a draft');
+
+    // Text appears while it is still being written, read-only.
+    await page.waitForFunction(
+      () =>
+        (document
+          .querySelector('[data-fillwright-widget]')
+          .shadowRoot.querySelector('.fw-draft textarea[readonly]')?.value.length ?? 0) > 0,
+      { timeout: 10_000 },
+    );
+    await page.waitForFunction(
+      () =>
+        document
+          .querySelector('[data-fillwright-widget]')
+          .shadowRoot.querySelector('.fw-draft textarea:not([readonly])') !== null,
+      { timeout: 15_000 },
+    );
+    const draft = (await draftPanel(page)).draft;
+    assert(
+      draft.length > 0 && draft.length <= 120,
+      `draft length ${draft.length} breaks maxlength 120`,
+    );
+
+    const prompts = await ctx.evalInWorker(worker, 'globalThis.__prompts');
+    assertEqual(prompts.length, 1, 'expected one prompt');
+    const prompt = prompts[0];
+    const header = prompt.split('\n').find((line) => line.startsWith('Job posting excerpt'));
+    assert(header && /untrusted/i.test(header), `posting not labelled untrusted: ${header}`);
+    const fenced = prompt.slice(prompt.indexOf(header));
+    assert(
+      /"""\n[^"]*Ignore all previous instructions[^"]*\n"""/.test(fenced),
+      'the injection sentence was not inside the fence',
+    );
+    assert(!prompt.includes(PROFILE_EMAIL), 'the prompt contained the email address');
+    assertEqual(
+      await page.evaluate(() => document.getElementById('q_why').value),
+      '',
+      'a streamed draft reached the form',
+    );
+    await page.close();
+  });
+
+  await test('streamed drafting: Cancel stops the model and leaves the form alone', async () => {
+    await installStreamingModel(true);
+    const page = await openAndReview('draft-posting.html');
+    assert(
+      await clickRowLinkIn(page, 'Why do you want', 'Draft with on-device AI'),
+      'no draft link',
+    );
+    await page.waitForFunction(
+      () =>
+        document
+          .querySelector('[data-fillwright-widget]')
+          .shadowRoot.querySelector('.fw-draft .fw-facts') !== null,
+      { timeout: 10_000 },
+    );
+    assert(await clickRowLinkIn(page, 'Why do you want', 'Write a draft'), 'no Write a draft');
+    await page.waitForFunction(
+      () =>
+        (document
+          .querySelector('[data-fillwright-widget]')
+          .shadowRoot.querySelector('.fw-draft textarea[readonly]')?.value.length ?? 0) > 0,
+      { timeout: 10_000 },
+    );
+    assert(await clickRowLinkIn(page, 'Why do you want', 'Cancel'), 'no Cancel while streaming');
+    const deadline = Date.now() + 5_000;
+    while (!(await ctx.evalInWorker(worker, 'globalThis.__aborted')) && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+    assertEqual(
+      await ctx.evalInWorker(worker, 'globalThis.__aborted'),
+      true,
+      'the model was not stopped',
+    );
+    assertEqual(await draftPanel(page), null, 'the draft panel stayed open');
+    assertEqual(
+      await page.evaluate(() => document.getElementById('q_why').value),
+      '',
+      'the form changed after Cancel',
+    );
+    await ctx.evalInWorker(
+      worker,
+      'delete globalThis.LanguageModel; delete globalThis.__prompts; delete globalThis.__aborted; true',
+    );
+    await page.close();
+  });
+
+  await test('the Assistance pane downloads the on-device model with progress', async () => {
+    const page = await browser.newPage();
+    await page.evaluateOnNewDocument(() => {
+      let state = 'downloadable';
+      globalThis.LanguageModel = {
+        availability: async () => state,
+        create: async (options = {}) => {
+          if (typeof options.monitor === 'function') {
+            const target = new EventTarget();
+            options.monitor(target);
+            for (const loaded of [0.25, 0.5, 1]) {
+              await new Promise((r) => setTimeout(r, 150));
+              const event = new Event('downloadprogress');
+              event.loaded = loaded;
+              target.dispatchEvent(event);
+            }
+          }
+          state = 'available';
+          return { prompt: async () => '', destroy() {} };
+        },
+      };
+    });
+    await page.goto(`chrome-extension://${extensionId}/options.html#/assistance`, {
+      waitUntil: 'networkidle0',
+    });
+    await page.waitForFunction(() => document.body.innerText.includes('Needs a one-off download'), {
+      timeout: 10_000,
+    });
+    const clicked = await page.evaluate(() => {
+      const button = Array.from(document.querySelectorAll('button')).find(
+        (b) => b.textContent.trim() === 'Download the on-device model',
+      );
+      button?.click();
+      return Boolean(button);
+    });
+    assert(clicked, 'no download button');
+    await page.waitForFunction(() => document.querySelector('progress') !== null, {
+      timeout: 5_000,
+    });
+    await page.waitForFunction(
+      () => document.body.innerText.includes('Available on this computer'),
+      { timeout: 10_000 },
+    );
+    await page.close();
+  });
+
   await ui({ type: 'ui:set-settings', patch: { ai: { enabled: false, provider: 'none' } } });
+
+  /* --- custom fields and saved answers --------------------------------- */
+
+  const SAVED_ANSWER_TEXT = 'I want to build payment systems people can trust.';
+  {
+    const current = (
+      await ui({ type: 'ui:get-profile', profileId: state.data.settings.activeProfileId })
+    ).data;
+    current.custom = [
+      {
+        id: 'e2e-cf-1',
+        key: 'custom1',
+        label: 'Employee badge',
+        value: 'EMP-4471',
+        provenance: prov,
+      },
+    ];
+    current.preferences.savedAnswers = [
+      {
+        id: 'e2e-sa-1',
+        key: 'answer-1',
+        label: 'Greatest strength',
+        text: 'Persistence.',
+        updatedAt: '',
+      },
+      {
+        id: 'e2e-sa-2',
+        key: 'answer-2',
+        label: 'Why do you want to work here',
+        text: SAVED_ANSWER_TEXT,
+        updatedAt: '',
+      },
+    ];
+    const stored = await ui({ type: 'ui:save-profile', profile: current });
+    assert(stored.ok, `could not seed custom fields: ${stored.error}`);
+  }
+
+  await test('a custom field taught once is remembered for that site', async () => {
+    const page = await openAndReview('saved-answers.html');
+    assertEqual(
+      itemFor(await readWidget(page), 'Badge reference')?.badge,
+      'Not recognised',
+      'the fixture field should start unrecognised',
+    );
+    const rowSel = (sel) =>
+      `(() => { const root = document.querySelector('[data-fillwright-widget]').shadowRoot;
+        const row = Array.from(root.querySelectorAll('.fw-item')).find((item) =>
+          item.querySelector('.fw-item__label')?.textContent.trim().startsWith('Badge reference'));
+        return row ? row.querySelector(${JSON.stringify(sel)}) : null; })()`;
+    assert(
+      await clickRowLinkIn(page, 'Badge reference', 'Set what this is'),
+      'no Set what this is',
+    );
+    const checked = await page.evaluate((expr) => {
+      const select = eval(expr);
+      if (!select) return 'no picker';
+      const own = Array.from(select.options).find((o) =>
+        o.textContent.startsWith('One of your custom fields'),
+      );
+      if (!own || own.disabled) return 'no custom-field choice';
+      if (
+        !Array.from(select.options).some((o) =>
+          o.textContent.startsWith('One of your saved answers'),
+        )
+      )
+        return 'no saved-answer choice';
+      return 'ok';
+    }, rowSel('.fw-teach__select'));
+    assertEqual(checked, 'ok', 'the picker choices');
+    // The panel ignores synthetic events, so choose with the real keyboard.
+    const picker = await page.evaluateHandle((expr) => eval(expr), rowSel('.fw-teach__select'));
+    await picker.asElement().focus();
+    await page.keyboard.type('One of your custom');
+    await sleep(300);
+    const result = await page.evaluate((expr) => {
+      const second = eval(expr);
+      if (!second || second.hidden) return 'no second list';
+      const labels = Array.from(second.options).map((o) => o.textContent);
+      if (!labels.includes('Employee badge')) return `second list: ${labels.join(',')}`;
+      if (labels.some((l) => l.includes('EMP-4471'))) return 'a value leaked into the list';
+      second.value = 'e2e-cf-1';
+      return 'ok';
+    }, rowSel('.fw-teach__own'));
+    if (result === 'ok') {
+      assert(await clickRowLinkIn(page, 'Badge reference', 'Use this'), 'no Use this');
+    }
+    assertEqual(result, 'ok', 'teaching a custom field');
+    const after = await waitForWidget(
+      page,
+      (s) => itemFor(s, 'Badge reference')?.value === 'EMP-4471',
+    );
+    assert(after, 'the custom field value was not proposed');
+    assertEqual(
+      await page.evaluate(() => document.getElementById('s-badge').value),
+      '',
+      'the form changed before Fill',
+    );
+    await page.close();
+
+    const again = await openAndReview('saved-answers.html');
+    const remembered = await page2Item(again, 'Badge reference');
+    assertEqual(remembered?.value, 'EMP-4471', 'the custom field was not remembered after reload');
+    const chips = await again.evaluate(() =>
+      Array.from(
+        document.querySelector('[data-fillwright-widget]').shadowRoot.querySelectorAll('.fw-chip'),
+      ).map((node) => node.textContent),
+    );
+    assert(chips.includes('remembered'), `expected "remembered" chip, saw ${chips.join(',')}`);
+    await again.close();
+    await ui({ type: 'ui:clear-saved-mappings', origin: server.origin });
+  });
+
+  async function page2Item(page, prefix) {
+    return itemFor(await waitForWidget(page, (s) => Boolean(itemFor(s, prefix))), prefix);
+  }
+
+  await test('an essay row offers a saved answer, and nothing is filled until confirmed', async () => {
+    const page = await openAndReview('saved-answers.html');
+    assert(
+      await clickRowLinkIn(page, 'Why do you want', 'Use a saved answer'),
+      'no "Use a saved answer" on the essay row',
+    );
+    await page.waitForFunction(
+      () =>
+        document
+          .querySelector('[data-fillwright-widget]')
+          .shadowRoot.querySelector('.fw-saved .fw-saved__select') !== null,
+      { timeout: 10_000 },
+    );
+    const listed = await page.evaluate(() => {
+      const select = document
+        .querySelector('[data-fillwright-widget]')
+        .shadowRoot.querySelector('.fw-saved__select');
+      return { value: select.value, options: Array.from(select.options).map((o) => o.textContent) };
+    });
+    assertEqual(listed.value, '', 'a saved answer was pre-selected');
+    assertEqual(listed.options[1], 'Why do you want to work here', 'best match not listed first');
+    assert(
+      !listed.options.join('|').includes(SAVED_ANSWER_TEXT),
+      'answer text reached the page before it was picked',
+    );
+
+    await page.evaluate(() => {
+      const select = document
+        .querySelector('[data-fillwright-widget]')
+        .shadowRoot.querySelector('.fw-saved__select');
+      select.value = 'e2e-sa-2';
+    });
+    assert(
+      await clickRowLinkIn(page, 'Why do you want', 'Show this answer'),
+      'no Show this answer',
+    );
+    await page.waitForFunction(
+      () =>
+        document
+          .querySelector('[data-fillwright-widget]')
+          .shadowRoot.querySelector('.fw-saved textarea') !== null,
+      { timeout: 10_000 },
+    );
+    assertEqual(
+      await page.evaluate(() => document.getElementById('s-why').value),
+      '',
+      'the saved answer reached the form before "Use this answer"',
+    );
+    // The panel ignores synthetic input, so edit with the real keyboard.
+    const area = await page.evaluateHandle(() =>
+      document
+        .querySelector('[data-fillwright-widget]')
+        .shadowRoot.querySelector('.fw-saved textarea'),
+    );
+    await area.asElement().focus();
+    await page.evaluate(
+      (node) => node.setSelectionRange(node.value.length, node.value.length),
+      area,
+    );
+    await page.keyboard.type(' Edited.');
+    assert(await clickRowLinkIn(page, 'Why do you want', 'Use this answer'), 'no Use this answer');
+    await page.waitForFunction(() => document.getElementById('s-why').value.length > 0, {
+      timeout: 10_000,
+    });
+    assertEqual(
+      await page.evaluate(() => document.getElementById('s-why').value),
+      `${SAVED_ANSWER_TEXT} Edited.`,
+      'the edited saved answer was not written',
+    );
+    assertEqual(await page.evaluate(() => window.__submitted ?? false), false, 'submitted');
+    await page.close();
+  });
 
   /* --- error recovery ------------------------------------------------- */
 
@@ -736,6 +1465,27 @@ export async function runV05Suite(ctx) {
         .join(''),
     );
     assertEqual(values, '', 'the form was changed');
+    await page.close();
+  });
+
+  await test('verify: a cut value fails and is removed, a masked phone passes', async () => {
+    const page = await browser.newPage();
+    await page.goto(url('strict-verify.html'), { waitUntil: 'domcontentloaded' });
+    await scanPage(worker, url('strict-verify.html'));
+    await waitForWidget(page, (s) => s.text.includes('application field'));
+    assert(await clickWidgetButton(page, 'Fill'), 'no Fill button');
+    const widget = await waitForWidget(page, (s) => s.text.includes('was cut'));
+    const values = await page.evaluate(() => ({
+      first: document.getElementById('s-first').value,
+      linkedin: document.getElementById('s-linkedin').value,
+      code: document.getElementById('s-github').value,
+      phone: document.getElementById('s-phone').value,
+    }));
+    assertEqual(values.linkedin, '', 'a value longer than maxlength was written');
+    assertEqual(values.code, '', 'a truncated value was left in the field');
+    assertEqual(values.phone, '(98450) 12345', 'the masked phone was not accepted');
+    assert(values.first !== '', 'the plain field was not filled');
+    assert(widget.text.includes('accepts 20 characters'), `unexpected text: ${widget.text}`);
     await page.close();
   });
 
@@ -800,6 +1550,110 @@ export async function runV05Suite(ctx) {
     assert(state.text.includes('off-limits'), `unclear message: ${state.text}`);
     assertEqual(state.disabled, true, 'Fill this page should be disabled here');
     await popup.close();
+  });
+
+  await test('shadow DOM: labels resolve inside the shadow root and from the host', async () => {
+    const page = await openAndReview('shadow-labels.html');
+    const widget = await readWidget(page);
+    const labels = widget.items.map((item) => item.label);
+    for (const expected of ['First Name', 'Email', 'GitHub']) {
+      assert(itemFor(widget, expected), `no row for ${expected}: ${JSON.stringify(labels)}`);
+    }
+    assert(
+      !labels.some((label) => label.includes('Outside decoy')),
+      `a document id labelled a shadow field: ${JSON.stringify(labels)}`,
+    );
+    await page.close();
+  });
+
+  /* --- settings that change what the panel does ----------------------- */
+
+  await test('settings: theme and reduced motion reach the on-page panel', async () => {
+    await ui({ type: 'ui:set-settings', patch: { ui: { theme: 'dark', reducedMotion: true } } });
+    try {
+      const page = await openAndReview('settings-effects.html');
+      const look = await page.evaluate(() => {
+        const root = document.querySelector('[data-fillwright-widget]').shadowRoot;
+        const panel = root.querySelector('.fw-widget');
+        return {
+          theme: panel.getAttribute('data-theme'),
+          motion: panel.getAttribute('data-reduced-motion'),
+          css: root.querySelector('style').textContent,
+          animation: getComputedStyle(panel).animationName,
+          background: getComputedStyle(root.querySelector('.fw-card')).backgroundColor,
+        };
+      });
+      assertEqual(look.theme, 'dark', 'panel theme');
+      assertEqual(look.motion, 'true', 'panel reduced motion');
+      assertEqual(look.animation, 'none', 'the panel still animates');
+      assert(!look.css.includes('prefers-color-scheme'), 'dark rules still follow the system');
+      assertEqual(look.background, 'rgb(26, 25, 31)', 'the panel card is not dark');
+      await page.close();
+    } finally {
+      await ui({
+        type: 'ui:set-settings',
+        patch: { ui: { theme: 'system', reducedMotion: false } },
+      });
+    }
+  });
+
+  await test('settings: a certify checkbox needs you and is never ticked', async () => {
+    const page = await openAndReview('settings-effects.html');
+    const row = itemFor(await readWidget(page), 'I certify');
+    assert(row, 'the certify box is not listed');
+    assertEqual(row.badge, 'Needs your answer', 'certify box status');
+    assert(await clickWidgetButton(page, 'Fill'), 'no Fill button');
+    await waitForWidget(page, (s) => s.text.includes('updated'));
+    assertEqual(
+      await page.evaluate(() => document.getElementById('s-certify').checked),
+      false,
+      'the certify box was ticked',
+    );
+    await page.close();
+  });
+
+  await test('settings: filling a remembered field counts a use of it', async () => {
+    const page = await openAndReview('settings-effects.html');
+    assertEqual(await correct(page, 'Portfolio handle', 'links.github', true), 'ok', 'correction');
+    await waitForWidget(page, (s) => itemFor(s, 'Portfolio handle')?.value !== '');
+    await page.close();
+    const again = await openAndReview('settings-effects.html');
+    assert(await clickWidgetButton(again, 'Fill'), 'no Fill button');
+    await waitForWidget(again, (s) => s.text.includes('updated'));
+    assertEqual(
+      await again.evaluate(() => document.getElementById('s-handle').value),
+      'https://github.com/aditir',
+      'remembered field not filled',
+    );
+    await again.close();
+    let used = 0;
+    for (let tries = 0; tries < 20 && used === 0; tries += 1) {
+      const rules = await ui({ type: 'ui:list-saved-mappings', origin: server.origin });
+      used = rules.data.find((rule) => rule.label.startsWith('Portfolio handle'))?.useCount ?? 0;
+      if (used === 0) await sleep(150);
+    }
+    assertEqual(used, 1, 'use count after one fill');
+  });
+
+  await test('settings: the on-page prompt can be switched off in Assist', async () => {
+    await ui({
+      type: 'ui:set-settings',
+      patch: { autofill: { mode: 'assist' }, ui: { showFloatingWidget: false } },
+    });
+    await ui({ type: 'ui:sync-auto-detect' });
+    try {
+      const page = await browser.newPage();
+      await page.goto(url('greenhouse.html'), { waitUntil: 'domcontentloaded' });
+      await sleep(4_000);
+      assertEqual(await hasPanel(page), false, 'a prompt appeared with the prompt switched off');
+      await page.close();
+    } finally {
+      await ui({
+        type: 'ui:set-settings',
+        patch: { autofill: { mode: 'manual' }, ui: { showFloatingWidget: true } },
+      });
+      await ui({ type: 'ui:sync-auto-detect' });
+    }
   });
 
   await control.close();

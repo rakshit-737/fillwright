@@ -1,0 +1,21 @@
+Europass Curriculum Vitae
+
+PERSONAL INFORMATION
+Name: Katarzyna Nowicka
+Email: katarzyna.nowicka@example.com
+Telephone: +48 601 555 234
+Address: Krakow, Poland
+
+WORK EXPERIENCE
+01/2021 – Present
+Quality Assurance Engineer
+Wisła Software Sp. z o.o., Krakow (Poland)
+Designed automated regression suites in Selenium
+
+EDUCATION AND TRAINING
+10/2016 – 06/2020
+Master of Science in Computer Science
+AGH University of Science and Technology, Krakow (Poland)
+
+PERSONAL SKILLS
+Selenium, Java, Jenkins, Cypress

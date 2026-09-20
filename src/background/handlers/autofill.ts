@@ -1,15 +1,16 @@
 import { handle, ok, err } from '../router';
 import { getProfile } from '@/storage/profiles';
 import { getSettings } from '@/storage/settings';
-import { listMappings, saveMapping } from '@/storage/mappings';
+import { listMappings, recordMappingUse, saveMapping } from '@/storage/mappings';
 import { logApplication } from '@/storage/history';
-import { buildMappings, buildFillPlan } from '@/autofill/plan';
+import { buildMappings, buildFillPlan, withoutValues } from '@/autofill/plan';
 import { originFromUrl, pageKeyFromUrl, sanitizeString } from '@/security/validate';
 import { validateScan } from '@/security/scan-guard';
 import { classifyField } from '@/field-detection/classify';
 import { scoreApplicationContext } from '@/field-detection/context';
 import { describeError, unsupportedPageCode } from '@/utils/errors';
 import { FIELD_CATALOG } from '@/field-detection/catalog';
+import { isValidCustomKey } from '@/autofill/saved-answers';
 import type { CanonicalField, SavedMapping, ScanResult } from '@/types/fields';
 import type { ContentRequest, UiRequest } from '@/types/messages';
 
@@ -103,20 +104,41 @@ async function readProgress(tabId: number, origin: string): Promise<StepProgress
   return stored;
 }
 
+const ASSIGNABLE = new Set<string>(FIELD_CATALOG.map((entry) => entry.field));
+
+/**
+ * A correction arriving from a page: one of the picker's fields, or `custom`
+ * with a key naming one of the user's custom fields or saved answers. Anything
+ * else (a demographic, `unknown`, a malformed key) is refused.
+ */
+export function sanitizeCorrection(
+  canonicalRaw: unknown,
+  customKeyRaw: unknown,
+): { canonical: CanonicalField; customKey?: string } | null {
+  const canonical = sanitizeString(canonicalRaw, 64);
+  if (canonical === 'custom') {
+    const customKey = sanitizeString(customKeyRaw, 80);
+    return isValidCustomKey(customKey) ? { canonical: 'custom', customKey } : null;
+  }
+  return ASSIGNABLE.has(canonical) ? { canonical: canonical as CanonicalField } : null;
+}
+
 function sanitizeOverrides(raw: unknown, origin: string): SavedMapping[] {
   if (!Array.isArray(raw)) return [];
-  const known = new Set<string>(FIELD_CATALOG.map((entry) => entry.field));
   return raw.slice(0, 100).flatMap((item, index) => {
     const fingerprint = sanitizeString((item as { fingerprint?: unknown })?.fingerprint, 240);
-    const canonical = sanitizeString((item as { canonical?: unknown })?.canonical, 64);
-    if (!fingerprint || !known.has(canonical)) return [];
+    const correction = sanitizeCorrection(
+      (item as { canonical?: unknown })?.canonical,
+      (item as { customKey?: unknown })?.customKey,
+    );
+    if (!fingerprint || !correction) return [];
     return [
       {
         id: `override-${index}`,
         origin,
         fingerprint,
         label: '',
-        canonical: canonical as CanonicalField,
+        ...correction,
         createdAt: '',
         useCount: 0,
       },
@@ -133,7 +155,7 @@ export function registerAutofillHandlers(): void {
    * This is the only path by which profile data reaches a page.
    */
   handle('content:request-mappings', async (request, sender) => {
-    const { scan, overrides } = request as Extract<
+    const { scan, overrides, withholdValues } = request as Extract<
       ContentRequest,
       { type: 'content:request-mappings' }
     >;
@@ -169,19 +191,21 @@ export function registerAutofillHandlers(): void {
       mappings,
     };
 
+    const plan = buildFillPlan(resolved, `${Date.now()}`, {
+      education: profile.education.length,
+      experience: profile.experience.length,
+    });
     return ok({
-      plan: buildFillPlan(resolved, `${Date.now()}`, {
-        education: profile.education.length,
-        experience: profile.experience.length,
-      }),
+      // Smart mode prepares a plan before the user has engaged. Until they
+      // open the panel, only counts and statuses cross into the page.
+      plan: withholdValues === true ? withoutValues(plan) : plan,
       // The name only, so the panel can say which profile it is using.
       profileName: profile.name,
       settings: {
-        previewBeforeFill: settings.autofill.previewBeforeFill,
         highlightFilledFields: settings.autofill.highlightFilledFields,
-        reducedMotion: settings.ui.reducedMotion,
-        theme: settings.ui.theme,
         diagnostics: settings.advanced.diagnostics,
+        theme: settings.ui.theme,
+        reducedMotion: settings.ui.reducedMotion,
       },
     });
   });
@@ -191,13 +215,15 @@ export function registerAutofillHandlers(): void {
     const { mapping } = request as Extract<ContentRequest, { type: 'content:save-mapping' }>;
     const origin = originFromUrl(sender.tab?.url ?? sender.url ?? '');
     if (!origin) return err('Unknown sender', 'ENOSENDER');
+    const correction = sanitizeCorrection(mapping?.canonical, mapping?.customKey);
+    const fingerprint = sanitizeString(mapping?.fingerprint, 240);
+    if (!correction || !fingerprint) return err('Not a field Fillwright can assign', 'EBADMAPPING');
 
     const saved = await saveMapping({
       origin,
-      fingerprint: sanitizeString(mapping.fingerprint, 240),
+      fingerprint,
       label: sanitizeString(mapping.label, 120),
-      canonical: mapping.canonical,
-      ...(mapping.customKey ? { customKey: sanitizeString(mapping.customKey, 80) } : {}),
+      ...correction,
     });
     return ok(saved);
   });
@@ -328,10 +354,26 @@ export function registerAutofillHandlers(): void {
     return ok(next);
   });
 
-  handle('content:fill-complete', async (request) => {
-    const { outcomes } = request as Extract<ContentRequest, { type: 'content:fill-complete' }>;
+  handle('content:fill-complete', async (request, sender) => {
+    const { outcomes, mappingIds } = request as Extract<
+      ContentRequest,
+      { type: 'content:fill-complete' }
+    >;
     // Counts only. Field values are never recorded, here or anywhere else.
     const filled = Array.isArray(outcomes) ? outcomes.filter((outcome) => outcome?.ok).length : 0;
+
+    // Remembered mappings that were actually written, by id. Only ids of
+    // active rules saved for the sender's own site are counted, once each.
+    const origin = originFromUrl(sender.tab?.url ?? sender.url ?? '');
+    if (origin && Array.isArray(mappingIds) && mappingIds.length > 0) {
+      const wanted = new Set(
+        mappingIds.slice(0, 400).filter((id): id is string => typeof id === 'string'),
+      );
+      const owned = (await listMappings(origin)).filter(
+        (mapping) => !mapping.disabled && wanted.has(mapping.id),
+      );
+      for (const mapping of owned) await recordMappingUse(mapping.id);
+    }
     return ok({ filled });
   });
 }

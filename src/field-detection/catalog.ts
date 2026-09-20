@@ -29,6 +29,18 @@ export const FIELD_CATALOG: CatalogEntry[] = [
   { field: 'personal.pronouns', label: 'Pronouns', group: 'About you' },
   { field: 'personal.email', label: 'Email', group: 'About you' },
   { field: 'personal.phone', label: 'Phone', group: 'About you' },
+  {
+    field: 'personal.phoneCountryCode',
+    label: 'Phone country code',
+    group: 'About you',
+    hint: 'Only when your saved phone starts with +code.',
+  },
+  {
+    field: 'personal.phoneNational',
+    label: 'Phone without country code',
+    group: 'About you',
+    hint: 'Only when your saved phone starts with +code.',
+  },
   { field: 'personal.dateOfBirth', label: 'Date of birth', group: 'About you' },
 
   /* ------------------------------------------------------------- address */
@@ -56,12 +68,28 @@ export const FIELD_CATALOG: CatalogEntry[] = [
   { field: 'education.gpa', label: 'GPA', group: 'Education' },
   { field: 'education.startDate', label: 'Education start date', group: 'Education' },
   { field: 'education.graduationDate', label: 'Graduation date', group: 'Education' },
+  { field: 'education.startMonth', label: 'Education start month', group: 'Education' },
+  { field: 'education.startYear', label: 'Education start year', group: 'Education' },
+  { field: 'education.endMonth', label: 'Graduation month', group: 'Education' },
+  { field: 'education.endYear', label: 'Graduation year', group: 'Education' },
+  { field: 'education.location', label: 'School location', group: 'Education' },
 
   /* ---------------------------------------------------------- experience */
   { field: 'experience.company', label: 'Employer', group: 'Experience' },
   { field: 'experience.title', label: 'Job title', group: 'Experience' },
   { field: 'experience.startDate', label: 'Role start date', group: 'Experience' },
   { field: 'experience.endDate', label: 'Role end date', group: 'Experience' },
+  { field: 'experience.startMonth', label: 'Role start month', group: 'Experience' },
+  { field: 'experience.startYear', label: 'Role start year', group: 'Experience' },
+  { field: 'experience.endMonth', label: 'Role end month', group: 'Experience' },
+  { field: 'experience.endYear', label: 'Role end year', group: 'Experience' },
+  {
+    field: 'experience.current',
+    label: 'I currently work here',
+    group: 'Experience',
+    hint: 'A tick box. The end date is left empty for a current role.',
+  },
+  { field: 'experience.location', label: 'Role location', group: 'Experience' },
   { field: 'experience.yearsOfExperience', label: 'Years of experience', group: 'Experience' },
   { field: 'experience.description', label: 'What you did', group: 'Experience' },
 
@@ -110,12 +138,19 @@ export const FIELD_CATALOG: CatalogEntry[] = [
     group: 'Only from your saved answers',
     hint: 'Left blank unless you switch salary answers on.',
   },
+  {
+    field: 'sensitive.currentSalary',
+    label: 'Current salary',
+    group: 'Only from your saved answers',
+    hint: 'Left blank unless you switch salary answers on.',
+  },
 ];
 
 const BY_FIELD = new Map(FIELD_CATALOG.map((entry) => [entry.field, entry]));
 
 /** A user-facing name for a canonical field, for labels and explanations. */
 export function catalogLabel(field: CanonicalField): string {
+  if (field === 'custom') return 'One of your custom fields or saved answers';
   return BY_FIELD.get(field)?.label ?? 'Something else';
 }
 
@@ -126,4 +161,19 @@ export function catalogGroups(): string[] {
 /** Fields a user may assign by hand. Demographics are deliberately excluded. */
 export function isAssignable(field: CanonicalField): boolean {
   return BY_FIELD.has(field);
+}
+
+/** The review-list section a field belongs to. Unrecognised fields go last. */
+export function catalogGroupOf(field: CanonicalField): string {
+  return BY_FIELD.get(field)?.group ?? 'Other questions';
+}
+
+/**
+ * True when `field` may be named in an options.html#/profile deep link.
+ *
+ * The value arrives from a content script, so it is checked against the fixed
+ * catalog by exact key — never interpreted — before it becomes part of a URL.
+ */
+export function isOpenableProfileField(field: unknown): field is CanonicalField {
+  return typeof field === 'string' && BY_FIELD.has(field as CanonicalField);
 }

@@ -1,0 +1,28 @@
+{
+  "layout": "LaTeX Jake's resume",
+  "firstName": "Ethan",
+  "lastName": "Brooks-Lee",
+  "email": "ethan.brookslee@example.com",
+  "phone": "(617) 555-0133",
+  "education": [
+    {
+      "institution": "Northeastern University",
+      "degree": "Bachelor of Science",
+      "gpa": "3.72"
+    }
+  ],
+  "experience": [
+    {
+      "company": "Harborlight Health",
+      "title": "Data Engineering Co-op"
+    }
+  ],
+  "skills": [
+    "Python",
+    "SQL",
+    "Scala",
+    "Airflow",
+    "Spark",
+    "dbt"
+  ]
+}

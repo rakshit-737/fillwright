@@ -1,6 +1,13 @@
 import { handle, ok, err } from '../router';
 import { destroyDb, idb } from '@/storage/idb';
-import { clearHistory, listHistory } from '@/storage/history';
+import {
+  addHistoryEntries,
+  clearHistory,
+  deleteHistoryEntry,
+  listHistory,
+  updateHistoryEntry,
+} from '@/storage/history';
+import { sanitizeTrackerPatch } from '@/storage/history-model';
 import {
   clearMappings,
   deleteMapping,
@@ -15,9 +22,12 @@ import { FIELD_CATALOG } from '@/field-detection/catalog';
 import {
   EXPORT_FORMAT,
   EXPORT_VERSION,
+  applyImportSelection,
   parseImport,
   portableSettings,
+  previewImport,
   type ExportFile,
+  type ImportPlan,
 } from '@/profile/portable';
 import { syncAutoDetect } from '../auto-detect';
 import type { CanonicalField } from '@/types/fields';
@@ -29,6 +39,21 @@ export function registerPrivacyHandlers(): void {
   handle('ui:clear-history', async () => {
     await clearHistory();
     return ok({ cleared: true });
+  });
+
+  /** Tracker fields only; company, role, site and date are not editable here. */
+  handle('ui:update-history', async (request) => {
+    const { id, patch } = request as Extract<UiRequest, { type: 'ui:update-history' }>;
+    const clean = sanitizeTrackerPatch(patch);
+    if (!clean) return err('That change is not valid.', 'EBADPATCH');
+    const updated = await updateHistoryEntry(sanitizeString(id, 64), clean);
+    return updated ? ok(updated) : err('Entry not found', 'ENOTFOUND');
+  });
+
+  handle('ui:delete-history-entry', async (request) => {
+    const { id } = request as Extract<UiRequest, { type: 'ui:delete-history-entry' }>;
+    await deleteHistoryEntry(sanitizeString(id, 64));
+    return ok({ deleted: true });
   });
 
   handle('ui:list-saved-mappings', async (request) => {
@@ -101,25 +126,27 @@ export function registerPrivacyHandlers(): void {
     return ok({ ...file, resumeCount: await idb.count('resumes') });
   });
 
+  /** Parses a file without storing anything, for the review screen. */
+  handle('ui:preview-import', async (request) => {
+    const { payload } = request as Extract<UiRequest, { type: 'ui:preview-import' }>;
+    const parsed = await parse(payload);
+    if (!parsed.ok) return parsed.result;
+    return ok(previewImport(parsed.plan, await getSettings()));
+  });
+
   /**
-   * Adds the contents of an export. Nothing already stored is replaced:
-   * profiles arrive with new ids, and mappings merge by fingerprint.
+   * Adds what the user ticked on the review screen. Nothing already stored is
+   * replaced: profiles arrive with new ids, and mappings merge by fingerprint
+   * (marked imported, so they are proposed but never pre-ticked).
    */
   handle('ui:import-data', async (request) => {
-    const { payload } = request as Extract<UiRequest, { type: 'ui:import-data' }>;
-    const existing = await listProfiles();
-    let plan;
-    try {
-      plan = parseImport(
-        payload,
-        existing.map((profile) => profile.name),
-      );
-    } catch (cause) {
-      return err(
-        cause instanceof Error ? cause.message : 'This file could not be read.',
-        'EBADIMPORT',
-      );
-    }
+    const { payload, selection } = request as Extract<UiRequest, { type: 'ui:import-data' }>;
+    const parsed = await parse(payload);
+    if (!parsed.ok) return parsed.result;
+    const plan = applyImportSelection(
+      parsed.plan,
+      selection ?? { profiles: [], mappings: [], settings: [] },
+    );
 
     // Written one by one: if the vault is locked, the first write throws and
     // the user is asked to unlock, rather than half the import landing.
@@ -133,8 +160,8 @@ export function registerPrivacyHandlers(): void {
     }
     let historyCount = 0;
     if (plan.history.length && (await getSettings()).privacy.keepApplicationHistory) {
-      for (const entry of plan.history) await idb.put('history', entry);
-      historyCount = plan.history.length;
+      // Through the store, so imported entries are encrypted when the vault is on.
+      historyCount = await addHistoryEntries(plan.history);
     }
     await syncAutoDetect().catch(() => undefined);
 
@@ -146,4 +173,28 @@ export function registerPrivacyHandlers(): void {
       warnings: plan.warnings,
     });
   });
+}
+
+/** The file is parsed afresh for each step; the page never supplies a plan. */
+async function parse(
+  payload: unknown,
+): Promise<{ ok: true; plan: ImportPlan } | { ok: false; result: ReturnType<typeof err> }> {
+  const existing = await listProfiles();
+  try {
+    return {
+      ok: true,
+      plan: parseImport(
+        payload,
+        existing.map((profile) => profile.name),
+      ),
+    };
+  } catch (cause) {
+    return {
+      ok: false,
+      result: err(
+        cause instanceof Error ? cause.message : 'This file could not be read.',
+        'EBADIMPORT',
+      ),
+    };
+  }
 }

@@ -1,0 +1,31 @@
+{
+  "layout": "single column",
+  "firstName": "Kwame",
+  "lastName": "Asante",
+  "email": "kwame.asante@example.com",
+  "phone": "+233 24 555 0199",
+  "education": [
+    {
+      "institution": "Kwame Nkrumah University of Science and Technology",
+      "degree": "BSc",
+      "gpa": ""
+    }
+  ],
+  "experience": [
+    {
+      "company": "Brightpath Cloud",
+      "title": "Site Reliability Engineer"
+    },
+    {
+      "company": "Volta Networks",
+      "title": "Systems Administrator"
+    }
+  ],
+  "skills": [
+    "Kubernetes",
+    "Terraform",
+    "AWS",
+    "Bash",
+    "Prometheus"
+  ]
+}

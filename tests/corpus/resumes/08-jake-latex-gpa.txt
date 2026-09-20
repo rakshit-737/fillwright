@@ -1,0 +1,15 @@
+Ethan Brooks-Lee
+(617) 555-0133 | ethan.brookslee@example.com
+
+Education
+Northeastern University                                        Boston, MA
+Bachelor of Science in Data Science, GPA: 3.72                 Sep. 2021 – May 2025
+
+Experience
+Data Engineering Co-op                                         Jan. 2024 – Jun. 2024
+Harborlight Health                                             Boston, MA
+• Moved nightly ETL from cron to Airflow
+
+Technical Skills
+Languages: Python, SQL, Scala
+Tools: Airflow, Spark, dbt

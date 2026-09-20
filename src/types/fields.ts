@@ -13,6 +13,10 @@ export type CanonicalField =
   | 'personal.pronouns'
   | 'personal.email'
   | 'personal.phone'
+  /** Dialling code alone, e.g. "+91" — only derived from a stored "+CC …" phone. */
+  | 'personal.phoneCountryCode'
+  /** The phone number without its dialling code. */
+  | 'personal.phoneNational'
   | 'personal.dateOfBirth'
   // address
   | 'address.line1'
@@ -38,11 +42,23 @@ export type CanonicalField =
   | 'education.startDate'
   | 'education.endDate'
   | 'education.graduationDate'
+  | 'education.startMonth'
+  | 'education.startYear'
+  | 'education.endMonth'
+  | 'education.endYear'
+  | 'education.location'
   // experience
   | 'experience.company'
   | 'experience.title'
   | 'experience.startDate'
   | 'experience.endDate'
+  | 'experience.startMonth'
+  | 'experience.startYear'
+  | 'experience.endMonth'
+  | 'experience.endYear'
+  /** "I currently work here". */
+  | 'experience.current'
+  | 'experience.location'
   | 'experience.description'
   | 'experience.yearsOfExperience'
   // documents & free text
@@ -52,6 +68,7 @@ export type CanonicalField =
   | 'profile.skills'
   // preferences
   | 'preferences.desiredSalary'
+  | 'sensitive.currentSalary'
   | 'preferences.startDate'
   | 'preferences.noticePeriod'
   | 'preferences.workMode'
@@ -125,6 +142,12 @@ export interface FieldSignals {
   optionLabels: string[];
   required: boolean;
   maxLength: number | null;
+  /**
+   * BCP 47 language of the control, from the nearest `lang` attribute
+   * ("de-DE"). Chooses which locale vocabulary packs apply. Empty or absent
+   * when the page declares none.
+   */
+  lang?: string;
 }
 
 export interface DetectedField {
@@ -137,6 +160,11 @@ export interface DetectedField {
   currentValue: string;
   hasExistingValue: boolean;
   visible: boolean;
+  /**
+   * Why a field was judged not visible ("transparent", "off-screen", …).
+   * Stays in the page: a hidden field is never sent to the worker.
+   */
+  hiddenReason?: string | null;
   disabled: boolean;
   readOnly: boolean;
   /** Index in document order — used to order the review list. */
@@ -182,8 +210,12 @@ export interface FieldMapping {
   rationale: string;
   /** True when this mapping came from a user-saved rule for this site. */
   fromSavedRule: boolean;
+  /** The id of that saved rule, so a fill can count its use. */
+  savedMappingId?: string;
   /** True when the user chose this mapping, saved or for this form only. */
   corrected?: boolean;
+  /** True when the saved rule came from an import file and is unconfirmed. */
+  imported?: boolean;
   /**
    * Which repeated block this field belongs to, and therefore which profile
    * entry it draws from. 0 for non-repeating fields.
@@ -216,6 +248,11 @@ export interface FillPlan {
   blocks: { education: number; experience: number };
   /** Entries the profile holds, for the same comparison. */
   available: { education: number; experience: number };
+  /**
+   * True for a plan prepared before the user engaged (Smart mode): counts and
+   * statuses only, every value and rationale blanked. It cannot fill anything.
+   */
+  withheld?: boolean;
 }
 
 export interface FillPlanEntry {
@@ -236,8 +273,12 @@ export interface FillPlanEntry {
   fingerprint: string;
   /** True when this mapping came from a correction the user already taught. */
   remembered: boolean;
+  /** The saved rule behind a remembered entry. An id, never a value. */
+  savedMappingId?: string;
   /** True when the user picked this mapping, saved or not. */
   corrected?: boolean;
+  /** True when the remembered rule came from an import and is unconfirmed. */
+  imported?: boolean;
   /** The form marks this field as required. */
   required?: boolean;
 }
@@ -266,4 +307,9 @@ export interface SavedMapping {
   useCount: number;
   /** A paused rule is kept but not applied. */
   disabled?: boolean;
+  /**
+   * Came from an import file and has not yet been confirmed on a real form.
+   * Such a rule is proposed at review confidence and starts unticked.
+   */
+  imported?: boolean;
 }

@@ -1,0 +1,15 @@
+Noah Petrakis
+Melbourne, VIC | noah.petrakis@example.com | +61 412 555 019
+
+EXPERIENCE
+Junior Developer, Wattle Software Pty Ltd
+Melbourne | February 2024 - Present
+High School Teacher, Brunswick Secondary College
+Melbourne | January 2017 - December 2023
+
+EDUCATION
+University of Melbourne
+Bachelor of Arts | 2012 - 2015
+
+SKILLS
+JavaScript, Node.js, Vue, Teaching

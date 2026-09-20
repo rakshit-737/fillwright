@@ -3,11 +3,20 @@ import { collectPageSignals, guessPosting } from './page-signals';
 import { fillFields, undoFill, type UndoRecord } from '@/autofill/fill';
 import { collectPostingText, type JobMatch } from '@/autofill/job-match';
 import { addEntries, findAddControls } from '@/autofill/repeat';
-import { FillwrightWidget, type AddOffer, type FillSummary, type ProfileChoice } from './widget';
+import { secondPassTargets } from '@/autofill/second-pass';
+import {
+  FillwrightWidget,
+  type AddOffer,
+  type FillSummary,
+  type HiddenField,
+  type ProfileChoice,
+} from './widget';
 import type { DraftFact } from './review';
+import type { AnswerChoices } from '@/autofill/saved-answers';
 import { applyAdapter, detectAdapter } from '@/adapters';
 import type { CanonicalField, DetectedField, FillPlan, FillPlanEntry } from '@/types/fields';
 import type { AutofillMode } from '@/types/settings';
+import { isOpenableProfileField } from '@/field-detection/catalog';
 import { describeError } from '@/utils/errors';
 import { request, notify } from './transport';
 import { controlSignature, createThrottle, mutationsMayAffectForm } from './observe';
@@ -74,7 +83,7 @@ const passiveThrottle = createThrottle(() => evaluatePassive(), {
 });
 
 /** Corrections for this page only, never saved. Keyed by field fingerprint. */
-const overrides = new Map<string, CanonicalField>();
+const overrides = new Map<string, { canonical: CanonicalField; customKey?: string }>();
 
 function boot(): void {
   const activated = consumeActivation();
@@ -202,13 +211,17 @@ async function runScan(quiet: boolean): Promise<void> {
 
   // Site-specific adapters only prepare the DOM (expanding collapsed sections,
   // for example). They never supply values and never bypass any safety rule.
-  const adapter = detectAdapter(location.href);
+  // They press page controls, so they run only when the user has asked:
+  // never from a quiet scan (Smart mode's passive preparation, a form change,
+  // a remembered correction).
+  const adapter = quiet ? null : detectAdapter(location.href);
   if (adapter) await applyAdapter(adapter);
 
   const { fields, elements, truncated } = harvestFields(document);
   lastSignature = `${location.href}#${controlSignature(document)}`;
   const visible = fields.filter((field) => field.visible && !field.disabled);
   const fieldMap = new Map(visible.map((field) => [field.id, field]));
+  widget.setHidden(hiddenFieldsOf(fields));
 
   // Nothing here, but the form is in a same-origin frame that has its own
   // copy of this script (explicit activation injects into every frame): stay
@@ -228,7 +241,12 @@ async function runScan(quiet: boolean): Promise<void> {
   const response = await request<{
     plan: FillPlan;
     profileName?: string;
-    settings?: { highlightFilledFields?: boolean; diagnostics?: boolean };
+    settings?: {
+      highlightFilledFields?: boolean;
+      diagnostics?: boolean;
+      theme?: 'system' | 'light' | 'dark';
+      reducedMotion?: boolean;
+    };
   }>({
     type: 'content:request-mappings',
     scan: {
@@ -239,7 +257,9 @@ async function runScan(quiet: boolean): Promise<void> {
       fields: visible,
       mappings: [],
     },
-    overrides: [...overrides].map(([fingerprint, canonical]) => ({ fingerprint, canonical })),
+    overrides: [...overrides].map(([fingerprint, correction]) => ({ fingerprint, ...correction })),
+    // Before the user has opened the panel, only counts and statuses come back.
+    withholdValues: quiet && !engaged,
   });
 
   if (!response.ok) {
@@ -262,6 +282,12 @@ async function runScan(quiet: boolean): Promise<void> {
     undo: session?.undo ?? [],
     highlight: Boolean(response.data.settings?.highlightFilledFields),
   };
+
+  const theme = response.data.settings?.theme;
+  widget.setAppearance({
+    theme: theme === 'light' || theme === 'dark' ? theme : 'system',
+    reducedMotion: Boolean(response.data.settings?.reducedMotion),
+  });
 
   // Diagnostics are read from the harvested fields, which stay in this page —
   // they are never sent to the worker and never persisted.
@@ -286,10 +312,13 @@ async function runScan(quiet: boolean): Promise<void> {
 }
 
 async function loadExtras(): Promise<void> {
-  const [progress, match] = await Promise.all([
+  const [progress, match, choices] = await Promise.all([
     send<{ steps: Record<string, number>; filled: number }>({ type: 'content:get-progress' }),
     loadJobMatch(),
+    // Titles only, so the picker and essay rows can offer them.
+    send<AnswerChoices>({ type: 'content:answer-choices' }),
   ]);
+  if (widget) widget.choices = choices;
   widget?.setMeta({
     progress: progress
       ? { steps: Object.keys(progress.steps).length, filled: progress.filled }
@@ -316,11 +345,13 @@ function createWidget(): FillwrightWidget {
     {
       onFill: (entries) => void runFill(entries),
       onUndo: () => {
-        void applyUndo().then((result) => widget?.markUndone(result.restored));
+        void applyUndo().then((result) => widget?.markUndone(result.restored, result.notRestored));
       },
       onRescan: () => void open(),
+      onOpen: () => void open(),
       onClose: () => teardown(),
-      onTeach: (entry, field, remember) => void teachMapping(entry, field, remember),
+      onTeach: (entry, field, remember, customKey) =>
+        void teachMapping(entry, field, remember, customKey),
       onListProfiles: async () =>
         (await send<ProfileChoice[]>({ type: 'content:list-profiles' })) ?? [],
       onSwitchProfile: (profileId) => {
@@ -331,12 +362,17 @@ function createWidget(): FillwrightWidget {
       },
       onAddEntries: (offer) => void addMissingEntries(offer),
       onUnlock: () => openExtensionPage('security'),
-      onOpenPage: (route) => openExtensionPage(route),
+      onOpenPage: (route, field) => openExtensionPage(route, field),
       onReload: () => location.reload(),
       canDraft: () => draftAvailable !== false,
       onDraftStart: (entry) => void startDraft(entry),
       onDraftGenerate: (entry, factIds) => void generateDraft(entry, factIds),
       onDraftUse: (entry, text) => void applyDraft(entry, text),
+      onShowField: (fieldId) => showField(fieldId),
+      onSavedAnswerStart: (entry) => void startSavedAnswer(entry),
+      onSavedAnswerPick: (entry, id) => void pickSavedAnswer(entry, id),
+      onSavedAnswerUse: (entry, text) => void applySavedAnswer(entry, text),
+      onDraftStop: (entry) => stopDraft(entry.fieldId),
     },
     matchMedia('(prefers-reduced-motion: reduce)').matches,
   );
@@ -345,8 +381,66 @@ function createWidget(): FillwrightWidget {
 
 /* ---------------------------------------------------------------- filling */
 
+/**
+ * Fields that exist but a person could not see: honeypots, off-screen or
+ * transparent inputs. They are never sent for a value; the panel only counts
+ * them. `display: none` is left out of the count — that is how ordinary
+ * multi-step forms park later steps, and saying so would be noise.
+ */
+function hiddenFieldsOf(fields: DetectedField[]): HiddenField[] {
+  return fields
+    .filter(
+      (field) =>
+        !field.visible &&
+        !field.disabled &&
+        field.hiddenReason &&
+        field.hiddenReason !== 'not displayed',
+    )
+    .map((field) => ({
+      label:
+        field.signals.labelText || field.signals.placeholder || field.signals.name || 'A field',
+      reason: field.hiddenReason ?? 'hidden',
+    }));
+}
+
+const SHOW_OUTLINE_MS = 2400;
+
+/** "Show me": scroll a row's field into view and outline it for a moment. */
+function showField(fieldId: string): void {
+  const element = session?.elements.get(fieldId)?.find((node) => node.isConnected);
+  if (!element) return;
+  // A visually hidden radio or checkbox is shown through its label.
+  const target =
+    element instanceof HTMLInputElement &&
+    (element.type === 'radio' || element.type === 'checkbox') &&
+    element.closest('label')
+      ? (element.closest('label') as HTMLElement)
+      : element;
+  const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  target.scrollIntoView({
+    block: 'center',
+    inline: 'nearest',
+    behavior: reduced ? 'auto' : 'smooth',
+  });
+  if (target.hasAttribute('data-fillwright-shown')) return;
+  const previous = {
+    outline: target.style.outline,
+    outlineOffset: target.style.outlineOffset,
+  };
+  target.setAttribute('data-fillwright-shown', '');
+  target.style.outline = '3px solid #4b3ecf';
+  target.style.outlineOffset = '2px';
+  setTimeout(() => {
+    target.style.outline = previous.outline;
+    target.style.outlineOffset = previous.outlineOffset;
+    target.removeAttribute('data-fillwright-shown');
+  }, SHOW_OUTLINE_MS);
+}
+
 async function runFill(entries: FillPlanEntry[]): Promise<void> {
   if (!widget) return;
+  // A values-free plan (Smart mode, not yet opened) can never fill anything.
+  if (session?.plan?.withheld) return;
   // The plan holds values read while the vault was open. If it has locked
   // since, those values are not written: the user unlocks and scans again.
   const gate = await request<{ locked: boolean }>({ type: 'content:vault-state' });
@@ -358,6 +452,56 @@ async function runFill(entries: FillPlanEntry[]): Promise<void> {
   widget.renderFilling();
   const summary = await applyFill(entries);
   widget.markFilled(summary);
+  // A dependent list usually loads within a moment of its parent changing.
+  // The mutation observer catches most; this catches a page that swapped
+  // options without changing their count.
+  window.setTimeout(() => void checkSecondPass(), 1_200);
+}
+
+let checkingSecondPass = false;
+
+/**
+ * After a fill: reads the page again, and if dropdowns that were empty or
+ * unmatched now have options that fit, offers "N more fields can be filled
+ * now". It never fills them — the user opens the list and chooses. Returns
+ * true when an offer was made.
+ */
+async function checkSecondPass(): Promise<boolean> {
+  if (!session?.plan || !widget || checkingSecondPass) return false;
+  if (widget.state !== 'success' && widget.state !== 'partial') return false;
+  checkingSecondPass = true;
+  try {
+    const { fields } = harvestFields(document);
+    const visible = fields.filter((field) => field.visible && !field.disabled);
+    const targets = secondPassTargets([...session.fields.values()], visible, session.plan);
+    if (targets.length === 0) return false;
+
+    const response = await request<{ plan: FillPlan }>({
+      type: 'content:request-mappings',
+      scan: {
+        url: location.href,
+        pageKey: location.href,
+        adapterId: null,
+        scannedAt: new Date().toISOString(),
+        fields: visible,
+        mappings: [],
+      },
+      overrides: [...overrides].map(([fingerprint, canonical]) => ({ fingerprint, canonical })),
+    });
+    if (!response.ok) return false;
+    const ids = new Set(targets.map((field) => field.id));
+    const fillable = response.data.plan.entries.filter(
+      (entry) =>
+        ids.has(entry.fieldId) &&
+        entry.newValue !== '' &&
+        (entry.status === 'ready' || entry.status === 'review'),
+    ).length;
+    if (fillable === 0) return false;
+    widget?.offerSecondPass(fillable);
+    return true;
+  } finally {
+    checkingSecondPass = false;
+  }
 }
 
 async function applyFill(entries: FillPlanEntry[]): Promise<FillSummary & { ok: true }> {
@@ -403,9 +547,17 @@ async function applyFill(entries: FillPlanEntry[]): Promise<FillSummary & { ok: 
   const manual = left.filter((entry) => entry.status === 'manual-required').length;
 
   // Counts only — no field values ever leave this page.
+  const mappingIds = [
+    ...new Set(
+      [...filledIds]
+        .map((id) => byId.get(id)?.savedMappingId)
+        .filter((id): id is string => Boolean(id)),
+    ),
+  ];
   notify({
     type: 'content:fill-complete',
     outcomes: outcomes.map(({ fieldId, ok }) => ({ fieldId, ok })),
+    ...(mappingIds.length ? { mappingIds } : {}),
   });
   if (filled > 0) {
     void send({ type: 'content:step-progress', filled, stepKey: stepKey() });
@@ -431,23 +583,25 @@ async function teachMapping(
   entry: FillPlanEntry,
   field: CanonicalField,
   remember: boolean,
+  customKey?: string,
 ): Promise<void> {
   if (!entry.fingerprint) return;
+  const correction = { canonical: field, ...(customKey ? { customKey } : {}) };
   if (remember) {
     overrides.delete(entry.fingerprint);
     const saved = await request({
       type: 'content:save-mapping',
-      mapping: { fingerprint: entry.fingerprint, label: entry.label, canonical: field },
+      mapping: { fingerprint: entry.fingerprint, label: entry.label, ...correction },
     });
     if (!saved.ok) {
       // Still apply it for this form, and say it was not remembered.
-      overrides.set(entry.fingerprint, field);
+      overrides.set(entry.fingerprint, correction);
       widget?.setMeta({
         notice: 'Applied to this form, but Fillwright could not remember it for next time.',
       });
     }
   } else {
-    overrides.set(entry.fingerprint, field);
+    overrides.set(entry.fingerprint, correction);
   }
   await scan({ quiet: true });
 }
@@ -481,11 +635,16 @@ const EMPTY_ENTRY: FillPlanEntry = {
   remembered: false,
 };
 
-async function applyUndo(): Promise<{ ok: true; restored: number }> {
-  if (!session) return { ok: true, restored: 0 };
-  const restored = await undoFill(session.undo);
+async function applyUndo(): Promise<{ ok: true; restored: number; notRestored: string[] }> {
+  if (!session) return { ok: true, restored: 0, notRestored: [] };
+  const { restored, notRestored } = await undoFill(session.undo);
+  const fields = session.fields;
   session.undo = [];
-  return { ok: true, restored };
+  return {
+    ok: true,
+    restored,
+    notRestored: notRestored.map((id) => fields.get(id)?.signals.labelText.trim() || 'A field'),
+  };
 }
 
 /* -------------------------------------------------------------- drafting */
@@ -503,36 +662,199 @@ async function startDraft(entry: FillPlanEntry): Promise<void> {
     });
   } else {
     draftAvailable = true;
-    const facts = response.data;
+    const facts = [...response.data];
+    // The posting is page text: offered, never ticked for the user.
+    const posting = postingExcerpt();
+    if (posting) {
+      facts.push({
+        id: 'posting',
+        label: 'An excerpt of this job posting',
+        value: posting,
+        optional: true,
+      });
+    }
     widget.drafts.set(entry.fieldId, {
       phase: 'facts',
       facts,
-      chosen: new Set(facts.map((fact) => fact.id)),
+      chosen: new Set(facts.filter((fact) => !fact.optional).map((fact) => fact.id)),
     });
   }
   widget.refresh();
+}
+
+/** Characters of the posting offered as context; the worker trims again. */
+const POSTING_EXCERPT_CHARS = 1_500;
+
+function postingExcerpt(): string {
+  const text = collectPostingText(document).replace(/\s+/g, ' ').trim();
+  return text.length < 200 ? '' : text.slice(0, POSTING_EXCERPT_CHARS);
+}
+
+/** Drafts being streamed, by field, so closing the panel can stop the model. */
+const draftPorts = new Map<
+  string,
+  { port: chrome.runtime.Port; finish: (outcome: DraftOutcome) => void }
+>();
+
+function stopDraft(fieldId: string): void {
+  const active = draftPorts.get(fieldId);
+  if (!active) return;
+  draftPorts.delete(fieldId);
+  const { port } = active;
+  // A port closed from this side never fires its own onDisconnect, so settle here.
+  active.finish({ ok: false, code: 'EDRAFTCANCELLED', error: '' });
+  try {
+    port.postMessage({ type: 'cancel' });
+    port.disconnect();
+  } catch {
+    // Already gone.
+  }
 }
 
 async function generateDraft(entry: FillPlanEntry, factIds: string[]): Promise<void> {
   const current = widget?.drafts.get(entry.fieldId);
   if (!widget || !current || !('facts' in current)) return;
   const { facts, chosen } = current;
-  widget.drafts.set(entry.fieldId, { phase: 'generating', facts, chosen });
+  const view = { phase: 'generating' as const, facts, chosen };
+  widget.drafts.set(entry.fieldId, view);
   widget.refresh();
 
   const field = session?.fields.get(entry.fieldId);
   const question = field?.signals.labelText || field?.signals.ariaLabel || entry.label;
-  const response = await request<{ text: string }>({
-    type: 'content:draft',
-    question,
-    factIds,
-    ...(field?.signals.maxLength ? { maxCharacters: field.signals.maxLength } : {}),
-  });
+  const posting = facts.find((fact) => fact.id === 'posting')?.value;
+  const outcome = await streamDraft(
+    entry.fieldId,
+    {
+      type: 'start',
+      question,
+      factIds,
+      ...(field?.signals.maxLength ? { maxCharacters: field.signals.maxLength } : {}),
+      ...(posting && factIds.includes('posting') ? { posting } : {}),
+    },
+    (text) => {
+      // Only while this same draft is still on screen.
+      if (widget?.drafts.get(entry.fieldId) !== view) return;
+      (view as { text?: string }).text = text;
+      scheduleDraftRefresh();
+    },
+  );
 
+  // Closed while it was being written: nothing to show.
+  if (!widget || widget.drafts.get(entry.fieldId) !== view) return;
   widget.drafts.set(
     entry.fieldId,
+    outcome.ok
+      ? { phase: 'result', text: outcome.text, facts, chosen }
+      : {
+          phase: 'error',
+          message: `${describeError(outcome.code, outcome.error).message} Nothing on the form was changed.`,
+        },
+  );
+  widget.refresh();
+}
+
+let draftRefreshTimer: ReturnType<typeof setTimeout> | null = null;
+
+/** Streaming redraws at most every 100 ms. */
+function scheduleDraftRefresh(): void {
+  if (draftRefreshTimer) return;
+  draftRefreshTimer = setTimeout(() => {
+    draftRefreshTimer = null;
+    widget?.refresh();
+  }, 100);
+}
+
+type DraftOutcome = { ok: true; text: string } | { ok: false; code: string; error: string };
+
+/** Opens a port to the worker and streams one draft through it. */
+function streamDraft(
+  fieldId: string,
+  start: Record<string, unknown>,
+  onChunk: (text: string) => void,
+): Promise<DraftOutcome> {
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (outcome: DraftOutcome) => {
+      if (settled) return;
+      settled = true;
+      if (draftPorts.get(fieldId)?.port === port) draftPorts.delete(fieldId);
+      resolve(outcome);
+    };
+    let port: chrome.runtime.Port;
+    try {
+      port = chrome.runtime.connect({ name: 'fw-draft' });
+    } catch {
+      resolve({ ok: false, code: 'EINVALIDATED', error: '' });
+      return;
+    }
+    stopDraft(fieldId);
+    draftPorts.set(fieldId, { port, finish });
+    port.onMessage.addListener((message: unknown) => {
+      const reply = message as { type?: unknown; text?: unknown; code?: unknown; error?: unknown };
+      if (reply?.type === 'chunk' && typeof reply.text === 'string') onChunk(reply.text);
+      else if (reply?.type === 'done')
+        finish({ ok: true, text: typeof reply.text === 'string' ? reply.text : '' });
+      else if (reply?.type === 'error')
+        finish({
+          ok: false,
+          code: typeof reply.code === 'string' ? reply.code : 'EDRAFT',
+          error: typeof reply.error === 'string' ? reply.error : '',
+        });
+    });
+    port.onDisconnect.addListener(() => {
+      finish({ ok: false, code: 'EWORKER', error: '' });
+    });
+    port.postMessage(start);
+  });
+}
+
+/** The user approved an edited draft. Only now does it touch the form. */
+async function applyDraft(entry: FillPlanEntry, text: string): Promise<void> {
+  widget?.drafts.delete(entry.fieldId);
+  await runFill([{ ...entry, newValue: text, status: 'ready', selected: true }]);
+}
+
+/* ---------------------------------------------------------- saved answers */
+
+/**
+ * "Use a saved answer": the worker returns titles ranked against this
+ * question; the text of one answer crosses only after the user picks it, and
+ * is written only after "Use this answer".
+ */
+async function startSavedAnswer(entry: FillPlanEntry): Promise<void> {
+  if (!widget) return;
+  widget.savedAnswers.set(entry.fieldId, { phase: 'loading' });
+  widget.refresh();
+  const field = session?.fields.get(entry.fieldId);
+  const question = field?.signals.labelText || field?.signals.ariaLabel || entry.label;
+  const response = await request<AnswerChoices>({ type: 'content:answer-choices', question });
+  // Cancelled (or rescanned away) while loading: do not bring the panel back.
+  if (!widget || widget.savedAnswers.get(entry.fieldId)?.phase !== 'loading') return;
+  widget.savedAnswers.set(
+    entry.fieldId,
+    response.ok && response.data.answers.length > 0
+      ? { phase: 'choose', answers: response.data.answers }
+      : {
+          phase: 'error',
+          message: response.ok
+            ? 'You have no saved answers yet. Add them under Preferences in Fillwright.'
+            : `${describeError(response.code, response.error).message} Nothing on the form was changed.`,
+        },
+  );
+  widget.refresh();
+}
+
+async function pickSavedAnswer(entry: FillPlanEntry, id: string): Promise<void> {
+  const current = widget?.savedAnswers.get(entry.fieldId);
+  if (!widget || !current || current.phase !== 'choose') return;
+  widget.savedAnswers.set(entry.fieldId, { ...current, busy: true });
+  widget.refresh();
+  const response = await request<{ text: string }>({ type: 'content:saved-answer', id });
+  if (!widget || widget.savedAnswers.get(entry.fieldId)?.phase !== 'choose') return;
+  widget.savedAnswers.set(
+    entry.fieldId,
     response.ok
-      ? { phase: 'result', text: String(response.data.text ?? ''), facts, chosen }
+      ? { phase: 'result', text: String(response.data.text ?? ''), answers: current.answers }
       : {
           phase: 'error',
           message: `${describeError(response.code, response.error).message} Nothing on the form was changed.`,
@@ -541,9 +863,8 @@ async function generateDraft(entry: FillPlanEntry, factIds: string[]): Promise<v
   widget.refresh();
 }
 
-/** The user approved an edited draft. Only now does it touch the form. */
-async function applyDraft(entry: FillPlanEntry, text: string): Promise<void> {
-  widget?.drafts.delete(entry.fieldId);
+async function applySavedAnswer(entry: FillPlanEntry, text: string): Promise<void> {
+  widget?.savedAnswers.delete(entry.fieldId);
   await runFill([{ ...entry, newValue: text, status: 'ready', selected: true }]);
 }
 
@@ -616,8 +937,18 @@ async function onFormChanged(): Promise<void> {
   if (!widget || scanning) return;
 
   // Mid-review, or mid-fill: say the page changed and let the user refresh.
-  if (widget.state === 'review' || widget.state === 'filling' || widget.drafts.size > 0) {
+  if (
+    widget.state === 'review' ||
+    widget.state === 'filling' ||
+    widget.drafts.size > 0 ||
+    widget.savedAnswers.size > 0
+  ) {
     widget.markStale();
+    return;
+  }
+  // Straight after a fill, a changed dropdown is offered rather than rescanned
+  // under the user's summary.
+  if ((widget.state === 'success' || widget.state === 'partial') && (await checkSecondPass())) {
     return;
   }
   // Otherwise refresh quietly, so the next step's fields are ready.
@@ -702,11 +1033,17 @@ async function send<T = unknown>(message: {
 }
 
 /** Only these extension pages may be opened from a web page. */
-const OPENABLE = new Set(['security', 'import', 'privacy', 'assistance']);
+const OPENABLE = new Set(['security', 'import', 'privacy', 'assistance', 'profile']);
 
-function openExtensionPage(route: string): void {
+/**
+ * Opens a Fillwright page. `field` (profile only) names the profile field to
+ * focus; it must be a FIELD_CATALOG key, and the worker checks it again. This
+ * only navigates — nothing here can read or write the profile.
+ */
+function openExtensionPage(route: string, field?: CanonicalField): void {
   if (!OPENABLE.has(route)) return;
-  notify({ type: 'content:open-page', route });
+  if (field !== undefined && (route !== 'profile' || !isOpenableProfileField(field))) return;
+  notify({ type: 'content:open-page', route, ...(field ? { field } : {}) });
 }
 
 /** True when a same-origin iframe on this page contains form controls. */

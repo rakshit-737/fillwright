@@ -1,0 +1,23 @@
+Jordan Pellegrini
+555-201-0147 | jordan.pellegrini@example.com | linkedin.com/in/jpellegrini | github.com/jpellegrini
+
+Education
+Carnegie Mellon University                                   Pittsburgh, PA
+Bachelor of Science in Computer Science                      Aug. 2022 – May 2026
+
+Experience
+Software Engineering Intern                                  May 2025 – Aug. 2025
+Northwind Robotics                                           Boston, MA
+• Wrote a path-planning simulator in Rust
+
+Undergraduate Teaching Assistant                             Jan. 2024 – Present
+Carnegie Mellon University                                   Pittsburgh, PA
+• Held weekly office hours for 15-213
+
+Projects
+Tinykv | Rust, Raft                                          Jan. 2025
+• Replicated key-value store with Raft consensus
+
+Technical Skills
+Languages: Rust, C, Python, Java
+Developer Tools: Git, Docker, VS Code

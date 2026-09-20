@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="pt">
+  <head>
+    <meta charset="utf-8" />
+    <title>Candidatura — Desenvolvedor de software</title>
+    <link rel="stylesheet" href="../shared.css" />
+  </head>
+  <body>
+    <h1>Candidatura — Desenvolvedor de software</h1>
+    <p class="lead" lang="en">
+      Expected (locale pack "pt"): every label is in this language and the name attributes
+      carry no English, so only the pt vocabulary can identify the fields. First name, last
+      name, email and phone fill from the profile. The gender question is recognised as sensitive
+      and is left for you. The referee's email is someone else's and stays empty. The form is
+      never submitted.
+    </p>
+    <form id="app">
+      <label for="f1">Primeiro nome</label>
+      <input id="f1" name="f1" />
+      <label for="f2">Sobrenome</label>
+      <input id="f2" name="f2" />
+      <label for="f3">Endereço de e-mail</label>
+      <input id="f3" name="f3" type="email" />
+      <label for="f4">Telefone</label>
+      <input id="f4" name="f4" type="tel" />
+      <label for="f5">Gênero</label>
+      <select id="f5" name="f5">
+        <option value="">Selecione</option>
+        <option value="Feminino">Feminino</option>
+        <option value="Masculino">Masculino</option>
+        <option value="Outro">Outro</option>
+      </select>
+      <label for="f6">E-mail do gestor</label>
+      <input id="f6" name="f6" type="email" />
+      <button type="submit">Enviar candidatura</button>
+    </form>
+    <script src="../shared.js"></script>
+  </body>
+</html>

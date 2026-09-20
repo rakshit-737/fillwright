@@ -26,9 +26,97 @@ Notable changes, newest first. Versions follow semantic versioning.
   saved.
 - A store left half-encrypted by an earlier version is detected and the
   Security page explains how to recover, instead of showing "locked" forever.
+- **Hidden fields and honeypots are no longer filled.** A field hidden with
+  `opacity: 0`, moved off-screen, clipped to 1 px, placed in a zero-size
+  container, or inside an `aria-hidden` or `inert` subtree used to count as
+  visible, could come back "ready" and be written by "Fill N ready". These are
+  now recognised as hidden, never sent for a value, and cannot be ticked. The
+  panel says "N hidden fields ignored" and lists why on request.
+- **Covered fields are refused at fill time.** Just before writing a ticked
+  field, Fillwright checks that the field (or its label) is what is actually at
+  its position on the page, so a control hidden under another element is not
+  written.
+- **Site adapters no longer press page buttons on their own.** The Ashby,
+  Workday and SmartRecruiters adapters clicked every collapsed
+  `button[aria-expanded="false"]` — dropdowns, menus and navigation included,
+  up to 20 per scan — and did so in Smart mode's passive scans, before the user
+  had done anything, and again on every form change. Adapters now run only when
+  the user opens Fillwright, press only accordions (a real `aria-controls`
+  region or a heading disclosure), never anything with `aria-haspopup`, a
+  combobox/menu role, or inside `nav`/`header`/menus/toolbars, press each
+  element at most once per page, and stop when a press reveals no new fields.
+- The content script sees only titles of custom fields and saved answers
+  (`content:answer-choices`); the text of one saved answer crosses only after
+  the user picks it (`content:saved-answer`).
+- `content:save-mapping` now validates the field a page asks to save. It
+  previously stored whatever canonical field the message named.
+- **Certify / agree / consent / declare checkboxes are never ticked.** They
+  are listed as "Needs your answer", even when a saved rule or a strong match
+  points at them.
+- `content:open-page` now accepts the `profile` route with an optional
+  `field`, validated against `FIELD_CATALOG` in both the content script and
+  the service worker. It still only opens a page.
+- DOCX parts are capped at 8 MB each and 16 MB in total, checked against the
+  declared sizes before anything is inflated. fflate never inflates past a
+  declared size, so a ZIP bomb is refused quickly and a lying header only
+  truncates its entry.
+- **The panel can no longer be click-jacked.** A page could cover the panel
+  with a see-through, `pointer-events: none` element in the top layer and bait
+  a click straight through to "Fill N ready", or dispatch a synthetic click.
+  Now: every panel control ignores untrusted events (`isTrusted`); the panel
+  is shown as a manual popover so it sits in the top layer, and takes the top
+  back (at most three times in ten seconds) when the page opens a dialog,
+  popover or fullscreen element; and Fill arms only after the panel has been
+  continuously visible and unobscured for about 500 ms, measured with
+  IntersectionObserver v2. When something covers the panel, Fill is paused and
+  the panel says so. Until armed the button is `aria-disabled`, so keyboard
+  focus still lands on it.
+- **Smart mode no longer puts values in the page before you open the panel.**
+  The plan it prepares in advance now carries counts and statuses only; the
+  worker blanks every proposed value and rationale. Opening the pill fetches
+  the real plan.
+- **Every handler that stores something validates it first.** A malformed
+  `ui:save-profile`, `ui:set-settings` or `content:save-mapping` payload is
+  rejected with a code (`EBADPROFILE`, `EBADSETTINGS`, `EBADFIELD`) and
+  nothing is stored. Settings are type- and enum-checked and clamped; a
+  settings page can no longer flip `privacy.encryptionEnabled` directly; a
+  page can no longer save a mapping to a field outside the catalog.
+- **Assist and Smart no longer need every website.** Choosing either mode now
+  requests only the applicant-tracking sites; every https site is a separate,
+  explicit step. The popup's "Turn on for this site" requests just the current
+  origin. The content script is registered for exactly what Chrome reports as
+  granted, and Settings → Permissions lists each granted site with a Revoke
+  button that unregisters it at once. No manifest change.
+- **Exports can be protected with a passphrase.** The export is sealed with
+  the vault's scheme (PBKDF2-SHA256, 600k iterations, AES-256-GCM) in a
+  versioned envelope whose header is authenticated too; import recognises it
+  and asks for the passphrase. A wrong passphrase or an edited file is refused.
+- **Imports are reviewed before anything is saved.** A new review screen lists
+  profiles, learned fields by site, and each settings change as old → new, with
+  checkboxes. Settings and learned fields start unticked, so a crafted file can
+  no longer switch on overwriting or change the autofill mode by itself.
+- **Imported learned fields are never pre-ticked.** They carry an "imported"
+  chip and are proposed at review confidence until you choose one again on a
+  real form. Previously they were treated like fields you taught (0.99
+  confidence, pre-ticked) on any site the file named.
+- **Application history is encrypted with the vault.** Where you applied was
+  stored in plaintext even with encryption on. Records are now encrypted like
+  profiles (only the date stays outside, for retention), re-keyed with the
+  passphrase, and shown as "locked" rather than empty while locked. A fill that
+  finishes while locked is not recorded. Imported history is encrypted too; it
+  used to be written straight to the database.
+- History has a retention setting (6, 12 or 24 months, or until cleared) and a
+  hard cap of 2,000 entries.
 
 ### Fixed
 
+- **A click in the drafting panel is no longer swallowed.** The job match and
+  the progress of earlier steps are fetched after the plan is shown, and
+  applying them rebuilt the whole review list. When that round-trip finished
+  while a row's drafting or saved-answer panel was open, the control the user
+  was reaching for was replaced underneath them and their click did nothing.
+  Late page information now waits for the next redraw whenever a row panel is
+  open.
 - **Re-importing a resume no longer deletes entries you edited.** "Replace
   with the resume version" swapped whole list sections, so an education,
   experience, project, skill, certification, achievement or language entry you
@@ -42,6 +130,205 @@ Notable changes, newest first. Versions follow semantic versioning.
   anything in it.
 - The import review lists each entry as added, updated, kept (yours) or no
   longer on the resume, with a checkbox for every change.
+- **"Verified" now means the page holds your value.** A write used to pass
+  when the first six characters matched or the page kept only a prefix, so
+  one LinkedIn URL "verified" as another and a cut-off email passed. Values
+  are now compared by kind (email, URL, phone, number, date, text); only an
+  input mask's reformatting is tolerated.
+- **Truncation is a failure.** A field that cuts your value reports "this
+  field accepts N characters, so your value was cut" and is put back as it
+  was. A value longer than a field's `maxlength` is moved to review before
+  anything is written.
+- **Undo names what it could not restore.** A custom dropdown that had no
+  selection before the fill cannot be emptied from outside; undo now lists it
+  in the panel instead of silently counting it.
+- **"Current CTC" no longer gets your expected salary.** Current pay is now
+  its own field (`sensitive.currentSalary`), answered only from the current
+  salary you saved in Preferences and only with salary answers switched on.
+  "Expected" labels never match it and "current / present / last drawn /
+  existing" labels never match the expected figure; a label asking about both
+  is left for you. Pay is never converted: if the question asks for lakhs,
+  per month or per year and your saved figure says something else (or no
+  unit), the field is declined with the reason. Number inputs get the bare
+  number, without currency symbols or separators.
+- **Labels inside shadow roots.** `aria-labelledby`, `aria-describedby` and
+  `label[for]` ids are now resolved in the control's own tree (its shadow root)
+  instead of the document, which cannot see in. A document id can no longer
+  label a field inside a shadow root. A shadow-DOM control with no label of its
+  own falls back to its host element's `aria-label`, `label` attribute or
+  `<label for>` — where form-associated custom elements put it.
+- **Whole-phrase matching checks every occurrence.** "username or first name"
+  now contains "name"; only the first hit used to be tested.
+- **Years of experience is no longer inflated.** Overlapping roles are merged
+  before summing, the total is whole years completed (never rounded up), and
+  under one year goes to review instead of writing an invented "1".
+- Two-column (sidebar) PDF resumes are read column by column. A per-page gutter
+  is found from a histogram of text extents; the header above the columns is
+  read first. Single-column pages, including right-aligned date columns, are
+  read exactly as before.
+- Profile links that exist only as clickable words are now found: PDF link
+  annotations and DOCX hyperlink relationships (`http(s)` only) are passed to
+  the link matcher.
+- DOCX text boxes are no longer read twice (`mc:Fallback` is skipped).
+- Names with non-ASCII letters ("José Álvarez") or initials ("S. R. Jeevan")
+  are recognised.
+- **Profiles written by an older release load.** Stored records are migrated
+  and rebuilt against the current schema on read (ids and provenance kept),
+  so a field added later is empty rather than undefined in the editor.
+- IndexedDB now has a versioned upgrade path (database version 2 repairs
+  missing stores or indexes), tested by upgrading a real v1 database.
+
+### Added
+
+- **"Show me" on every review row** scrolls to the field on the page and
+  outlines it for a moment, so you can see which field a row means.
+- **Custom fields and saved answers are used.** The "Set what this is"
+  picker offers "One of your custom fields…" and "One of your saved
+  answers…"; the choice is remembered for that site like any correction.
+  Written-question rows offer "Use a saved answer": titles ranked by how well
+  they match the question, none pre-selected, and the chosen answer is shown
+  for editing before anything is written.
+- **Month and year asked separately.** "Start month" / "Start year" selects
+  and MM / YYYY inputs (Workday, Greenhouse) are filled for education and
+  experience entries. Month options are matched by name, abbreviation or
+  number; a stored year with no month leaves the month empty. The bare labels
+  only count inside an education or experience block, so a lone "Start Month"
+  elsewhere is left alone.
+- **Phone country code and national number.** A "Country code" select gets
+  "+91" (matched by the dialling code in its options; countries that share a
+  code are told apart by your saved country, or not at all) and the phone
+  field beside it gets the number without the code. Both are derived only when
+  your saved phone is written "+CC …"; otherwise they are left for you.
+- **"I currently work here"** is ticked for a current role, and that role's end
+  date, month and year are left empty.
+- **Location per entry**: "Location" inside an education or experience block
+  is that entry's location, not yours.
+- **Dependent dropdowns.** After a fill, a select whose options changed — a
+  State list that loads once Country is chosen — is read again, and the panel
+  offers "N more fields can be filled now". Nothing is filled until you review
+  them and press Fill.
+- All of the above are in the "What is this field?" picker.
+- **Forms in German, French, Spanish, Portuguese, Dutch and Italian.** Locale
+  vocabulary packs (`src/field-detection/locales.ts`) are merged into the
+  field rules under the English rules' negative discipline: every locale rule
+  inherits the English `not` list for its field. The control's `lang`
+  attribute (nearest ancestor) picks the pack; with no supported language,
+  every pack applies except words that are also English ("Note", "Handy",
+  "Via"), which need the page to declare the language.
+- **Safety vocabulary in every language, whatever the page declares.** Each
+  sensitive category (gender, ethnicity, disability, veteran, criminal record,
+  work authorisation, sponsorship, visa/nationality, clearance, relocation,
+  travel, drug test, background check), date of birth and salary are
+  recognised in all six languages even on a page that says it is English. The
+  third-party words (referee, emergency contact, manager…) and company words
+  are recognised in every language too, as are "confirm your email" boxes.
+- Yes/No options in each language (Ja/Nein, Oui/Non, Sí/No, Sim/Não, Ja/Nee,
+  Sì/No), and localised month and country names for dropdown matching.
+- `test-pages/i18n/<lang>.html` per pack, with a Chrome test each, and
+  `tests/i18n.test.ts` with the phrasings that must and must not match.
+- **History is a tracker.** Each entry takes a status (applied, assessment,
+  interview, offer, rejected, withdrawn), notes, a follow-up date and the
+  profile used. A posting link is kept only when ticked for that entry, as
+  origin + path with no query string.
+- **CSV export** of history, saved locally, with formula-injection protection.
+- **On-device drafting no longer dead-ends at "needs a download".** Writing
+  assistance has a "Download the on-device model" button with progress, and a
+  separate "downloading" state.
+- **Drafts stream** into the panel, can be cancelled at any time, stop after
+  60 seconds, and are held to the field's character limit while streaming.
+- **Optional context:** an excerpt of the job posting (fenced as untrusted page
+  text) and your saved answers can be ticked, both off by default.
+- Sessions declare expected input and output languages (English), following
+  the current Prompt API. `npm run probe:ai` reports the state the options page
+  would show.
+
+### Changed
+
+- **Every switch in Settings now does something.** The on-page panel follows
+  the Theme and Reduce motion settings (motion is reduced when either the
+  setting or the system asks). "Show the on-page prompt in Assist and Smart"
+  now has a control. Removed with a settings migration to version 3, because
+  nothing read them: "Fill empty fields only" (the overwrite switch is what
+  decides), "Show a preview before filling" (the panel always previews),
+  `ai.assistFieldMapping` and `privacy.encryptionEnabled`.
+- **Learned fields count their uses.** After a fill, the content script sends
+  the ids of remembered rules it wrote — ids only — and the worker counts only
+  active rules saved for that site.
+- `npm run check` runs `scripts/check-settings.mjs`, which fails on a default
+  setting that nothing outside `src/types` and `src/options` reads.
+- **The review list keeps your place.** Ticking a box, opening "Why?" or
+  "Change" no longer sends focus to the Fill button and the list back to the
+  top: rows are keyed by field, and focus and scroll position survive every
+  redraw.
+- **Edit for this form.** A proposed value can be changed in its row. The
+  value is marked "your edit", is used for this fill only, and lives only in
+  the tab — your profile is not changed.
+- **"Add it in your profile"** on rows whose value is missing opens the
+  profile editor focused on that field.
+- Rows are grouped by section, each with select all / none, and the list can
+  be filtered by status.
+- "Graduation year" is no longer rewritten to "graduation date", so a year
+  field gets "2026" rather than "May 2026".
+- A field with `autocomplete="tel-national"` now gets the number without its
+  country code (it used to get the whole stored phone).
+- The form-change signature now counts dropdown options, and an added
+  `<option>` counts as a possible form change.
+- **Unicode-aware label normalisation.** Labels are NFKD-folded and
+  diacritics stripped, keeping every letter and digit: "Prénom" is now
+  "prenom" (it was "pr nom"), "Straße" is "strasse", and non-Latin labels
+  are no longer erased. Dropdown option text is folded the same way.
+  A mapping you taught Fillwright on a label with accents is keyed on the
+  new form, so it may need teaching once more.
+
+### Docs
+
+- PRIVACY.md names the current version; CONTRIBUTING.md lists the audit and
+  settings steps of `npm run check`; README's known limitations are numbered
+  in order; the ESLint `fetch` message no longer points at a file that does
+  not exist.
+
+### Testing
+
+- **Accuracy is measured, not guessed.** `npm run eval` scores the field
+  classifier on 372 labelled fields and the resume parser on 27 invented
+  resumes across seven layouts, printing per-field precision, recall and a
+  confusion list. CI fails when any number drops below the committed
+  `tests/corpus/baseline.json`. Starting point: 90.3% classifier accuracy;
+  the weakest areas are start/end dates inside repeated blocks, postal codes
+  named only in attributes, and parser recall for names and employers on
+  surname-first, Europass and no-heading layouts.
+- Coverage thresholds (`npm run test:coverage`, `@vitest/coverage-v8`) for
+  `src/autofill`, `src/field-detection`, `src/security` and `src/parser`, run
+  in CI.
+- fast-check property tests: `validateScan`, `conformProfile`,
+  `normalizeLabel` and `matchOption` never throw and return bounded output.
+- New dev-only dependencies: `@vitest/coverage-v8`, `fast-check`. Nothing
+  shipped changes.
+- New hostile fixture `test-pages/clickjack.html` and Chrome case: a synthetic
+  click and a click through a pointer-events:none overlay both leave the form
+  untouched; a normal click after the arming delay fills it.
+- The end-to-end harness now drives the panel with real (trusted) input
+  (`trustedClick`), since `element.click()` from page script is ignored.
+
+### Release and CI
+
+- The content-script size budget (`npm run perf`) is raised from 100 KB to
+  128 KB. The 0.6.0 features that run on the page (six locale packs, the
+  country table, the click-jacking guard, saved answers, the review list's
+  groups, filter and editor) bring the minified script to about 121 KB.
+  Injection and scan timings are unchanged and within budget.
+- **Reproducible store package.** `scripts/package.mjs` now sorts zip entries,
+  stamps every entry with one timestamp from `SOURCE_DATE_EPOCH` or the last
+  commit (in UTC, never the wall clock), uses fixed deflate settings, prints
+  the SHA-256 and writes `SHA256SUMS`. Two builds of one commit are identical.
+- **Releases are built by CI.** `release.yml` runs on a `v*` tag: `npm ci`,
+  check, end-to-end, packages twice and fails unless the hashes match, then
+  publishes the zip, `SHA256SUMS` and a build provenance attestation.
+- **Tighter CI.** Read-only token permissions, actions pinned by commit SHA, a
+  concurrency group, a Windows job running `npm run check`, Dependabot for npm
+  and GitHub Actions, and CodeQL for JavaScript/TypeScript.
+- README: "Verify the store package yourself".
+
 
 ## 0.5.0
 

@@ -1,0 +1,290 @@
+{
+  "field:*accuracy": {
+    "precision": 0.9059,
+    "recall": 1
+  },
+  "field:address.city": {
+    "precision": 1,
+    "recall": 1
+  },
+  "field:address.country": {
+    "precision": 1,
+    "recall": 1
+  },
+  "field:address.line1": {
+    "precision": 1,
+    "recall": 1
+  },
+  "field:address.line2": {
+    "precision": 1,
+    "recall": 0.5
+  },
+  "field:address.postalCode": {
+    "precision": 1,
+    "recall": 0.7273
+  },
+  "field:address.state": {
+    "precision": 1,
+    "recall": 1
+  },
+  "field:documents.coverLetter": {
+    "precision": 1,
+    "recall": 1
+  },
+  "field:documents.resume": {
+    "precision": 1,
+    "recall": 1
+  },
+  "field:education.degree": {
+    "precision": 1,
+    "recall": 0.8333
+  },
+  "field:education.endDate": {
+    "precision": 1,
+    "recall": 0
+  },
+  "field:education.endYear": {
+    "precision": 1,
+    "recall": 1
+  },
+  "field:education.gpa": {
+    "precision": 1,
+    "recall": 1
+  },
+  "field:education.graduationDate": {
+    "precision": 1,
+    "recall": 1
+  },
+  "field:education.institution": {
+    "precision": 1,
+    "recall": 1
+  },
+  "field:education.major": {
+    "precision": 1,
+    "recall": 0.8333
+  },
+  "field:education.minor": {
+    "precision": 1,
+    "recall": 1
+  },
+  "field:education.startDate": {
+    "precision": 1,
+    "recall": 0.3333
+  },
+  "field:experience.company": {
+    "precision": 1,
+    "recall": 1
+  },
+  "field:experience.description": {
+    "precision": 1,
+    "recall": 0
+  },
+  "field:experience.endDate": {
+    "precision": 1,
+    "recall": 0
+  },
+  "field:experience.startDate": {
+    "precision": 1,
+    "recall": 0
+  },
+  "field:experience.title": {
+    "precision": 1,
+    "recall": 0.9167
+  },
+  "field:experience.yearsOfExperience": {
+    "precision": 1,
+    "recall": 0.8
+  },
+  "field:links.github": {
+    "precision": 1,
+    "recall": 1
+  },
+  "field:links.linkedin": {
+    "precision": 1,
+    "recall": 1
+  },
+  "field:links.portfolio": {
+    "precision": 1,
+    "recall": 1
+  },
+  "field:links.stackoverflow": {
+    "precision": 1,
+    "recall": 1
+  },
+  "field:links.twitter": {
+    "precision": 1,
+    "recall": 0.6667
+  },
+  "field:links.website": {
+    "precision": 1,
+    "recall": 0.8571
+  },
+  "field:personal.dateOfBirth": {
+    "precision": 1,
+    "recall": 1
+  },
+  "field:personal.email": {
+    "precision": 1,
+    "recall": 1
+  },
+  "field:personal.firstName": {
+    "precision": 0.9333,
+    "recall": 1
+  },
+  "field:personal.fullName": {
+    "precision": 1,
+    "recall": 1
+  },
+  "field:personal.lastName": {
+    "precision": 1,
+    "recall": 1
+  },
+  "field:personal.middleName": {
+    "precision": 1,
+    "recall": 1
+  },
+  "field:personal.phone": {
+    "precision": 1,
+    "recall": 1
+  },
+  "field:personal.phoneNational": {
+    "precision": 1,
+    "recall": 1
+  },
+  "field:personal.preferredName": {
+    "precision": 1,
+    "recall": 0.6667
+  },
+  "field:personal.pronouns": {
+    "precision": 1,
+    "recall": 1
+  },
+  "field:preferences.desiredSalary": {
+    "precision": 1,
+    "recall": 1
+  },
+  "field:preferences.howDidYouHear": {
+    "precision": 1,
+    "recall": 0.4
+  },
+  "field:preferences.noticePeriod": {
+    "precision": 1,
+    "recall": 1
+  },
+  "field:preferences.referredBy": {
+    "precision": 1,
+    "recall": 0.75
+  },
+  "field:preferences.startDate": {
+    "precision": 0.7143,
+    "recall": 1
+  },
+  "field:preferences.workMode": {
+    "precision": 1,
+    "recall": 0.3333
+  },
+  "field:profile.skills": {
+    "precision": 1,
+    "recall": 0.8
+  },
+  "field:profile.summary": {
+    "precision": 1,
+    "recall": 0.6
+  },
+  "field:sensitive.backgroundCheckConsent": {
+    "precision": 1,
+    "recall": 1
+  },
+  "field:sensitive.criminalHistory": {
+    "precision": 1,
+    "recall": 1
+  },
+  "field:sensitive.disabilityStatus": {
+    "precision": 1,
+    "recall": 1
+  },
+  "field:sensitive.drugTestConsent": {
+    "precision": 1,
+    "recall": 1
+  },
+  "field:sensitive.gender": {
+    "precision": 1,
+    "recall": 1
+  },
+  "field:sensitive.raceEthnicity": {
+    "precision": 1,
+    "recall": 0.8
+  },
+  "field:sensitive.requiresSponsorship": {
+    "precision": 1,
+    "recall": 1
+  },
+  "field:sensitive.securityClearance": {
+    "precision": 1,
+    "recall": 1
+  },
+  "field:sensitive.veteranStatus": {
+    "precision": 1,
+    "recall": 0.75
+  },
+  "field:sensitive.visaStatus": {
+    "precision": 1,
+    "recall": 0.6667
+  },
+  "field:sensitive.willingToRelocate": {
+    "precision": 1,
+    "recall": 1
+  },
+  "field:sensitive.willingToTravel": {
+    "precision": 1,
+    "recall": 1
+  },
+  "field:sensitive.workAuthorization": {
+    "precision": 1,
+    "recall": 1
+  },
+  "field:unknown": {
+    "precision": 0.5949,
+    "recall": 1
+  },
+  "resume:company": {
+    "precision": 0.4545,
+    "recall": 0.3333
+  },
+  "resume:degree": {
+    "precision": 0.9091,
+    "recall": 0.6667
+  },
+  "resume:email": {
+    "precision": 1,
+    "recall": 1
+  },
+  "resume:firstName": {
+    "precision": 0.8,
+    "recall": 0.7407
+  },
+  "resume:gpa": {
+    "precision": 1,
+    "recall": 0.75
+  },
+  "resume:institution": {
+    "precision": 0.8571,
+    "recall": 0.5806
+  },
+  "resume:lastName": {
+    "precision": 0.8,
+    "recall": 0.7407
+  },
+  "resume:phone": {
+    "precision": 1,
+    "recall": 0.963
+  },
+  "resume:skills": {
+    "precision": 0.9888,
+    "recall": 0.8
+  },
+  "resume:title": {
+    "precision": 0.9231,
+    "recall": 0.8
+  }
+}

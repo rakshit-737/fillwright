@@ -1,8 +1,15 @@
 import type { CanonicalField, FieldSignals, FillPlan, FillPlanEntry } from '@/types/fields';
 import type { JobMatch } from '@/autofill/job-match';
 import type { RepeatKind } from '@/autofill/repeat';
-import { renderReviewList, type DraftView } from './review';
+import {
+  renderReviewList,
+  type DraftView,
+  type SavedAnswerView,
+  type StatusFilter,
+} from './review';
+import type { AnswerChoices } from '@/autofill/saved-answers';
 import { WIDGET_CSS } from './styles';
+import { themedCss, type Theme } from './theme';
 import type { UserError } from '@/utils/errors';
 
 /**
@@ -62,20 +69,43 @@ export interface WidgetCallbacks {
   onUndo: () => void;
   onClose: () => void;
   onRescan: () => void;
+  /**
+   * The user opened a panel whose plan was prepared without values (Smart
+   * mode). Fetch the real plan now.
+   */
+  onOpen: () => void;
   /** The user corrected what a field means. */
-  onTeach: (entry: FillPlanEntry, field: CanonicalField, remember: boolean) => void;
+  onTeach: (
+    entry: FillPlanEntry,
+    field: CanonicalField,
+    remember: boolean,
+    customKey?: string,
+  ) => void;
   onListProfiles: () => Promise<ProfileChoice[]>;
   onSwitchProfile: (profileId: string) => void;
   onAddEntries: (offer: AddOffer) => void;
   onUnlock: () => void;
   /** Opens one of Fillwright's own pages (import, privacy, …). */
-  onOpenPage: (route: string) => void;
+  onOpenPage: (route: string, field?: CanonicalField) => void;
   onReload: () => void;
   /** Whether a written question can be drafted at all (AI on and available). */
   canDraft: (entry: FillPlanEntry) => boolean;
   onDraftStart: (entry: FillPlanEntry) => void;
   onDraftGenerate: (entry: FillPlanEntry, factIds: string[]) => void;
   onDraftUse: (entry: FillPlanEntry, text: string) => void;
+  /** Scroll a row's field into view and outline it. */
+  onShowField?: (fieldId: string) => void;
+  onSavedAnswerStart?: (entry: FillPlanEntry) => void;
+  onSavedAnswerPick?: (entry: FillPlanEntry, id: string) => void;
+  onSavedAnswerUse?: (entry: FillPlanEntry, text: string) => void;
+  /** The draft panel was closed: stop any draft still being written. */
+  onDraftStop?: (entry: FillPlanEntry) => void;
+}
+
+/** A field on the page that a person could not see, so it was left alone. */
+export interface HiddenField {
+  label: string;
+  reason: string;
 }
 
 export interface FillSummary {
@@ -90,10 +120,46 @@ export interface FillSummary {
 
 const POSITION_KEY = '__fillwrightPanelPosition';
 
+/** How long the panel must be visible and unobscured before Fill arms. */
+export const ARM_DELAY_MS = 500;
+
+/** At most this many top-layer re-assertions per window, so a page cannot loop us. */
+const REASSERT_LIMIT = 3;
+const REASSERT_WINDOW_MS = 10_000;
+
+/** Every event type a panel control acts on. Untrusted ones never reach a handler. */
+const GUARDED_EVENTS = [
+  'click',
+  'dblclick',
+  'auxclick',
+  'pointerdown',
+  'pointerup',
+  'mousedown',
+  'mouseup',
+  'keydown',
+  'keyup',
+  'input',
+  'change',
+  'submit',
+] as const;
+
+export interface WidgetOptions {
+  /**
+   * Decides whether an event came from the user. Always `event.isTrusted` in
+   * the product; a test seam only, because jsdom cannot create trusted events.
+   */
+  trust?: (event: Event) => boolean;
+}
+
+type Visibility = 'unknown' | 'visible' | 'covered';
+
 export class FillwrightWidget {
   private host: HTMLElement;
   private root: ShadowRoot;
   private panel: HTMLElement;
+  private style: HTMLStyleElement;
+  /** The system's reduced-motion preference, which a setting can only add to. */
+  private systemReducedMotion: boolean;
   private live: HTMLElement;
 
   state: WidgetState = 'idle';
@@ -110,6 +176,10 @@ export class FillwrightWidget {
   private stale = false;
   private minimized = false;
   private lastSummary: FillSummary | null = null;
+  /** Labels of fields the last undo could not restore. */
+  private notUndone: string[] = [];
+  /** Fields that became fillable after the last fill (dependent dropdowns). */
+  private secondPass = 0;
   private lastError: UserError = { message: '', action: 'retry', actionLabel: 'Try again' };
   private detectedCount = 0;
   /** The page element focused before the panel took focus. */
@@ -117,12 +187,40 @@ export class FillwrightWidget {
   private suppressFocus = false;
   private lastAnnounced = '';
 
+  /* Click-jacking defences. */
+  private readonly trust: (event: Event) => boolean;
+  /** Fill works only when armed: shown, unobscured, for ARM_DELAY_MS. */
+  private armed = false;
+  private armTimer: ReturnType<typeof setTimeout> | undefined;
+  /** What IntersectionObserver v2 last said; 'visible' when v2 is unavailable. */
+  private visibility: Visibility = 'unknown';
+  private observer: IntersectionObserver | null = null;
+  private reasserts: number[] = [];
+  private readonly onPageTopLayer = (event: Event) => {
+    if (event.target === this.host) return;
+    this.reassertTopLayer();
+  };
+
   /** Rows whose "Why?" explanation is open. */
   private explanations = new Set<string>();
   /** Rows whose correction picker is open. */
   private teaching = new Set<string>();
+  /** Rows whose value editor is open. */
+  private editing = new Set<string>();
+  /**
+   * Values the user typed for this form ("Edit for this form"). They live
+   * only here, in the content script's memory, and are used for this fill.
+   */
+  private edits = new Map<string, string>();
+  private filter: StatusFilter = 'all';
+  /** A control to focus after the next redraw, by its data-fw-key. */
+  private pendingFocus: string | null = null;
   /** Drafting panels, per field. */
   drafts = new Map<string, DraftView>();
+  /** "Use a saved answer" panels, per field. */
+  savedAnswers = new Map<string, SavedAnswerView>();
+  /** Titles of the user's custom fields and saved answers. Never values. */
+  choices: AnswerChoices | null = null;
   private profiles: ProfileChoice[] | null = null;
   private showProfiles = false;
   private showMatch = false;
@@ -131,22 +229,47 @@ export class FillwrightWidget {
   private diagnostics = false;
   private signals = new Map<string, FieldSignals>();
 
+  /** Hidden fields ignored on this page, and whether their reasons are open. */
+  private hiddenFields: HiddenField[] = [];
+  private showHidden = false;
+
   constructor(
     private callbacks: WidgetCallbacks,
     reducedMotion: boolean,
+    options: WidgetOptions = {},
   ) {
+    this.trust = options.trust ?? ((event) => event.isTrusted);
     this.host = document.createElement('div');
     // data-fillwright-ui marks the subtree so the harvester skips its own
     // controls; data-fillwright-widget identifies THIS element specifically.
     this.host.setAttribute('data-fillwright-ui', '');
     this.host.setAttribute('data-fillwright-widget', '');
     this.host.style.cssText = 'all: initial; position: fixed; z-index: 2147483647;';
+    // A manual popover sits in the top layer, above anything the page can put
+    // in the normal stacking context, and is never light-dismissed.
+    this.host.setAttribute('popover', 'manual');
 
     this.root = this.host.attachShadow({ mode: 'closed' });
+
+    // A page can dispatch events, but it cannot make them trusted. Nothing in
+    // the panel acts on an event the user did not produce.
+    for (const type of GUARDED_EVENTS) {
+      this.root.addEventListener(
+        type,
+        (event) => {
+          if (this.trust(event)) return;
+          event.stopImmediatePropagation();
+          event.preventDefault();
+        },
+        { capture: true },
+      );
+    }
 
     const style = document.createElement('style');
     style.textContent = WIDGET_CSS;
     this.root.appendChild(style);
+    this.style = style;
+    this.systemReducedMotion = reducedMotion;
 
     const container = document.createElement('div');
     container.className = 'fw-widget';
@@ -162,11 +285,125 @@ export class FillwrightWidget {
 
     this.restorePosition();
     document.documentElement.appendChild(this.host);
+    this.showTopLayer();
+    // The page opening a dialog, popover or fullscreen element puts it above
+    // us; take the top back (within a budget) and let the observer decide.
+    document.addEventListener('toggle', this.onPageTopLayer, { capture: true });
+    document.addEventListener('fullscreenchange', this.onPageTopLayer, { capture: true });
+    this.watchVisibility();
   }
 
   destroy(): void {
     this.restoreFocus();
+    this.observer?.disconnect();
+    clearTimeout(this.armTimer);
+    document.removeEventListener('toggle', this.onPageTopLayer, { capture: true });
+    document.removeEventListener('fullscreenchange', this.onPageTopLayer, { capture: true });
     this.host.remove();
+  }
+
+  /* ------------------------------------------------------- click-jacking */
+
+  private showTopLayer(): void {
+    const host = this.host as HTMLElement & { showPopover?: () => void };
+    if (typeof host.showPopover !== 'function') return;
+    try {
+      if (!host.matches(':popover-open')) host.showPopover();
+    } catch {
+      // Not connected, or the page is mid-transition. The observer still guards.
+    }
+  }
+
+  private reassertTopLayer(): void {
+    const host = this.host as HTMLElement & { hidePopover?: () => void };
+    if (typeof host.hidePopover !== 'function') return;
+    const now = Date.now();
+    this.reasserts = this.reasserts.filter((at) => now - at < REASSERT_WINDOW_MS);
+    if (this.reasserts.length >= REASSERT_LIMIT) return;
+    this.reasserts.push(now);
+    try {
+      if (host.matches(':popover-open')) host.hidePopover();
+    } catch {
+      // Fall through to show.
+    }
+    this.showTopLayer();
+  }
+
+  /**
+   * IntersectionObserver v2 reports whether the panel is actually visible:
+   * not covered by anything, not faded, not filtered. Fill arms only after a
+   * continuous ARM_DELAY_MS of that. Without v2 (not Chrome), time alone arms.
+   */
+  private watchVisibility(): void {
+    const Observer = globalThis.IntersectionObserver;
+    const Entry = globalThis.IntersectionObserverEntry;
+    const v2 = Boolean(Observer && Entry && 'isVisible' in Entry.prototype);
+    if (!v2) {
+      this.visibility = 'visible';
+      return;
+    }
+    const options = { trackVisibility: true, delay: 100, threshold: [1] };
+    this.observer = new Observer((entries) => {
+      const entry = entries[entries.length - 1] as
+        (IntersectionObserverEntry & { isVisible?: boolean }) | undefined;
+      if (!entry) return;
+      const next: Visibility = entry.isVisible ? 'visible' : 'covered';
+      if (next === this.visibility) return;
+      this.visibility = next;
+      if (next === 'covered') {
+        this.disarm();
+        this.reassertTopLayer();
+      } else this.scheduleArm();
+    }, options as IntersectionObserverInit);
+    this.observer.observe(this.panel);
+  }
+
+  private scheduleArm(): void {
+    clearTimeout(this.armTimer);
+    this.armTimer = undefined;
+    if (this.armed || this.visibility !== 'visible') {
+      this.syncGuard();
+      return;
+    }
+    this.armTimer = setTimeout(() => {
+      this.armTimer = undefined;
+      if (this.visibility !== 'visible') return;
+      this.armed = true;
+      this.syncGuard();
+    }, ARM_DELAY_MS);
+    this.syncGuard();
+  }
+
+  private disarm(): void {
+    clearTimeout(this.armTimer);
+    this.armTimer = undefined;
+    this.armed = false;
+    this.syncGuard();
+  }
+
+  /** What the panel shows changed: the user must see it again before Fill. */
+  private rearm(): void {
+    this.armed = false;
+    this.scheduleArm();
+  }
+
+  /** Updates the Fill button and its note in place, without moving focus. */
+  private syncGuard(): void {
+    const fill = this.root.querySelector<HTMLButtonElement>('[data-fw-fill]');
+    // Not yet armed is aria-disabled, not disabled: the button keeps focus
+    // for keyboard users, and a press simply does nothing until it arms.
+    if (fill) {
+      if (this.armed) fill.removeAttribute('aria-disabled');
+      else fill.setAttribute('aria-disabled', 'true');
+    }
+    const note = this.root.querySelector<HTMLElement>('[data-fw-guard]');
+    if (note) {
+      const covered = this.visibility === 'covered';
+      note.hidden = !covered;
+      note.textContent = covered
+        ? 'Something on this page is covering Fillwright, so Fill is paused until the panel is fully visible.'
+        : '';
+    }
   }
 
   /** For the end-to-end harness and tests; the page itself cannot call this. */
@@ -176,14 +413,56 @@ export class FillwrightWidget {
 
   /* ------------------------------------------------------------ inputs */
 
+  /**
+   * Applies the Appearance settings. Reduced motion is on when either the
+   * system or the setting asks for it; the theme swaps the stylesheet.
+   */
+  setAppearance({ theme, reducedMotion }: { theme: Theme; reducedMotion: boolean }): void {
+    this.style.textContent = themedCss(WIDGET_CSS, theme);
+    if (theme === 'system') this.panel.removeAttribute('data-theme');
+    else this.panel.setAttribute('data-theme', theme);
+    if (reducedMotion || this.systemReducedMotion) {
+      this.panel.setAttribute('data-reduced-motion', 'true');
+    } else {
+      this.panel.removeAttribute('data-reduced-motion');
+    }
+  }
+
   setDiagnostics(enabled: boolean, signals: Map<string, FieldSignals>): void {
     this.diagnostics = enabled;
     this.signals = signals;
   }
 
+  /** Fields a person could not see. They are counted, never filled. */
+  setHidden(fields: HiddenField[]): void {
+    this.hiddenFields = fields;
+  }
+
+  /**
+   * Page information that arrives after the plan is on screen: the job match,
+   * the progress of earlier steps, a non-blocking notice. All of it decorates
+   * the panel, and the worker round-trip it comes from finishes at an
+   * arbitrary moment — including while the user is halfway through a row's
+   * drafting or saved-answer panel. A redraw then replaces the very control
+   * they are reaching for, so the click lands on a detached node and does
+   * nothing. The metadata is kept and appears at the next draw, which any
+   * further action in the panel causes.
+   */
   setMeta(patch: Partial<PageMeta>): void {
     this.meta = { ...this.meta, ...patch };
-    if (this.state === 'ready' || this.state === 'review') this.draw();
+    if (this.state !== 'ready' && this.state !== 'review') return;
+    if (this.subPanelOpen()) return;
+    this.draw();
+  }
+
+  /** True while a row has a drafting, saved-answer, teach or edit panel open. */
+  private subPanelOpen(): boolean {
+    return (
+      this.drafts.size > 0 ||
+      this.savedAnswers.size > 0 ||
+      this.teaching.size > 0 ||
+      this.editing.size > 0
+    );
   }
 
   /** The page changed under a plan the user is looking at. */
@@ -215,6 +494,7 @@ export class FillwrightWidget {
 
   renderPlan(plan: FillPlan): void {
     const keepReview = this.state === 'review';
+    this.secondPass = 0;
     this.plan = plan;
     this.stale = false;
     this.selection = new Set(
@@ -223,6 +503,14 @@ export class FillwrightWidget {
     // Drafts and pickers refer to fields of the previous scan.
     const ids = new Set(plan.entries.map((entry) => entry.fieldId));
     for (const id of [...this.drafts.keys()]) if (!ids.has(id)) this.drafts.delete(id);
+    for (const id of [...this.savedAnswers.keys()]) {
+      if (!ids.has(id)) this.savedAnswers.delete(id);
+    }
+    for (const id of [...this.edits.keys()]) {
+      if (!ids.has(id)) this.edits.delete(id);
+      else this.selection.add(id);
+    }
+    for (const id of [...this.editing]) if (!ids.has(id)) this.editing.delete(id);
     this.go(keepReview ? 'review' : 'ready');
   }
 
@@ -230,14 +518,29 @@ export class FillwrightWidget {
     this.go('filling');
   }
 
+  /**
+   * After a fill, some fields can be filled that could not before — a State
+   * list that loaded once Country was chosen. Offered, never filled.
+   */
+  offerSecondPass(count: number): void {
+    this.secondPass = count;
+    if (this.state === 'success' || this.state === 'partial') {
+      this.draw();
+      this.live.textContent = `${count} more field${count === 1 ? '' : 's'} can be filled now.`;
+    }
+  }
+
   markFilled(summary: FillSummary): void {
+    this.secondPass = 0;
     this.canUndo = summary.filled > 0 || this.canUndo;
     this.lastSummary = summary;
     this.go(summary.failures.length > 0 || summary.remaining > 0 ? 'partial' : 'success');
   }
 
-  markUndone(restored: number): void {
+  /** @param notRestored labels of fields that could not be put back. */
+  markUndone(restored: number, notRestored: string[] = []): void {
     this.canUndo = false;
+    this.notUndone = notRestored;
     this.lastSummary = { filled: restored, failures: [], remaining: 0, manual: 0 };
     this.go('undo');
   }
@@ -251,6 +554,7 @@ export class FillwrightWidget {
     this.state = state;
     this.minimized = false;
     this.draw();
+    this.rearm();
     this.announce();
   }
 
@@ -281,7 +585,14 @@ export class FillwrightWidget {
   /* ------------------------------------------------------------ drawing */
 
   private draw(): void {
-    const hadFocus = this.root.activeElement !== null;
+    const active = this.root.activeElement;
+    const hadFocus = active !== null;
+    // Keep the user's place: the control they were on, and how far the list
+    // was scrolled. Rows are keyed by field id, so the same control is found
+    // again in the fresh markup.
+    const focusKey = this.pendingFocus ?? active?.getAttribute('data-fw-key') ?? null;
+    this.pendingFocus = null;
+    const scrollTop = this.panel.querySelector<HTMLElement>('.fw-list')?.scrollTop ?? 0;
     this.panel.replaceChildren();
     this.panel.setAttribute('data-state', this.state);
 
@@ -309,6 +620,10 @@ export class FillwrightWidget {
       case 'ready':
       case 'review':
         this.drawPlan();
+        if (this.state === 'review') {
+          const list = this.panel.querySelector<HTMLElement>('.fw-list');
+          if (list) list.scrollTop = scrollTop;
+        }
         break;
       case 'success':
       case 'partial':
@@ -324,7 +639,18 @@ export class FillwrightWidget {
         this.drawLocked();
         break;
     }
-    if (hadFocus) this.focusFirst();
+    if (hadFocus || focusKey) {
+      const target = focusKey ? this.keyed(focusKey) : null;
+      if (target) target.focus({ preventScroll: true });
+      else if (hadFocus) this.focusFirst();
+    }
+  }
+
+  private keyed(key: string): HTMLElement | null {
+    for (const node of this.panel.querySelectorAll<HTMLElement>('[data-fw-key]')) {
+      if (node.getAttribute('data-fw-key') === key) return node;
+    }
+    return null;
   }
 
   private drawPill(): void {
@@ -344,8 +670,14 @@ export class FillwrightWidget {
       ),
     );
     pill.addEventListener('click', () => {
+      // A plan prepared before the user engaged holds no values; get them now.
+      if (this.plan?.withheld && (this.state === 'ready' || this.state === 'review')) {
+        this.callbacks.onOpen();
+        return;
+      }
       this.minimized = false;
       this.draw();
+      this.rearm();
       this.focusFirst();
     });
     this.panel.appendChild(pill);
@@ -493,6 +825,8 @@ export class FillwrightWidget {
       summary.appendChild(this.tally('–', `${counts.filled} already filled`, 'muted'));
     body.appendChild(summary);
 
+    if (this.hiddenFields.length > 0) body.appendChild(this.hiddenNote());
+
     if (this.meta.progress && this.meta.progress.filled > 0) {
       body.appendChild(
         el(
@@ -524,30 +858,97 @@ export class FillwrightWidget {
 
     if (this.meta.jobMatch) body.appendChild(this.jobMatch(this.meta.jobMatch));
 
+    if (plan.withheld) {
+      const actions = el('div', 'fw-actions');
+      actions.appendChild(this.button('Close', 'ghost', () => this.callbacks.onClose()));
+      actions.appendChild(
+        this.button('Review with Fillwright', 'primary', () => this.callbacks.onOpen()),
+      );
+      body.appendChild(actions);
+      return;
+    }
+
     if (reviewing) {
       body.appendChild(
-        renderReviewList(plan.entries, this.selection, this.explanations, this.teaching, {
-          diagnostics: this.diagnostics ? this.signals : null,
-          drafts: this.drafts,
-          canDraft: (entry) => this.callbacks.canDraft(entry),
-          onToggle: (fieldId, selected) => {
-            if (selected) this.selection.add(fieldId);
-            else this.selection.delete(fieldId);
-            this.draw();
+        renderReviewList(
+          plan.entries,
+          {
+            selection: this.selection,
+            expanded: this.explanations,
+            teaching: this.teaching,
+            editing: this.editing,
+            edits: this.edits,
+            filter: this.filter,
           },
-          onTeach: (entry, field, remember) => {
-            this.teaching.delete(entry.fieldId);
-            this.callbacks.onTeach(entry, field, remember);
+          {
+            diagnostics: this.diagnostics ? this.signals : null,
+            drafts: this.drafts,
+            choices: this.choices,
+            savedAnswers: this.savedAnswers,
+            onSavedAnswerStart: (entry) => this.callbacks.onSavedAnswerStart?.(entry),
+            onSavedAnswerPick: (entry, id) => this.callbacks.onSavedAnswerPick?.(entry, id),
+            onSavedAnswerUse: (entry, text) => this.callbacks.onSavedAnswerUse?.(entry, text),
+            onSavedAnswerCancel: (entry) => {
+              this.savedAnswers.delete(entry.fieldId);
+              this.draw();
+            },
+            onShowField: this.callbacks.onShowField,
+            canDraft: (entry) => this.callbacks.canDraft(entry),
+            onToggle: (fieldId, selected) => {
+              if (selected) this.selection.add(fieldId);
+              else this.selection.delete(fieldId);
+              this.draw();
+            },
+            onTeach: (entry, field, remember, customKey) => {
+              this.teaching.delete(entry.fieldId);
+              this.callbacks.onTeach(entry, field, remember, customKey);
+            },
+            onExplainToggle: () => this.draw(),
+            onDraftStart: (entry) => this.callbacks.onDraftStart(entry),
+            onDraftGenerate: (entry, facts) => this.callbacks.onDraftGenerate(entry, facts),
+            onDraftUse: (entry, text) => this.callbacks.onDraftUse(entry, text),
+            onDraftCancel: (entry) => {
+              this.drafts.delete(entry.fieldId);
+              this.callbacks.onDraftStop?.(entry);
+              this.draw();
+            },
+            onSetMany: (fieldIds, selected) => {
+              for (const id of fieldIds) {
+                if (selected) this.selection.add(id);
+                else this.selection.delete(id);
+              }
+              this.draw();
+            },
+            onFilter: (filter) => {
+              this.filter = filter;
+              this.draw();
+            },
+            onEditStart: (fieldId) => {
+              this.editing.add(fieldId);
+              this.pendingFocus = fieldId + ':edit-input';
+              this.draw();
+            },
+            onEditSave: (fieldId, value) => {
+              this.editing.delete(fieldId);
+              if (value) {
+                this.edits.set(fieldId, value);
+                this.selection.add(fieldId);
+              } else {
+                this.edits.delete(fieldId);
+                const original = plan.entries.find((entry) => entry.fieldId === fieldId);
+                if (!original?.selected) this.selection.delete(fieldId);
+              }
+              this.pendingFocus = fieldId + ':edit';
+              this.draw();
+            },
+            onEditCancel: (fieldId) => {
+              this.editing.delete(fieldId);
+              this.pendingFocus = fieldId + ':edit';
+              this.draw();
+            },
+            onOpenProfile: (field) => this.callbacks.onOpenPage('profile', field),
           },
-          onExplainToggle: () => this.draw(),
-          onDraftStart: (entry) => this.callbacks.onDraftStart(entry),
-          onDraftGenerate: (entry, facts) => this.callbacks.onDraftGenerate(entry, facts),
-          onDraftUse: (entry, text) => this.callbacks.onDraftUse(entry, text),
-          onDraftCancel: (entry) => {
-            this.drafts.delete(entry.fieldId);
-            this.draw();
-          },
-        }),
+        ),
       );
     }
 
@@ -567,16 +968,30 @@ export class FillwrightWidget {
           : `Fill ${count} ready`,
       'primary',
       () => {
-        const entries = plan.entries.map((entry) => ({
-          ...entry,
-          selected: this.selection.has(entry.fieldId),
-        }));
+        // Belt and braces: a disabled button fires nothing, but re-check.
+        if (!this.armed) return;
+        const entries = plan.entries.map((entry) => {
+          const edit = this.edits.get(entry.fieldId);
+          return {
+            ...entry,
+            ...(edit === undefined ? {} : { newValue: edit }),
+            selected: this.selection.has(entry.fieldId),
+          };
+        });
         this.callbacks.onFill(entries);
       },
     );
+    fill.setAttribute('data-fw-fill', '');
     if (count === 0) fill.disabled = true;
     actions.appendChild(fill);
     body.appendChild(actions);
+
+    const guard = el('p', 'fw-note fw-note--warn');
+    guard.setAttribute('data-fw-guard', '');
+    guard.setAttribute('role', 'status');
+    guard.hidden = true;
+    body.appendChild(guard);
+    this.syncGuard();
 
     body.appendChild(
       el('p', 'fw-note', 'Fillwright never submits an application. That is always your click.'),
@@ -610,6 +1025,19 @@ export class FillwrightWidget {
     if (summary.manual > 0)
       tally.appendChild(this.tally('✎', `${summary.manual} need your input`, 'muted'));
     if (tally.childElementCount > 0) body.appendChild(tally);
+
+    if (this.secondPass > 0) {
+      const offer = el('div', 'fw-banner');
+      offer.appendChild(
+        el(
+          'span',
+          '',
+          `${this.secondPass} more field${this.secondPass === 1 ? '' : 's'} can be filled now.`,
+        ),
+      );
+      offer.appendChild(this.link('Review them', () => this.callbacks.onRescan()));
+      body.appendChild(offer);
+    }
 
     // When the page refused every single value, one sentence explains it
     // better than a list of identical failures.
@@ -675,6 +1103,19 @@ export class FillwrightWidget {
         `Restored ${restored} field${restored === 1 ? '' : 's'} to how they were.`,
       ),
     );
+    if (this.notUndone.length > 0) {
+      body.appendChild(
+        el(
+          'p',
+          'fw-note',
+          `Fillwright couldn’t put ${this.notUndone.length === 1 ? 'this field' : 'these fields'} back — please change ${this.notUndone.length === 1 ? 'it' : 'them'} yourself:`,
+        ),
+      );
+      const list = el('ul', 'fw-undo-missed');
+      // Labels come from the page, so they are set as text, never markup.
+      for (const label of this.notUndone) list.appendChild(el('li', '', label));
+      body.appendChild(list);
+    }
     const actions = el('div', 'fw-actions');
     actions.appendChild(this.button('Close', 'ghost', () => this.callbacks.onClose()));
     actions.appendChild(this.button('Scan again', 'primary', () => this.callbacks.onRescan()));
@@ -964,6 +1405,39 @@ export class FillwrightWidget {
     tools.appendChild(close);
     header.appendChild(tools);
     return header;
+  }
+
+  /**
+   * "N hidden fields ignored", with each field's reason on request. Every
+   * label here came from the page, so it is set as text only.
+   */
+  private hiddenNote(): HTMLElement {
+    const count = this.hiddenFields.length;
+    const wrap = el('div', 'fw-hidden');
+    const line = el('p', 'fw-note');
+    line.appendChild(el('span', '', `${count} hidden field${count === 1 ? '' : 's'} ignored. `));
+    const toggle = this.link(this.showHidden ? 'Hide reasons' : 'Why?', () => {
+      this.showHidden = !this.showHidden;
+      this.draw();
+    });
+    toggle.setAttribute('aria-expanded', String(this.showHidden));
+    line.appendChild(toggle);
+    wrap.appendChild(line);
+    if (this.showHidden) {
+      const list = el('ul', 'fw-hidden__list');
+      for (const field of this.hiddenFields) {
+        list.appendChild(el('li', 'fw-note', `${field.label}: ${field.reason}`));
+      }
+      wrap.appendChild(list);
+      wrap.appendChild(
+        el(
+          'p',
+          'fw-note',
+          'A person cannot see these, so Fillwright never fills them. Hidden fields are often traps for bots.',
+        ),
+      );
+    }
+    return wrap;
   }
 
   private tally(icon: string, label: string, tone: 'ok' | 'caution' | 'muted'): HTMLElement {

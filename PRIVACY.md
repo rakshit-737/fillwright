@@ -6,7 +6,7 @@ personal information.**
 That is the entire policy. The rest of this document explains how that is true
 architecturally, so you do not have to take it on trust.
 
-_Last updated: 2026-09-11. Applies to Fillwright 0.2.0._
+_Last updated: 2026-09-19. Applies to Fillwright 0.5.0 and later._
 
 ---
 
@@ -20,12 +20,13 @@ browser storage mechanisms:
 | Your profile(s) | IndexedDB (`fillwright`) | Everything from your resume: name, contact details, education, experience, projects, skills, plus any preferences you set |
 | Your resume file | IndexedDB (`fillwright`) | The original file bytes and its extracted text |
 | Remembered field mappings | IndexedDB (`fillwright`) | "On this site, the field labelled X means Y" — corrections you made |
-| Application history | IndexedDB (`fillwright`) | **Off by default.** Company, role, site, date, and how many fields were filled. Never what you typed |
+| Application history | IndexedDB (`fillwright`) | **Off by default.** Company, role, site, date, and how many fields were filled — never what you typed. Plus what you add: status, notes, a follow-up date, the profile used, and (only if you tick it) the posting link without its query string. Kept 6/12/24 months or until you clear it |
 | Settings | `chrome.storage.local` | Your preferences and which profile is active |
 | Vault key, while unlocked | `chrome.storage.session` | Memory-only, never written to disk, cleared when the browser closes |
 
 If you turn on encryption (Options → Security), your profile and resume are
-stored as AES-256-GCM ciphertext with a key derived from your passphrase.
+stored as AES-256-GCM ciphertext with a key derived from your passphrase, and
+so is your application history (all but each entry's date).
 
 ## 2. What Fillwright sends
 
@@ -53,7 +54,11 @@ only after you click its toolbar button or press its keyboard shortcut, and only
 on that tab.
 
 If you enable automatic detection, Chrome will ask you to approve specific
-sites. You can withdraw that at any time from `chrome://extensions`.
+sites: by default only job-application sites (Greenhouse, Lever, Workday and
+similar). You can add a single site from the toolbar popup, or every https site
+as a separate step in Settings. Settings → Permissions lists each site you
+granted with a Revoke button; you can also withdraw access from
+`chrome://extensions`.
 
 Fillwright never reads, stores, or fills:
 

@@ -1129,7 +1129,18 @@
   background: var(--fw-ok-soft);
 }
 
-.fw-availability--downloadable {
+.fw-availability__progress {
+  display: grid;
+  gap: var(--fw-space-1, 4px);
+  font-size: var(--fw-text-sm);
+}
+
+.fw-availability__progress progress {
+  width: 100%;
+}
+
+.fw-availability--downloadable,
+.fw-availability--downloading {
   border-color: color-mix(in oklab, var(--fw-caution) 35%, transparent);
   background: var(--fw-caution-soft);
 }
@@ -1378,4 +1389,18 @@
     flex-direction: column;
     align-items: stretch;
   }
+}
+
+/* --------------------------------------------------------- history tracker */
+
+.fw-history__tracker {
+  flex-basis: 100%;
+  display: grid;
+  gap: var(--fw-space-3);
+  padding-top: var(--fw-space-3);
+}
+
+.fw-history__status {
+  font-weight: 600;
+  color: var(--fw-ink-muted);
 }

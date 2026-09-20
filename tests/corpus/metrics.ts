@@ -1,0 +1,155 @@
+/**
+ * Scoring for the accuracy corpus. Pure functions, no I/O, so the maths is
+ * unit-tested on its own (tests/eval-metrics.test.ts) and the eval runner
+ * (tests/corpus/eval.run.ts) only glues data to it.
+ */
+
+export interface Score {
+  /** Predictions that were right. */
+  tp: number;
+  /** Predictions that were made but wrong. */
+  fp: number;
+  /** Expected answers that were missed. */
+  fn: number;
+}
+
+export interface Metric {
+  precision: number;
+  recall: number;
+  support: number;
+}
+
+export type Baseline = Record<string, { precision: number; recall: number }>;
+
+export const emptyScore = (): Score => ({ tp: 0, fp: 0, fn: 0 });
+
+/** Precision and recall, rounded to 4 places. An empty denominator scores 1. */
+export function toMetric(score: Score): Metric {
+  const round = (n: number) => Math.round(n * 10_000) / 10_000;
+  const predicted = score.tp + score.fp;
+  const expected = score.tp + score.fn;
+  return {
+    precision: predicted === 0 ? 1 : round(score.tp / predicted),
+    recall: expected === 0 ? 1 : round(score.tp / expected),
+    support: expected,
+  };
+}
+
+/**
+ * Tallies classifier results per canonical field. 'unknown' is a real class
+ * here: declining on a password box is a correct answer, and guessing a
+ * profile field for it is a false positive against that field.
+ */
+export function scoreClassification(results: Array<{ expected: string; actual: string }>): {
+  perField: Record<string, Score>;
+  confusions: Array<{ expected: string; actual: string; count: number }>;
+} {
+  const perField: Record<string, Score> = {};
+  const confusion = new Map<string, number>();
+  const at = (field: string) => (perField[field] ??= emptyScore());
+
+  for (const { expected, actual } of results) {
+    if (expected === actual) {
+      at(expected).tp += 1;
+      continue;
+    }
+    at(expected).fn += 1;
+    at(actual).fp += 1;
+    const pairKey = JSON.stringify([expected, actual]);
+    confusion.set(pairKey, (confusion.get(pairKey) ?? 0) + 1);
+  }
+
+  const confusions = [...confusion.entries()]
+    .map(([key, count]) => {
+      const [expected, actual] = JSON.parse(key) as [string, string];
+      return { expected, actual, count };
+    })
+    .sort((a, b) => b.count - a.count || a.expected.localeCompare(b.expected));
+  return { perField, confusions };
+}
+
+/** Lower-case, accents kept, punctuation and runs of space collapsed. */
+export function normalizeValue(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}+#]+/gu, ' ')
+    .trim();
+}
+
+/** Phone numbers compare on digits alone: formatting is not the parser's job. */
+export const digitsOnly = (value: string) => value.replace(/\D+/g, '');
+
+/**
+ * True when a parsed value names the expected one. Exact after normalising, or
+ * one contains the other when both are long enough that containment is not a
+ * coincidence ("B.E." inside "B.E. in Electronics" counts; "C" inside "CSS" not).
+ */
+export function sameValue(expected: string, actual: string): boolean {
+  const e = normalizeValue(expected);
+  const a = normalizeValue(actual);
+  if (!e || !a) return false;
+  if (e === a) return true;
+  if (Math.min(e.length, a.length) < 3) return false;
+  const wrap = (s: string) => ` ${s} `;
+  return wrap(a).includes(wrap(e)) || wrap(e).includes(wrap(a));
+}
+
+/** Adds one scalar comparison: empty expected + empty actual counts as nothing. */
+export function scoreScalar(
+  score: Score,
+  expected: string,
+  actual: string,
+  same = sameValue,
+): void {
+  if (!expected && !actual) return;
+  if (expected && actual && same(expected, actual)) score.tp += 1;
+  else {
+    if (actual) score.fp += 1;
+    if (expected) score.fn += 1;
+  }
+}
+
+/**
+ * Scores a list field (skills, schools, employers) as sets: each expected item
+ * matched at most once, order ignored.
+ */
+export function scoreList(score: Score, expected: string[], actual: string[]): void {
+  const remaining = actual.filter(Boolean);
+  for (const item of expected.filter(Boolean)) {
+    const index = remaining.findIndex((candidate) => sameValue(item, candidate));
+    if (index === -1) score.fn += 1;
+    else {
+      score.tp += 1;
+      remaining.splice(index, 1);
+    }
+  }
+  score.fp += remaining.length;
+}
+
+/**
+ * Compares current metrics with the committed baseline. A metric may go up
+ * freely; any drop fails. Metrics missing from the baseline are reported but
+ * do not fail, so adding a new field to the corpus is not itself a regression.
+ */
+export function compareToBaseline(
+  current: Record<string, Metric>,
+  baseline: Baseline,
+): { regressions: string[]; missing: string[] } {
+  const regressions: string[] = [];
+  const missing: string[] = [];
+  const EPSILON = 1e-9;
+  for (const [key, floor] of Object.entries(baseline)) {
+    const now = current[key];
+    if (!now) {
+      missing.push(key);
+      continue;
+    }
+    if (now.precision + EPSILON < floor.precision) {
+      regressions.push(`${key}: precision ${now.precision} < baseline ${floor.precision}`);
+    }
+    if (now.recall + EPSILON < floor.recall) {
+      regressions.push(`${key}: recall ${now.recall} < baseline ${floor.recall}`);
+    }
+  }
+  return { regressions, missing };
+}

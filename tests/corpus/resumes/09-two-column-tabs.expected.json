@@ -1,0 +1,27 @@
+{
+  "layout": "two-column flattened to tabs",
+  "firstName": "Sofia",
+  "lastName": "Marchetti",
+  "email": "sofia.marchetti@example.com",
+  "phone": "+39 347 555 0123",
+  "education": [
+    {
+      "institution": "Politecnico di Milano",
+      "degree": "Master of Science",
+      "gpa": ""
+    }
+  ],
+  "experience": [
+    {
+      "company": "Lumen Studio Srl",
+      "title": "Product Designer"
+    }
+  ],
+  "skills": [
+    "Figma",
+    "Sketch",
+    "Prototyping",
+    "User Research",
+    "Design Systems"
+  ]
+}

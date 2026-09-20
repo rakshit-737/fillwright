@@ -1,4 +1,5 @@
 import { createServer } from 'node:http';
+import { createServer as createTlsServer } from 'node:https';
 import { readFile } from 'node:fs/promises';
 import { resolve, extname, normalize } from 'node:path';
 
@@ -18,8 +19,8 @@ const TYPES = {
  * fixtures over http://localhost — the same way a real application form is
  * served.
  */
-export function startServer(root, port = 0, host = '127.0.0.1') {
-  const server = createServer(async (request, response) => {
+export function startServer(root, port = 0, host = '127.0.0.1', tls = null) {
+  const handler = async (request, response) => {
     try {
       const url = new URL(request.url ?? '/', 'http://localhost');
       const path = url.pathname === '/' ? '/index.html' : url.pathname;
@@ -35,13 +36,17 @@ export function startServer(root, port = 0, host = '127.0.0.1') {
     } catch {
       response.writeHead(404).end('Not found');
     }
-  });
+  };
+  // With `tls` ({ key, cert }), the same fixtures are served over HTTPS so a
+  // real ATS hostname can be mapped onto them (see ats/workday passive test).
+  const server = tls ? createTlsServer(tls, handler) : createServer(handler);
 
   return new Promise((done) => {
     server.listen(port, host, () => {
       const address = server.address();
       done({
-        origin: `http://${host}:${address.port}`,
+        origin: `${tls ? 'https' : 'http'}://${host}:${address.port}`,
+        port: address.port,
         close: () => new Promise((closed) => server.close(closed)),
       });
     });

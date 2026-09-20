@@ -1,0 +1,15 @@
+Arjun Mehta                                  arjun.mehta@example.com
+Pune, India                                  +91 99220 55501
+
+EXPERIENCE
+Software Developer, Quillpoint Technologies
+Pune | Aug 2021 - Present
+- Built an invoicing module in Django
+
+EDUCATION
+Savitribai Phule Pune University
+Bachelor of Engineering in Information Technology | 2017 - 2021
+CGPA: 7.8/10
+
+SKILLS
+Python, Django, PostgreSQL, Celery

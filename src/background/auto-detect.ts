@@ -1,4 +1,5 @@
 import { getSettings } from '@/storage/settings';
+import { grantedSiteOrigins } from '@/utils/site-access';
 
 /**
  * Assist / Smart mode plumbing.
@@ -10,8 +11,9 @@ import { getSettings } from '@/storage/settings';
  * In Manual mode Fillwright is injected only when the user invokes it, through
  * `activeTab`, and needs no site access at all. The other modes need to run on
  * pages the user has not clicked on yet, which is only possible with the
- * optional `https://*\/*` host permission — requested from the settings page,
- * where the user sees Chrome's own prompt and can refuse.
+ * optional host permissions — requested from the settings page (job sites by
+ * default, every https site only as a second step) or from the popup (this one
+ * site), where the user sees Chrome's own prompt and can refuse.
  *
  * With the permission granted and a proactive mode chosen, the content script
  * is registered dynamically. Removing either one unregisters it, so the
@@ -19,25 +21,14 @@ import { getSettings } from '@/storage/settings';
  */
 
 export const AUTO_SCRIPT_ID = 'fillwright-auto-detect';
-/** What Settings asks for. */
-export const AUTO_ORIGINS = ['https://*/*'];
-/**
- * Every origin pattern the manifest lists as optional. The script is
- * registered for exactly the subset the user has granted — so granting only
- * localhost (a developer testing their own form) never reaches https sites.
- */
-const CANDIDATE_ORIGINS = ['https://*/*', 'http://localhost/*', 'http://127.0.0.1/*'];
 
+/**
+ * The script is registered for exactly what Chrome reports as granted — the
+ * job-site tier, single sites turned on from the popup, localhost, or every
+ * https site if the user took that explicit step. Nothing more.
+ */
 export async function grantedOrigins(): Promise<string[]> {
-  const granted: string[] = [];
-  for (const origin of CANDIDATE_ORIGINS) {
-    try {
-      if (await chrome.permissions.contains({ origins: [origin] })) granted.push(origin);
-    } catch {
-      /* An unknown pattern is simply not granted. */
-    }
-  }
-  return granted;
+  return grantedSiteOrigins();
 }
 
 export async function hasSiteAccess(): Promise<boolean> {

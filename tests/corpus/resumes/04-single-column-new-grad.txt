@@ -1,0 +1,15 @@
+Tomás Herrera
+Madrid, Spain · tomas.herrera@example.com · +34 612 345 678
+
+EDUCATION
+Universidad Politécnica de Madrid
+Master of Science in Data Science | 2023 - 2025
+Universidad de Sevilla
+Bachelor of Engineering in Telecommunications | 2019 - 2023
+
+PROJECTS
+Routewise | Python, OR-Tools
+- Vehicle routing solver for a local courier cooperative
+
+SKILLS
+Python, C++, TensorFlow, Linux

@@ -1,0 +1,13 @@
+DR. AYESHA SIDDIQUI
+Karachi, Pakistan | ayesha.siddiqui@example.com | +92 300 555 7788
+
+RESEARCH EXPERIENCE
+Postdoctoral Researcher, Indus Institute of Computing
+Karachi | September 2022 - Present
+
+EDUCATION
+Lahore University of Management Sciences
+PhD in Computer Science | 2017 - 2022
+
+SKILLS
+Python, PyTorch, LaTeX, Statistics

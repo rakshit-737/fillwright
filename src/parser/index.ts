@@ -49,12 +49,17 @@ export interface ParsedResume {
  *     from a resume — not from names, not from schools, not from locations.
  *     See src/security/sensitive.ts, which enforces this on the merge path.
  */
-export function parseResume(rawText: string): ParsedResume {
+export interface ParseOptions {
+  /** Links the file carried outside its text (see ExtractedText.links). */
+  links?: readonly string[];
+}
+
+export function parseResume(rawText: string, options: ParseOptions = {}): ParsedResume {
   const text = normalizeDocument(rawText);
   const sections = splitSections(text);
   const warnings: string[] = [];
 
-  const contact = parseContact(sections, text);
+  const contact = parseContact(sections, text, options.links ?? []);
   const education = parseEducation(sections).sort((a, b) =>
     compare(b.endDate || b.graduationDate, a.endDate || a.graduationDate),
   );

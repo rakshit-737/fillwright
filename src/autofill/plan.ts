@@ -14,6 +14,7 @@ import { assignGroups, countBlocks, groupKindOf, type FieldGroup } from '@/field
 import { resolveForField } from './resolve';
 import { isSensitiveField, requiresExplicitConsent } from '@/security/sensitive';
 import { normalizeLabel } from '@/field-detection/normalize';
+import { CONSENT_REQUIRED_HINT_RE } from '@/field-detection/rules';
 export { STATUS_LABELS } from './status';
 
 /**
@@ -47,10 +48,16 @@ export function buildMappings(
       saved
         ? {
             field: saved.canonical,
-            confidence: 0.99,
+            // An imported rule was not taught on this device: it is proposed,
+            // never pre-ticked, until the user confirms it on a real form.
+            confidence: saved.imported
+              ? Math.min(0.99, settings.autofill.confidenceThreshold) - 0.01
+              : 0.99,
             rationale: isOneOff(saved)
               ? 'you chose this for this form'
-              : 'you taught Fillwright this mapping on this website',
+              : saved.imported
+                ? 'imported from a file — check it, then choose it again to confirm'
+                : 'you taught Fillwright this mapping on this website',
             isOpenQuestion: false,
           }
         : classifyField(field.signals),
@@ -58,6 +65,7 @@ export function buildMappings(
   }
 
   resolveLoneNameField(fields, classifications);
+  splitPhoneBesideCountryCode(fields, classifications, byFingerprint);
 
   const groups = assignGroups(
     fields,
@@ -78,8 +86,10 @@ export function buildMappings(
       rationale: classification.rationale,
       fromSavedRule: Boolean(saved) && !isOneOff(saved),
       corrected: Boolean(saved),
+      ...(saved?.imported ? { imported: true } : {}),
       entryIndex: group.index,
     };
+    if (saved && !isOneOff(saved)) base.savedMappingId = saved.id;
 
     /* --- fields we refuse to touch ------------------------------------- */
 
@@ -97,6 +107,17 @@ export function buildMappings(
         canonical: 'unknown',
         status: 'unmapped',
         rationale: 'this asks about someone else, so Fillwright leaves it to you',
+      };
+    }
+
+    // A checkbox that certifies, agrees, consents or declares is the user's
+    // statement to make. It is never ticked, whatever it matched or was taught.
+    if (field.kind === 'checkbox' && isConsentStatement(field)) {
+      return {
+        ...base,
+        status: 'needs-consent',
+        proposedValue: '',
+        rationale: 'this box is a statement you make yourself, so Fillwright never ticks it',
       };
     }
 
@@ -127,7 +148,13 @@ export function buildMappings(
 
     /* --- resolve a value ------------------------------------------------ */
 
-    const resolved = resolveForField(classification.field, field, profile, group.index);
+    const resolved = resolveForField(
+      classification.field,
+      field,
+      profile,
+      group.index,
+      saved?.customKey,
+    );
     const sensitive = isSensitiveField(classification.field);
 
     if (resolved.needsConsent || (sensitive && !resolved.value)) {
@@ -182,6 +209,17 @@ export function buildMappings(
       };
     }
 
+    // A value the field cannot hold would be cut on write, and a cut URL or
+    // email is a different value. Say so before anything is written.
+    const limit = field.signals.maxLength;
+    if (limit && resolved.value.length > limit) {
+      return {
+        ...entry,
+        status: 'review',
+        rationale: `${entry.rationale} This field accepts ${limit} characters and your value has ${resolved.value.length}, so it would be cut — check it before filling.`,
+      };
+    }
+
     if (combined < settings.autofill.confidenceThreshold) {
       return { ...entry, status: 'review' };
     }
@@ -226,6 +264,39 @@ function resolveLoneNameField(
   });
 }
 
+function isConsentStatement(field: DetectedField): boolean {
+  const text = normalizeLabel(
+    [field.signals.labelText, field.signals.ariaLabel].filter(Boolean).join(' '),
+  );
+  return CONSENT_REQUIRED_HINT_RE.test(text);
+}
+
+/**
+ * A form that asks for the dialling code separately wants the rest of the
+ * number in its phone field; writing "+91 98450 12345" beside a "+91" select
+ * would enter the code twice. A phone field the user mapped by hand is left
+ * as they chose.
+ */
+function splitPhoneBesideCountryCode(
+  fields: DetectedField[],
+  classifications: Map<string, ReturnType<typeof classifyField>>,
+  saved: Map<string, SavedMapping>,
+): void {
+  const hasCode = [...classifications.values()].some(
+    (c) => c.field === 'personal.phoneCountryCode' && c.confidence >= 0.5,
+  );
+  if (!hasCode) return;
+  for (const field of fields) {
+    const current = classifications.get(field.id);
+    if (current?.field !== 'personal.phone' || saved.has(fingerprintOf(field))) continue;
+    classifications.set(field.id, {
+      ...current,
+      field: 'personal.phoneNational',
+      rationale: `${current.rationale} The form asks for the country code separately, so this gets the number without it.`,
+    });
+  }
+}
+
 /** A correction made for the current form only; see `content:request-mappings`. */
 function isOneOff(mapping: SavedMapping | undefined): boolean {
   return Boolean(mapping?.id.startsWith('override-'));
@@ -243,6 +314,19 @@ export function fingerprintOf(field: DetectedField): string {
     field.kind,
   ].filter(Boolean);
   return parts.join('|').slice(0, 240);
+}
+
+/**
+ * The values-free variant of a plan, for a panel the user has not opened yet.
+ * Counts and statuses survive so the pill can say "4 ready"; the proposed
+ * values and the rationales (which can quote them) do not leave the worker.
+ */
+export function withoutValues(plan: FillPlan): FillPlan {
+  return {
+    ...plan,
+    withheld: true,
+    entries: plan.entries.map((entry) => ({ ...entry, newValue: '', rationale: '' })),
+  };
 }
 
 /** Assembles the preview the user reviews before anything is written. */
@@ -271,7 +355,9 @@ export function buildFillPlan(
         selected: mapping.status === 'ready',
         fingerprint: fingerprintOf(field),
         remembered: mapping.fromSavedRule,
+        ...(mapping.savedMappingId ? { savedMappingId: mapping.savedMappingId } : {}),
         corrected: Boolean(mapping.corrected),
+        ...(mapping.imported ? { imported: true } : {}),
         required: field.signals.required,
       } satisfies FillPlanEntry;
     })

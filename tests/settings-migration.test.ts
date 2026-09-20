@@ -35,7 +35,7 @@ describe('settings migration from 0.3', () => {
       version: number;
       autofill: Record<string, unknown>;
     };
-    expect(stored.version).toBe(2);
+    expect(stored.version).toBe(3);
     expect(stored.autofill).not.toHaveProperty('autoDetectOnKnownSites');
   });
 });

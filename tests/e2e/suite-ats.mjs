@@ -4,10 +4,18 @@
  * Each fixture states its expected behaviour at the top of the page; these
  * tests assert exactly that. Trust note: drives the TEST build only.
  */
-import { readWidget, clickWidgetButton, waitForWidget, sleep } from './harness.mjs';
+import {
+  readWidget,
+  clickWidgetButton,
+  trustedClick,
+  waitForWidget,
+  sleep,
+  ATS_TEST_HOST,
+} from './harness.mjs';
 
 export async function runAtsSuite(ctx) {
-  const { browser, extensionId, server, test, assert, assertEqual, worker, evalInWorker } = ctx;
+  const { secure, browser, extensionId, server, test, assert, assertEqual, worker, evalInWorker } =
+    ctx;
   const url = (name) => `${server.origin}/ats/${name}`;
 
   const control = await browser.newPage();
@@ -22,6 +30,8 @@ export async function runAtsSuite(ctx) {
   ).data;
   profile.preferences.workModePreference = 'remote';
   profile.links.portfolio = { value: '', provenance: profile.links.portfolio.provenance };
+  // For the dependent State dropdown on the Greenhouse fixture.
+  profile.address.state = { value: 'Karnataka', provenance: profile.address.city.provenance };
   assert((await ui({ type: 'ui:save-profile', profile })).ok, 'could not update the profile');
   const P = {
     first: profile.personal.firstName.value,
@@ -134,6 +144,86 @@ export async function runAtsSuite(ctx) {
     await page.close();
   });
 
+  await test('ats/greenhouse: phone code, month/year parts, role location and current box', async () => {
+    const page = await open('greenhouse.html');
+    await fill(page);
+    const got = await values(page, [
+      '#phone_country_code',
+      '#phone',
+      '#edu_start_month',
+      '#edu_start_year',
+      '#edu_end_month',
+      '#edu_end_year',
+      '#emp_title',
+      '#emp_location',
+      '#emp_start_month',
+      '#emp_start_year',
+      '#emp_end_month',
+      '#emp_end_year',
+    ]);
+    const current = await page.evaluate(() => document.getElementById('emp_current').checked);
+    // Read back from the live profile: earlier suites replace its entries.
+    const latest = (
+      await ui({ type: 'ui:get-profile', profileId: state.data.settings.activeProfileId })
+    ).data;
+    const edu = latest.education[0];
+    const eduEnd = edu.graduationDate || edu.endDate;
+    const role = [...latest.experience].sort((a, b) => Number(b.current) - Number(a.current))[0];
+    const month = (date) => String(Number(date.slice(5, 7)));
+    assertEqual(got['#phone_country_code'], 'IN', 'phone country code');
+    assertEqual(got['#phone'], P.phone.replace(/^\+\d+\s+/, ''), 'phone without its code');
+    assertEqual(got['#edu_start_month'], edu.startDate.slice(5, 7), 'education start month');
+    assertEqual(got['#edu_start_year'], edu.startDate.slice(0, 4), 'education start year');
+    assertEqual(got['#edu_end_month'], eduEnd.slice(5, 7), 'education end month');
+    assertEqual(got['#edu_end_year'], eduEnd.slice(0, 4), 'education end year');
+    assertEqual(got['#emp_title'], role.title, 'role title');
+    assertEqual(got['#emp_location'], role.location, 'role location');
+    assertEqual(got['#emp_start_month'], month(role.startDate), 'role start month (by name)');
+    assertEqual(got['#emp_start_year'], role.startDate.slice(0, 4), 'role start year');
+    assertEqual(current, role.current, 'the current-role box');
+    assertEqual(got['#emp_end_month'], role.current ? '' : month(role.endDate), 'role end month');
+    assertEqual(
+      got['#emp_end_year'],
+      role.current ? '' : role.endDate.slice(0, 4),
+      'role end year',
+    );
+    await page.close();
+  });
+
+  await test('ats/greenhouse: State loads after Country — offered as a second pass, never auto-filled', async () => {
+    const page = await open('greenhouse.html');
+    const step = (label, promise) =>
+      promise.catch((error) => {
+        throw new Error(`${label}: ${error.message}`);
+      });
+    const before = await step('review list', reviewItems(page));
+    const state = before.find((i) => i.label.startsWith('State'));
+    assert(state, `State not listed\n      ${dump(before)}`);
+    assertEqual(state.value, '', 'State cannot be proposed before its options load');
+    await step('first fill', fill(page));
+    assertEqual(await page.evaluate(() => document.getElementById('country').value), 'India');
+    const offered = await step(
+      'second-pass offer',
+      waitForWidget(page, (s) => s.text.includes('can be filled now'), 15_000),
+    );
+    assert(offered.text.includes('1 more field can be filled now'), `offer: ${offered.text}`);
+    await sleep(1_500);
+    assertEqual(
+      await page.evaluate(() => document.getElementById('state').value),
+      '',
+      'State was filled without the user asking',
+    );
+    assert(await clickWidgetButton(page, 'Review them'), 'no Review them');
+    await step(
+      'plan after Review them',
+      waitForWidget(page, (s) => s.text.includes('application field'), 15_000),
+    );
+    await step('second fill', fill(page));
+    assertEqual(await page.evaluate(() => document.getElementById('state').value), 'KA', 'State');
+    assertEqual(await page.evaluate(() => window.__submitted), false, 'submitted');
+    await page.close();
+  });
+
   /* --- Lever -------------------------------------------------------- */
 
   await test('ats/lever: div labels and names; written answer left alone', async () => {
@@ -175,6 +265,7 @@ export async function runAtsSuite(ctx) {
         country: byLabel('Country'),
         first: byLabel('First Name'),
         email: byLabel('Email Address'),
+        phoneCode: byLabel('Country Phone Code'),
         phone: byLabel('Phone Number'),
         presses: window.__nextPresses,
       };
@@ -182,7 +273,8 @@ export async function runAtsSuite(ctx) {
     assertEqual(got.country, 'India', 'country dropdown');
     assertEqual(got.first, P.first, 'first name');
     assertEqual(got.email, P.email, 'email');
-    assertEqual(got.phone, P.phone, 'phone');
+    assertEqual(got.phoneCode, 'IN_91', 'country phone code');
+    assertEqual(got.phone, P.phone.replace(/^\+\d+\s+/, ''), 'phone without its code');
     assertEqual(got.presses, 0, 'Fillwright pressed Save and Continue');
     ctx.workdayPage = page;
   });
@@ -207,6 +299,43 @@ export async function runAtsSuite(ctx) {
       Array.from(document.querySelectorAll('[data-automation-id="degree"]')).map((s) => s.value),
     );
     assertEqual(degrees.join(' | '), P.degree.join(' | '), 'degrees by block');
+    const years = await page.evaluate(() =>
+      Array.from(document.querySelectorAll('[data-automation-id^="education-"]')).map((block) =>
+        ['firstYearAttended', 'lastYearAttended']
+          .map((id) => block.querySelector(`[data-automation-id="${id}"]`).value)
+          .join('-'),
+      ),
+    );
+    assertEqual(
+      years.join(' | '),
+      profile.education
+        .map((e) => `${e.startDate.slice(0, 4)}-${(e.graduationDate || e.endDate).slice(0, 4)}`)
+        .join(' | '),
+      'years attended by block',
+    );
+    const work = await page.evaluate(() => {
+      const block = document.querySelector('[data-automation-id="workExperience-1"]');
+      const v = (id) => block.querySelector(`[data-automation-id="${id}"]`);
+      const date = (key, part) =>
+        block.querySelector(
+          `[data-automation-id="formField-${key}"] [data-automation-id="dateSection${part}-input"]`,
+        ).value;
+      return {
+        title: v('jobTitle').value,
+        company: v('company').value,
+        location: v('location').value,
+        current: v('currentlyWorkHere').checked,
+        from: `${date('startDate', 'Month')}/${date('startDate', 'Year')}`,
+        to: `${date('endDate', 'Month')}/${date('endDate', 'Year')}`,
+      };
+    });
+    const role = profile.experience[0];
+    assertEqual(work.title, role.title, 'job title');
+    assertEqual(work.company, role.company, 'company');
+    assertEqual(work.location, role.location, 'role location');
+    assertEqual(work.current, false, 'past role marked current');
+    assertEqual(work.from, `${role.startDate.slice(5, 7)}/${role.startDate.slice(0, 4)}`, 'From');
+    assertEqual(work.to, `${role.endDate.slice(5, 7)}/${role.endDate.slice(0, 4)}`, 'To');
     // The school prompt loads options only after typing: each block gets its
     // own school, and Fillwright typed only short prefixes.
     const schools = await page.evaluate(() =>
@@ -267,12 +396,11 @@ export async function runAtsSuite(ctx) {
       ),
     );
     assertEqual(topPanel, false, 'the outer page showed its own empty panel');
-    await frame.evaluate(() => {
-      const button = Array.from(
+    await trustedClick(frame, () =>
+      Array.from(
         document.querySelector('[data-fillwright-widget]').shadowRoot.querySelectorAll('button'),
-      ).find((b) => b.textContent.startsWith('Fill'));
-      button.click();
-    });
+      ).find((b) => b.textContent.startsWith('Fill')),
+    );
     await frame.waitForFunction(
       () => document.getElementById('PersonProfileFields.Email').value !== '',
       { timeout: 15_000 },
@@ -361,12 +489,19 @@ export async function runAtsSuite(ctx) {
     await waitForWidget(page, (s) => s.text.includes('application field'), 15_000);
     await reviewItems(page);
     // Tick everything that can be ticked, then fill.
-    await page.evaluate(() => {
-      const root = document.querySelector('[data-fillwright-widget]').shadowRoot;
-      root.querySelectorAll('input.fw-check').forEach((box) => {
-        if (!box.checked) box.click();
-      });
-    });
+    // Each tick redraws the list, so find the next unticked box every time.
+    for (let guard = 0; guard < 200; guard += 1) {
+      const clicked = await trustedClick(
+        page,
+        () =>
+          Array.from(
+            document
+              .querySelector('[data-fillwright-widget]')
+              .shadowRoot.querySelectorAll('input.fw-check'),
+          ).find((box) => !box.checked && !box.disabled) ?? null,
+      );
+      if (!clicked) break;
+    }
     await fill(page);
     const after = await page.evaluate(() => ({
       submitted: window.__submitted,
@@ -377,6 +512,60 @@ export async function runAtsSuite(ctx) {
     assertEqual(after.href, url, 'a disguised link was followed');
     assertEqual(after.first, P.first, 'ordinary fields should still fill');
     await page.close();
+  });
+
+  /* --- adapters stay out of passive scans ---------------------------- */
+
+  await test('ats/workday: Smart mode presses no page button until the user opens the panel', async () => {
+    if (!secure) {
+      console.log('    (skipped: openssl is unavailable, so the HTTPS fixture could not start)');
+      return;
+    }
+    const pageUrl = `https://${ATS_TEST_HOST}:${secure.port}/ats/workday.html`;
+    await ui({ type: 'ui:set-settings', patch: { autofill: { mode: 'smart' } } });
+    const sync = await ui({ type: 'ui:sync-auto-detect' });
+    assert(sync.data.registered, `passive script not registered: ${sync.data.reason}`);
+    const page = await browser.newPage();
+    try {
+      await page.goto(pageUrl, { waitUntil: 'domcontentloaded' });
+      // Smart mode prepares the plan on its own; wait until it has.
+      await page.waitForFunction(
+        () => {
+          const node = document
+            .querySelector('[data-fillwright-widget]')
+            ?.shadowRoot?.querySelector('.fw-pill');
+          return node && /\d+ ready/.test(node.textContent);
+        },
+        { timeout: 20_000 },
+      );
+      // A form change triggers another quiet scan; give it time to happen.
+      await page.evaluate(() => {
+        const extra = document.createElement('input');
+        extra.setAttribute('aria-label', 'Middle Name');
+        document.getElementById('page').appendChild(extra);
+      });
+      await sleep(2_500);
+      assertEqual(
+        await page.evaluate(() => window.__pagePresses),
+        0,
+        'a passive scan pressed a page button',
+      );
+      // The user opens the panel from the pill: adapters may run now, and still must not
+      // press a dropdown or a navigation menu.
+      await trustedClick(page, () =>
+        document.querySelector('[data-fillwright-widget]').shadowRoot.querySelector('.fw-pill'),
+      );
+      await waitForWidget(page, (s) => s.text.includes('application field'), 15_000);
+      assertEqual(
+        await page.evaluate(() => window.__pagePresses),
+        0,
+        'an explicit scan pressed a dropdown or nav menu',
+      );
+    } finally {
+      await page.close();
+      await ui({ type: 'ui:set-settings', patch: { autofill: { mode: 'manual' } } });
+      await ui({ type: 'ui:sync-auto-detect' });
+    }
   });
 
   await ctx.workdayPage?.close();

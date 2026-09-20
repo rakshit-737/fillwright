@@ -1,6 +1,6 @@
 import type { FillOutcome, FillPlanEntry } from '@/types/fields';
 import { isCombobox, selectInCombobox } from './combobox';
-import { ariaOptionValue } from '@/field-detection/harvest';
+import { ariaOptionValue, obscuredBy } from '@/field-detection/harvest';
 import { isPressSafe } from './press-guard';
 
 /**
@@ -29,6 +29,17 @@ export interface UndoRecord {
   previousValue: string;
   /** For radio groups: which member was checked, if any. */
   previousCheckedValue: string | null;
+  /**
+   * For custom dropdowns: the selection the control showed before the fill
+   * ('' when nothing was selected). null for every other control.
+   */
+  previousShown: string | null;
+}
+
+export interface UndoResult {
+  restored: number;
+  /** Field ids that could not be put back, so the panel can name them. */
+  notRestored: string[];
 }
 
 export interface FillResult {
@@ -59,6 +70,19 @@ export async function fillFields(
         ok: false,
         previousValue: '',
         error: 'This field is no longer on the page. Scan again to pick up the current step.',
+      });
+      continue;
+    }
+
+    // The scan judged this field visible, but a page can still lay something
+    // over it. Only what a person would actually see there gets a value.
+    const covered = coveredReason(elements);
+    if (covered) {
+      outcomes.push({
+        fieldId: entry.fieldId,
+        ok: false,
+        previousValue: '',
+        error: `Not filled: this field is ${covered}. It may be a trap for bots.`,
       });
       continue;
     }
@@ -111,26 +135,70 @@ export async function fillFields(
     }
   }
 
+  restoreScroll(scrolledFrom);
   return { outcomes, undo };
 }
 
-/** Restores every value captured by the matching fill. */
-export async function undoFill(records: UndoRecord[]): Promise<number> {
+/** Page scroll before the presence check moved it, restored after the fill. */
+let scrolledFrom: { x: number; y: number } | null = null;
+
+function restoreScroll(from: { x: number; y: number } | null): void {
+  scrolledFrom = null;
+  if (from) window.scrollTo({ left: from.x, top: from.y, behavior: 'instant' });
+}
+
+/**
+ * Null when at least one of the field's elements (or its label) is what sits
+ * at its position; otherwise why not. A control outside the viewport is
+ * scrolled to first, because the hit test only sees the viewport.
+ */
+function coveredReason(elements: HTMLElement[]): string | null {
+  const doc = elements[0]?.ownerDocument;
+  if (!doc || typeof doc.elementsFromPoint !== 'function') return null;
+  let reason: string | null = null;
+  for (const element of elements) {
+    if (!element.isConnected) continue;
+    const rect = element.getBoundingClientRect();
+    // Nothing to test against (no layout); the scan already judged the box.
+    if (rect.width === 0 && rect.height === 0) return null;
+    const view = doc.defaultView ?? window;
+    const cx = rect.left + rect.width / 2;
+    const cy = rect.top + rect.height / 2;
+    if (cx < 0 || cy < 0 || cx > view.innerWidth || cy > view.innerHeight) {
+      scrolledFrom ??= { x: view.scrollX, y: view.scrollY };
+      element.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'instant' });
+    }
+    const found = obscuredBy(element);
+    if (!found) return null;
+    reason = found;
+  }
+  return reason;
+}
+
+/** Restores every value captured by the matching fill, and names what it could not. */
+export async function undoFill(records: UndoRecord[]): Promise<UndoResult> {
   let restored = 0;
+  const notRestored: string[] = [];
   for (const record of records) {
     try {
-      if (record.previousCheckedValue !== null) {
+      if (record.previousShown !== null) {
+        // A custom dropdown cannot be emptied from outside; it can only be
+        // driven to another option. With nothing shown before, there is
+        // nothing to select, so it is reported rather than claimed.
+        if (record.previousShown === '') throw new Error('Nothing was selected before.');
+        await writeValue(record.elements, record.previousShown);
+      } else if (record.previousCheckedValue !== null) {
         await writeValue(record.elements, record.previousCheckedValue);
       } else {
         await writeValue(record.elements, record.previousValue);
       }
       restored++;
     } catch {
-      // A field that has since been removed cannot be restored; keep going so
-      // one stale element does not abandon the rest of the undo.
+      // Keep going so one stale element does not abandon the rest of the undo.
+      notRestored.push(record.fieldId);
     }
   }
-  return restored;
+  return { restored, notRestored };
 }
 
 /* -------------------------------------------------------------- verifying */
@@ -210,17 +278,122 @@ export function verify(elements: HTMLElement[], intended: string): Verdict {
       reason: 'The page cleared the value straight after it was entered.',
     };
   }
-  if (matches(actual, intended)) return { ok: true, reason: '' };
 
-  // A field that reformatted or truncated the value still accepted it.
-  if (normalizeForCompare(actual).startsWith(normalizeForCompare(intended).slice(0, 6))) {
-    return { ok: true, reason: '' };
-  }
-  if (normalizeForCompare(intended).startsWith(normalizeForCompare(actual)) && actual.length > 2) {
-    return { ok: true, reason: '' };
+  // Truncation is not success: a cut-off URL or email is a different value.
+  // A page trimming trailing whitespace has not cut anything.
+  const wanted = intended.trimEnd();
+  if (actual.length < wanted.length && wanted.startsWith(actual)) {
+    const limit =
+      (first instanceof HTMLInputElement || first instanceof HTMLTextAreaElement) &&
+      first.maxLength > 0
+        ? first.maxLength
+        : actual.length;
+    return {
+      ok: false,
+      reason: `This field accepts ${limit} characters, so your value was cut.`,
+    };
   }
 
-  return { ok: false, reason: 'The page changed the value after it was entered.' };
+  return valuesAgree(kindOf(first, intended), actual, intended)
+    ? { ok: true, reason: '' }
+    : { ok: false, reason: 'The page changed the value after it was entered.' };
+}
+
+type ValueKind = 'email' | 'url' | 'tel' | 'number' | 'date' | 'text';
+
+const EMAIL_SHAPE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const URL_SHAPE = /^(?:https?:\/\/|www\.)\S+$/i;
+const ISO_DATE = /^\d{4}-\d{2}(?:-\d{2})?$/;
+
+/** Decides how strictly to compare, from the control's type and the value's shape. */
+function kindOf(element: HTMLElement, intended: string): ValueKind {
+  const type = element instanceof HTMLInputElement ? element.type : '';
+  const value = intended.trim();
+  if (type === 'email' || EMAIL_SHAPE.test(value)) return 'email';
+  if (type === 'url' || URL_SHAPE.test(value)) return 'url';
+  if (type === 'tel') return 'tel';
+  if (type === 'number') return 'number';
+  if (type === 'date' || type === 'month' || ISO_DATE.test(value)) return 'date';
+  return 'text';
+}
+
+export function valuesAgree(kind: ValueKind, actual: string, intended: string): boolean {
+  switch (kind) {
+    case 'email':
+      return actual.trim().toLowerCase() === intended.trim().toLowerCase();
+    case 'url':
+      return sameUrl(actual, intended);
+    case 'tel':
+      return samePhone(actual, intended);
+    case 'number': {
+      const a = Number(actual.trim());
+      const b = Number(intended.trim());
+      return actual.trim() !== '' && Number.isFinite(a) && a === b;
+    }
+    case 'date':
+      return sameDate(actual, intended) || matches(actual, intended);
+    default:
+      // An input mask may add spacing and punctuation, but the characters that
+      // carry the value must all be there, in order, and nothing more.
+      return matches(actual, intended);
+  }
+}
+
+function parseUrl(value: string): URL | null {
+  const trimmed = value.trim();
+  try {
+    return new URL(/^[a-z][a-z0-9+.-]*:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`);
+  } catch {
+    return null;
+  }
+}
+
+/** Exact, except that the host is case-insensitive and a trailing slash is tolerated. */
+function sameUrl(actual: string, intended: string): boolean {
+  const a = parseUrl(actual);
+  const b = parseUrl(intended);
+  if (!a || !b) return actual.trim() === intended.trim();
+  const path = (url: URL) => url.pathname.replace(/\/+$/, '');
+  return (
+    a.protocol === b.protocol &&
+    a.host === b.host &&
+    path(a) === path(b) &&
+    a.search === b.search &&
+    a.hash === b.hash
+  );
+}
+
+/** Same digits, allowing one side to carry a country code (1–3 digits) the other lacks. */
+function samePhone(actual: string, intended: string): boolean {
+  const a = actual.replace(/\D/g, '');
+  const b = intended.replace(/\D/g, '');
+  if (a === '' || b === '') return false;
+  if (a === b) return true;
+  const [short, long] = a.length < b.length ? [a, b] : [b, a];
+  return short.length >= 7 && long.length - short.length <= 3 && long.endsWith(short);
+}
+
+/**
+ * Year plus month and day. Year-first values (ISO) keep their order; a value
+ * with the year last may be day-first or month-first depending on locale, so
+ * either reading of it is accepted.
+ */
+function dateReadings(value: string): string[] {
+  const numbers = (value.match(/\d+/g) ?? []).map((part) =>
+    part.length === 4 ? part : String(Number(part)),
+  );
+  if (numbers.length < 2 || numbers.length > 3) return [];
+  if (numbers[0]!.length === 4) return [numbers.join('-')];
+  if (numbers[numbers.length - 1]!.length !== 4) return [];
+  const year = numbers.pop()!;
+  const readings = [[year, ...numbers.reverse()].join('-')];
+  if (numbers.length === 2) readings.push([year, ...numbers.reverse()].join('-'));
+  return readings;
+}
+
+function sameDate(actual: string, intended: string): boolean {
+  const expected = dateReadings(intended);
+  return expected.length === 1 && dateReadings(actual).includes(expected[0]!);
 }
 
 function matches(actual: string, intended: string): boolean {
@@ -247,14 +420,47 @@ function snapshot(fieldId: string, elements: HTMLElement[]): UndoRecord {
       elements,
       previousValue: (checked as HTMLInputElement | undefined)?.value ?? '',
       previousCheckedValue: (checked as HTMLInputElement | undefined)?.value ?? '',
+      previousShown: null,
     };
   }
   if (isAriaRadio(first)) {
     const checked = elements.find((element) => element.getAttribute('aria-checked') === 'true');
     const previous = checked ? ariaOptionValue(checked) : '';
-    return { fieldId, elements, previousValue: previous, previousCheckedValue: previous };
+    return {
+      fieldId,
+      elements,
+      previousValue: previous,
+      previousCheckedValue: previous,
+      previousShown: null,
+    };
   }
-  return { fieldId, elements, previousValue: currentValue(first), previousCheckedValue: null };
+  if (!(first instanceof HTMLSelectElement) && isCombobox(first)) {
+    return {
+      fieldId,
+      elements,
+      previousValue: currentValue(first),
+      previousCheckedValue: null,
+      previousShown: shownSelection(first),
+    };
+  }
+  return {
+    fieldId,
+    elements,
+    previousValue: currentValue(first),
+    previousCheckedValue: null,
+    previousShown: null,
+  };
+}
+
+/**
+ * What a custom dropdown shows as selected: a choice Fillwright made earlier,
+ * or the value of its hidden native input. Placeholder text ("Select…") is not
+ * a selection, so an unknown state reads as ''.
+ */
+function shownSelection(element: HTMLElement): string {
+  const earlier = comboSelections.get(element);
+  if (earlier?.length) return earlier.join(', ');
+  return currentValue(element).trim();
 }
 
 function currentValue(element: HTMLElement): string {

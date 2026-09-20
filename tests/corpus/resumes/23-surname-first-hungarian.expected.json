@@ -1,0 +1,25 @@
+{
+  "layout": "surname first",
+  "firstName": "Réka",
+  "lastName": "Szabó",
+  "email": "reka.szabo@example.com",
+  "phone": "+36 30 555 4321",
+  "education": [
+    {
+      "institution": "Budapest University of Technology and Economics",
+      "degree": "Master of Science",
+      "gpa": ""
+    }
+  ],
+  "experience": [
+    {
+      "company": "Duna Digital Kft.",
+      "title": "UX Researcher"
+    }
+  ],
+  "skills": [
+    "User Interviews",
+    "Usability Testing",
+    "Figma"
+  ]
+}

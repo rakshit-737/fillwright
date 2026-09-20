@@ -1,0 +1,22 @@
+CONTACT
+lena.vogel@example.com
++49 151 5550 1234
+Berlin, Germany
+
+SKILLS
+Go
+Kotlin
+gRPC
+PostgreSQL
+
+LENA VOGEL
+Backend Engineer
+
+EXPERIENCE
+Backend Engineer, Nordlicht Mobility GmbH
+Berlin | February 2020 - Present
+- Designed the trip-pricing service
+
+EDUCATION
+Technische Universität Berlin
+Bachelor of Science in Computer Science | 2015 - 2019

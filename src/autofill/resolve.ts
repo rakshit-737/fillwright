@@ -1,9 +1,10 @@
-import { containsWords, sameByAlias } from './aliases';
+import { containsWords, localeYesNo, monthNumber, sameByAlias } from './aliases';
 import { countryDisplayName, detectCountries } from './countries';
 import type { CanonicalField, DetectedField, FieldOption } from '@/types/fields';
 import type { Profile, TriState } from '@/types/profile';
 import { formatDate } from '@/parser/dates';
 import { isSensitiveField } from '@/security/sensitive';
+import { resolveCustom } from './saved-answers';
 
 export interface ResolvedValue {
   value: string;
@@ -89,6 +90,20 @@ export function resolveValue(
       return fromTracked(profile.personal.email);
     case 'personal.phone':
       return fromTracked(profile.personal.phone);
+    case 'personal.phoneCountryCode':
+    case 'personal.phoneNational': {
+      const stored = fromTracked(profile.personal.phone);
+      if (!stored.value) return stored;
+      const parts = splitPhone(stored.value);
+      // Without a written "+CC" the split would be a guess: "9845012345" could
+      // be Indian, or an American number missing its area code.
+      if (!parts) return none('your saved phone does not start with a +country code');
+      return {
+        ...stored,
+        value: field === 'personal.phoneCountryCode' ? `+${parts.code}` : parts.national,
+        note: `${stored.note}, split from your saved phone`,
+      };
+    }
     case 'personal.dateOfBirth':
       return fromTracked(profile.personal.dateOfBirth);
 
@@ -163,6 +178,19 @@ export function resolveValue(
         education,
         'your most recent education entry',
       );
+    case 'education.startMonth':
+    case 'education.startYear':
+      return datePart(field, education?.startDate, education, 'your most recent education entry');
+    case 'education.endMonth':
+    case 'education.endYear':
+      return datePart(
+        field,
+        education?.graduationDate || education?.endDate,
+        education,
+        'your most recent education entry',
+      );
+    case 'education.location':
+      return fromEntry(education?.location, education, 'your most recent education entry');
 
     /* ---------------------------------------------------------- experience */
     case 'experience.company':
@@ -172,19 +200,44 @@ export function resolveValue(
     case 'experience.startDate':
       return fromEntry(experience?.startDate, experience, 'your current or most recent role');
     case 'experience.endDate':
-      return fromEntry(experience?.endDate, experience, 'your current or most recent role');
+    case 'experience.endMonth':
+    case 'experience.endYear':
+      // A current role has no end date. Whatever the profile holds there — a
+      // stale date, or "Present" — is not written.
+      if (experience?.current) return none('you currently work here, so the end date stays empty');
+      return field === 'experience.endDate'
+        ? fromEntry(experience?.endDate, experience, 'your current or most recent role')
+        : datePart(field, experience?.endDate, experience, 'your current or most recent role');
+    case 'experience.startMonth':
+    case 'experience.startYear':
+      return datePart(field, experience?.startDate, experience, 'your current or most recent role');
+    case 'experience.current':
+      if (!experience) return none('not stored in your profile');
+      return {
+        ...fromEntry('set', experience, 'your current or most recent role'),
+        value: experience.current ? 'Yes' : 'No',
+      };
+    case 'experience.location':
+      return fromEntry(experience?.location, experience, 'your current or most recent role');
     case 'experience.description':
       return fromEntry(experience?.description, experience, 'your current or most recent role');
     case 'experience.yearsOfExperience': {
-      const years = totalYearsOfExperience(profile);
-      return years
-        ? {
-            value: years,
-            confidence: 0.7,
-            note: 'calculated from your work history',
-            needsConsent: false,
-          }
-        : none('no work history is stored');
+      const months = totalMonthsOfExperience(profile);
+      if (months === 0) return none('no work history is stored');
+      // Whole years completed, never rounded up. Under a year there is no
+      // honest number to write, so the question goes to review.
+      if (months < 12) {
+        return {
+          ...none('your work history adds up to less than one year'),
+          needsConsent: true,
+        };
+      }
+      return {
+        value: String(Math.floor(months / 12)),
+        confidence: 0.7,
+        note: 'calculated from your work history',
+        needsConsent: false,
+      };
     }
 
     /* ------------------------------------------------------------- profile */
@@ -223,6 +276,15 @@ export function resolveValue(
         };
       }
       return fromPreference(profile.sensitive.compensation.expectedSalary, 'your expected salary');
+    }
+    case 'sensitive.currentSalary': {
+      if (!profile.sensitive.compensation.shareCompensation) {
+        return {
+          ...none('salary answers are switched off in your preferences'),
+          needsConsent: true,
+        };
+      }
+      return fromPreference(profile.sensitive.compensation.currentSalary, 'your current salary');
     }
 
     case 'sensitive.workAuthorization':
@@ -288,13 +350,21 @@ export function resolveForField(
   detected: DetectedField,
   profile: Profile,
   entryIndex = 0,
+  customKey?: string,
 ): ResolvedValue & { optionValue?: string } {
   let resolved =
     field === 'sensitive.workAuthorization' || field === 'sensitive.requiresSponsorship'
       ? resolveAuthorization(field, detected, profile)
-      : resolveValue(field, profile, entryIndex);
+      : field === 'custom'
+        ? fromCustom(profile, customKey)
+        : resolveValue(field, profile, entryIndex);
 
   if (!resolved.value) return resolved;
+
+  if (field === 'preferences.desiredSalary' || field === 'sensitive.currentSalary') {
+    resolved = fitPayToQuestion(resolved, detected);
+    if (!resolved.value) return resolved;
+  }
 
   // Dates: match the precision the control actually wants.
   if (detected.kind === 'date' || detected.kind === 'month') {
@@ -308,6 +378,37 @@ export function resolveForField(
   } else if (/date|graduation/i.test(field) && /^\d{4}(?:-\d{2})?$/.test(resolved.value)) {
     // A text field reads better as "May 2026" than "2026-05".
     resolved = { ...resolved, value: formatDate(resolved.value) };
+  }
+
+  // A lone checkbox's "option" is its own label; the Yes/No is its state.
+  if (field === 'experience.current') return resolved;
+
+  if (detected.options.length > 0 && isMonthField(field)) {
+    const wanted = Number(resolved.value);
+    return pickOption(resolved, detected.options, (option) => {
+      const month = option.label.trim() ? monthNumber(option.label) : monthNumber(option.value);
+      return month === wanted;
+    });
+  }
+
+  if (detected.options.length > 0 && field === 'personal.phoneCountryCode') {
+    const code = resolved.value.replace(/^\+/, '');
+    const byCode = detected.options.filter(
+      (option) => dialCode(option.label) === code || dialCode(option.value) === code,
+    );
+    // Countries that share a code (+1, +7, +44) are told apart by the saved
+    // country, or not at all.
+    const country = profile.address.country.value.trim();
+    const narrowed =
+      byCode.length > 1
+        ? byCode.filter(
+            (option) =>
+              country !== '' &&
+              (containsWords(option.label, country) ||
+                sameByAlias(option.label.replace(/[\s(]*\+.*$/, ''), country)),
+          )
+        : byCode;
+    return pickOption(resolved, detected.options, (option) => narrowed.includes(option));
   }
 
   if (detected.options.length > 0) {
@@ -330,6 +431,151 @@ export function resolveForField(
   }
 
   return resolved;
+}
+
+/* ------------------------------------------------------------------- pay */
+
+type PayDimension = 'scale' | 'period';
+
+const PAY_UNITS: Array<{ dimension: PayDimension; unit: string; re: RegExp }> = [
+  { dimension: 'scale', unit: 'lakhs', re: /\b(?:lpa|l\.p\.a\.?|lakhs?|lacs?|lakh)\b/i },
+  { dimension: 'scale', unit: 'crores', re: /\b(?:crores?|cr)\b/i },
+  { dimension: 'scale', unit: 'thousands', re: /\b(?:thousands?|\d+\s*k|in k)\b/i },
+  {
+    dimension: 'period',
+    unit: 'per month',
+    re: /\b(?:monthly|per month|a month|p\.m\.|pm)\b|\/\s*(?:month|mo)\b/i,
+  },
+  {
+    dimension: 'period',
+    unit: 'per year',
+    re: /\b(?:lpa|annual|annually|per annum|p\.a\.?|yearly|per year|a year)\b|\/\s*(?:year|yr)\b/i,
+  },
+];
+
+function payUnits(text: string): Partial<Record<PayDimension, string>> {
+  const found: Partial<Record<PayDimension, string>> = {};
+  for (const { dimension, unit, re } of PAY_UNITS) {
+    if (!found[dimension] && re.test(text)) found[dimension] = unit;
+  }
+  return found;
+}
+
+/**
+ * Pay figures are never converted. If the question names a unit (lakhs, per
+ * month, per year, ...) the stored answer must name the same one, otherwise
+ * the field is declined with the reason. A number input gets the bare number.
+ */
+function fitPayToQuestion(resolved: ResolvedValue, detected: DetectedField): ResolvedValue {
+  const { labelText, ariaLabel, placeholder } = detected.signals;
+  const asked = payUnits(`${labelText} ${ariaLabel} ${placeholder}`);
+  const stored = payUnits(resolved.value);
+
+  for (const dimension of ['scale', 'period'] as const) {
+    const want = asked[dimension];
+    if (want && stored[dimension] !== want) {
+      return {
+        ...none(
+          stored[dimension]
+            ? `the question asks for ${want} but your saved figure is ${stored[dimension]}; it is not converted`
+            : `the question asks for ${want} and your saved figure does not say its unit; it is not converted`,
+        ),
+        needsConsent: resolved.needsConsent,
+      };
+    }
+  }
+
+  if (detected.kind !== 'number') return resolved;
+
+  let bare = resolved.value;
+  for (const { re } of PAY_UNITS) bare = bare.replace(new RegExp(re.source, 'gi'), ' ');
+  bare = bare.replace(/(?:rs\.?|inr|usd|eur|gbp|[₹$€£¥])/gi, '').replace(/[\s,_']/g, '');
+  if (!/^\d+(?:\.\d+)?$/.test(bare)) {
+    return {
+      ...none('your saved figure is not a single number, so it cannot go in a number field'),
+      needsConsent: resolved.needsConsent,
+    };
+  }
+  return { ...resolved, value: bare };
+}
+
+/**
+ * A custom field or saved answer the user pointed this field at. Only ever
+ * reached through a mapping the user chose; never inferred.
+ */
+function fromCustom(profile: Profile, customKey: string | undefined): ResolvedValue {
+  const { value, note } = resolveCustom(profile, customKey);
+  return value ? { value, confidence: 1, note, needsConsent: false } : none(note);
+}
+
+const MONTH_FIELDS: ReadonlySet<CanonicalField> = new Set<CanonicalField>([
+  'education.startMonth',
+  'education.endMonth',
+  'experience.startMonth',
+  'experience.endMonth',
+]);
+
+function isMonthField(field: CanonicalField): boolean {
+  return MONTH_FIELDS.has(field);
+}
+
+/** Exactly one option may satisfy `test`; otherwise nothing is chosen. */
+function pickOption(
+  resolved: ResolvedValue,
+  options: FieldOption[],
+  test: (option: FieldOption) => boolean,
+): ResolvedValue & { optionValue?: string } {
+  const hits = options.filter(
+    (option) => (option.value !== '' || option.label.trim() !== '') && test(option),
+  );
+  if (hits.length !== 1) {
+    return {
+      ...resolved,
+      value: '',
+      confidence: 0,
+      note: `none of the available options match "${resolved.value}"`,
+    };
+  }
+  const option = hits[0]!;
+  return { ...resolved, value: option.label, optionValue: option.value };
+}
+
+/** The dialling code written in an option, e.g. "India (+91)" → "91". */
+function dialCode(text: string): string | null {
+  const match = text.match(/\+\s?(\d{1,4})\b/) ?? text.trim().match(/^(\d{1,4})$/);
+  return match ? match[1]! : null;
+}
+
+/**
+ * Splits a stored phone written as "+CC rest" into its code and national part.
+ * Returns null unless the code is written with a "+" and set apart from the
+ * rest — "+919845012345" could be split several ways, so it is not split.
+ */
+export function splitPhone(phone: string): { code: string; national: string } | null {
+  const match = phone.trim().match(/^\+(\d{1,3})[\s.-]+(\(?\d[\d\s().-]*)$/);
+  if (!match) return null;
+  const national = match[2]!.trim();
+  if (national.replace(/\D/g, '').length < 4) return null;
+  return { code: match[1]!, national };
+}
+
+/**
+ * The month ("08") or year ("2022") part of a stored "YYYY-MM" date. A
+ * year-only date has no month, and none is invented.
+ */
+function datePart<T extends { provenance: { confidence: number; source: string } }>(
+  field: CanonicalField,
+  date: string | undefined,
+  entry: T | undefined,
+  note: string,
+): ResolvedValue {
+  const base = fromEntry(date, entry, note);
+  if (!base.value) return base;
+  const match = base.value.match(/^(\d{4})(?:-(\d{1,2}))?/);
+  if (!match) return none('the stored date is not in a form Fillwright can split');
+  if (field.endsWith('Year')) return { ...base, value: match[1]! };
+  if (!match[2]) return none('the stored date has a year but no month');
+  return { ...base, value: match[2].padStart(2, '0') };
 }
 
 /* ---------------------------------------------------------- authorisation */
@@ -455,11 +701,16 @@ export function matchOption(value: string, options: FieldOption[]): OptionMatch 
   }
 
   // 3. Yes/No equivalence, which is how most compliance questions are shaped.
+  //    Option labels may be translated ("Ja", "Oui", "Sí", "Sim", "Sì").
   if (YES_RE.test(target) || NO_RE.test(target)) {
     const wantYes = YES_RE.test(target);
     for (const option of usable) {
       const label = option.label.trim().toLowerCase();
-      if ((wantYes && YES_RE.test(label)) || (!wantYes && NO_RE.test(label))) {
+      const translated = localeYesNo(label);
+      if (
+        (wantYes && (YES_RE.test(label) || translated === 'yes')) ||
+        (!wantYes && (NO_RE.test(label) || translated === 'no'))
+      ) {
         return { option, confidence: 0.92, exact: true };
       }
     }
@@ -575,22 +826,34 @@ function plural(count: number, one: string, many: string): string {
   return count === 1 ? one : many;
 }
 
-/** Rough total years across all roles, used for "years of experience" fields. */
-function totalYearsOfExperience(profile: Profile): string {
-  let months = 0;
+/**
+ * Total months across all roles, with overlapping roles (two concurrent
+ * internships) merged so no month is counted twice.
+ */
+function totalMonthsOfExperience(profile: Profile): number {
+  const intervals: [number, number][] = [];
   for (const entry of profile.experience) {
     const start = parseYearMonth(entry.startDate);
     if (!start) continue;
     const end = entry.current ? new Date() : parseYearMonth(entry.endDate);
     if (!end) continue;
-    months += Math.max(
-      0,
-      (end.getFullYear() - start.getFullYear()) * 12 + (end.getMonth() - start.getMonth()),
-    );
+    const from = start.getFullYear() * 12 + start.getMonth();
+    const to = end.getFullYear() * 12 + end.getMonth();
+    if (to > from) intervals.push([from, to]);
   }
-  if (months === 0) return '';
-  const years = months / 12;
-  return years < 1 ? '1' : String(Math.round(years));
+  intervals.sort((a, b) => a[0] - b[0]);
+  let months = 0;
+  let current: [number, number] | null = null;
+  for (const [from, to] of intervals) {
+    if (current && from <= current[1]) {
+      current[1] = Math.max(current[1], to);
+    } else {
+      if (current) months += current[1] - current[0];
+      current = [from, to];
+    }
+  }
+  if (current) months += current[1] - current[0];
+  return months;
 }
 
 function parseYearMonth(value: string): Date | null {

@@ -14,14 +14,10 @@ export interface Settings {
   onboardingTriedFill: boolean;
 
   autofill: {
-    /** Never overwrite a field the user already typed into. Default: true. */
-    fillEmptyFieldsOnly: boolean;
     /** Explicit opt-in to clobber existing values. Default: false. */
     allowOverwrite: boolean;
     /** Below this, a mapping is shown as "review required" instead of filled. */
     confidenceThreshold: number;
-    /** Show the fill preview before touching the page. Default: true. */
-    previewBeforeFill: boolean;
     /** Briefly outline fields Fillwright changed. */
     highlightFilledFields: boolean;
     /**
@@ -41,8 +37,8 @@ export interface Settings {
   privacy: {
     /** Record company/role/date/url only. Default: false. */
     keepApplicationHistory: boolean;
-    /** Encrypt the profile store with a user passphrase. */
-    encryptionEnabled: boolean;
+    /** Months of history to keep: 6, 12 or 24; 0 keeps it until you clear it. */
+    historyRetentionMonths: number;
     /** Wipe decrypted data from memory after N minutes of inactivity. */
     autoLockMinutes: number;
   };
@@ -56,15 +52,16 @@ export interface Settings {
      * blocks outbound connections. See SECURITY.md.
      */
     provider: 'none' | 'chrome-builtin';
-    /** Let the model help classify fields we could not match deterministically. */
-    assistFieldMapping: boolean;
     /** Let the model draft answers to open-ended essay questions. */
     assistAnswerDrafting: boolean;
   };
 
   ui: {
+    /** Applies to Fillwright's pages and the on-page panel. */
     theme: 'system' | 'light' | 'dark';
+    /** Adds to the system preference; it can never turn motion back on. */
     reducedMotion: boolean;
+    /** In Assist and Smart, whether an uninvited panel may appear at all. */
     showFloatingWidget: boolean;
   };
 
@@ -80,7 +77,7 @@ export interface Settings {
   version: number;
 }
 
-export const SETTINGS_VERSION = 2;
+export const SETTINGS_VERSION = 3;
 
 export const DEFAULT_SETTINGS: Settings = {
   activeProfileId: null,
@@ -88,22 +85,19 @@ export const DEFAULT_SETTINGS: Settings = {
   onboardingStep: 0,
   onboardingTriedFill: false,
   autofill: {
-    fillEmptyFieldsOnly: true,
     allowOverwrite: false,
     confidenceThreshold: 0.7,
-    previewBeforeFill: true,
     highlightFilledFields: true,
     mode: 'manual',
   },
   privacy: {
     keepApplicationHistory: false,
-    encryptionEnabled: false,
+    historyRetentionMonths: 0,
     autoLockMinutes: 30,
   },
   ai: {
     enabled: false,
     provider: 'none',
-    assistFieldMapping: false,
     assistAnswerDrafting: false,
   },
   ui: {

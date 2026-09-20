@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Apply — Site access check</title>
+    <link rel="stylesheet" href="./shared.css" />
+  </head>
+  <body>
+    <h1>Apply: Site access check</h1>
+    <p class="lead">
+      Expected: in Assist or Smart, Fillwright offers help on this page only if this exact site has
+      been granted (Settings "Job sites only" does not cover it; the popup's "Turn on for this site"
+      does). Revoking the site under Settings → Permissions stops the offer on the next load, with
+      no reinstall. Covered automatically by the "site access" case in tests/e2e/suite-v05.mjs,
+      which uses a granted https origin because this server is plain http.
+    </p>
+    <form>
+      <label for="s-first">First Name</label>
+      <input id="s-first" name="first_name" autocomplete="given-name" />
+      <label for="s-email">Email</label>
+      <input id="s-email" name="email" type="email" autocomplete="email" />
+      <label for="s-school">University</label>
+      <input id="s-school" name="school" />
+      <button type="submit">Submit application</button>
+    </form>
+    <script src="./shared.js"></script>
+  </body>
+</html>

@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Apply — Imported mapping</title>
+    <link rel="stylesheet" href="./shared.css" />
+  </head>
+  <body>
+    <h1>Apply: Operations Associate</h1>
+    <p class="lead">
+      Expected: "Applicant Token" is not recognised on its own. After importing a file that maps it
+      to Email (and ticking that mapping on the review screen), it is proposed with an "imported"
+      chip, at review confidence, and starts unticked. Choosing it again with "Remember" ticked
+      confirms it, and it then starts ticked like any taught mapping.
+    </p>
+    <form>
+      <label for="i-first">First Name</label>
+      <input id="i-first" name="first_name" autocomplete="given-name" />
+      <label for="i-token">Applicant Token</label>
+      <input id="i-token" name="zz_token_47" />
+      <button type="submit">Submit application</button>
+    </form>
+    <script src="./shared.js"></script>
+  </body>
+</html>

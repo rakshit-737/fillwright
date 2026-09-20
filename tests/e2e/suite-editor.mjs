@@ -210,5 +210,96 @@ export async function runEditorSuite(ctx) {
     }
   });
 
+  await test('history: with the vault on, the stored record holds no readable company', async () => {
+    const PASS = 'history vault passphrase';
+    await ui({ type: 'ui:clear-history' });
+    await ui({ type: 'ui:set-settings', patch: { privacy: { keepApplicationHistory: true } } });
+    assert((await ui({ type: 'ui:vault-enable', passphrase: PASS })).ok, 'vault enable');
+    try {
+      const url = `${server.origin}/greenhouse.html?history-vault`;
+      const page = await browser.newPage();
+      await page.goto(url, { waitUntil: 'domcontentloaded' });
+      await evalInWorker(
+        worker,
+        `(async () => {
+          const [tab] = await chrome.tabs.query({ url: ${JSON.stringify(url)} });
+          await chrome.scripting.executeScript({ target: { tabId: tab.id }, func: () => { globalThis.__fillwrightActivation = Date.now(); } });
+          await chrome.scripting.executeScript({ target: { tabId: tab.id }, files: ['content.js'] });
+        })()`,
+      );
+      await waitForWidget(page, (s) => s.text.includes('application field'));
+      await clickWidgetButton(page, 'Fill');
+      await waitForWidget(page, (s) => s.text.includes('updated'));
+      await sleep(400);
+      await page.close();
+
+      const listed = await ui({ type: 'ui:list-history' });
+      assert(listed.ok, `history not readable while unlocked: ${listed.error}`);
+      assertEqual(listed.data.length, 1, 'the fill was not recorded');
+      const [entry] = listed.data;
+      assert(entry.company.length > 2, 'no company recorded to look for');
+
+      // Tracker fields round-trip, and the link loses its query string.
+      const updated = await ui({
+        type: 'ui:update-history',
+        id: entry.id,
+        patch: {
+          status: 'interview',
+          notes: 'Recruiter call',
+          followUpOn: '2030-01-15',
+          postingUrl: `${server.origin}/jobs/42?utm_source=board&token=secret`,
+        },
+      });
+      assert(updated.ok, `update failed: ${updated.error}`);
+      assertEqual(updated.data.postingUrl, `${server.origin}/jobs/42`, 'query string kept');
+
+      const raw = await readRawStore('history');
+      assert(raw.includes('"encrypted":true'), 'the history record is not marked encrypted');
+      for (const secret of [entry.company, entry.role, 'Recruiter call', '/jobs/42', 'interview']) {
+        assert(!raw.includes(secret), `"${secret}" is readable in the stored history record`);
+      }
+
+      await ui({ type: 'ui:vault-lock' });
+      const locked = await ui({ type: 'ui:list-history' });
+      assert(!locked.ok, 'a locked vault returned history');
+      assertEqual(locked.code, 'ELOCKED', 'locked history should be typed, not empty');
+
+      const pane = await browser.newPage();
+      await pane.goto(options('history'), { waitUntil: 'networkidle0' });
+      await pane.waitForFunction(() => /locked/i.test(document.body.innerText), {
+        timeout: 10_000,
+      });
+      await pane.close();
+    } finally {
+      await ui({ type: 'ui:vault-unlock', passphrase: PASS });
+      assert((await ui({ type: 'ui:vault-disable', passphrase: PASS })).ok, 'vault disable');
+      const after = await ui({ type: 'ui:list-history' });
+      assert(after.ok && after.data[0]?.status === 'interview', 'history lost on vault disable');
+      await ui({ type: 'ui:set-settings', patch: { privacy: { keepApplicationHistory: false } } });
+      await ui({ type: 'ui:clear-history' });
+    }
+  });
+
+  /** Reads one IndexedDB store exactly as stored, from an extension page. */
+  async function readRawStore(store) {
+    const page = await browser.newPage();
+    await page.goto(options('history'), { waitUntil: 'domcontentloaded' });
+    const raw = await page.evaluate(
+      (name) =>
+        new Promise((resolve, reject) => {
+          const open = indexedDB.open('fillwright');
+          open.onerror = () => reject(new Error('open failed'));
+          open.onsuccess = () => {
+            const all = open.result.transaction(name, 'readonly').objectStore(name).getAll();
+            all.onsuccess = () => resolve(JSON.stringify(all.result));
+            all.onerror = () => reject(new Error('read failed'));
+          };
+        }),
+      store,
+    );
+    await page.close();
+    return raw;
+  }
+
   await control.close();
 }

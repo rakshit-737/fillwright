@@ -1,0 +1,182 @@
+import { describe, expect, it } from 'vitest';
+import {
+  applyTrackerPatch,
+  expiredIds,
+  historyToCsv,
+  mergeFill,
+  normalizeFollowUp,
+  normalizePostingUrl,
+  sanitizeTrackerPatch,
+  SAME_APPLICATION_MS,
+} from '@/storage/history-model';
+import { DEFAULT_SETTINGS } from '@/types/settings';
+import type { ApplicationHistoryEntry } from '@/types/messages';
+
+const NOW = Date.parse('2026-09-19T12:00:00Z');
+
+const entry = (over: Partial<ApplicationHistoryEntry> = {}): ApplicationHistoryEntry => ({
+  id: 'app_1',
+  company: 'Acme',
+  role: 'Engineer',
+  origin: 'https://jobs.acme.test',
+  appliedAt: new Date(NOW - 60_000).toISOString(),
+  fieldsFilled: 5,
+  ...over,
+});
+
+describe('history defaults', () => {
+  it('stays off, and keeps entries until cleared unless the user picks a limit', () => {
+    expect(DEFAULT_SETTINGS.privacy.keepApplicationHistory).toBe(false);
+    expect(DEFAULT_SETTINGS.privacy.historyRetentionMonths).toBe(0);
+  });
+});
+
+describe('merging a repeat fill', () => {
+  const fill = {
+    company: 'Acme',
+    role: 'Engineer',
+    origin: 'https://jobs.acme.test',
+    fieldsFilled: 3,
+  };
+
+  it('adds to the same posting within the window', () => {
+    const merged = mergeFill([entry()], fill, NOW);
+    expect(merged?.id).toBe('app_1');
+    expect(merged?.fieldsFilled).toBe(8);
+  });
+
+  it('starts a new entry after the window', () => {
+    const old = entry({ appliedAt: new Date(NOW - SAME_APPLICATION_MS - 1).toISOString() });
+    expect(mergeFill([old], fill, NOW)).toBeNull();
+  });
+
+  it('starts a new entry for a different role, company or site', () => {
+    expect(mergeFill([entry()], { ...fill, role: 'Designer' }, NOW)).toBeNull();
+    expect(mergeFill([entry()], { ...fill, company: 'Other' }, NOW)).toBeNull();
+    expect(mergeFill([entry()], { ...fill, origin: 'https://other.test' }, NOW)).toBeNull();
+  });
+
+  it('never overwrites what the user tracked', () => {
+    const tracked = entry({
+      status: 'interview',
+      notes: 'Call Tuesday',
+      followUpOn: '2026-09-22',
+      postingUrl: 'https://jobs.acme.test/42',
+    });
+    const merged = mergeFill([tracked], { ...fill, profileId: 'prof_2' }, NOW);
+    expect(merged).toMatchObject({
+      status: 'interview',
+      notes: 'Call Tuesday',
+      followUpOn: '2026-09-22',
+      postingUrl: 'https://jobs.acme.test/42',
+      profileId: 'prof_2',
+    });
+  });
+
+  it('caps the fill count', () => {
+    expect(mergeFill([entry({ fieldsFilled: 499 })], fill, NOW)?.fieldsFilled).toBe(500);
+  });
+});
+
+describe('retention', () => {
+  const at = (months: number, id: string) => {
+    const d = new Date(NOW);
+    d.setMonth(d.getMonth() - months);
+    d.setDate(d.getDate() - 1);
+    return { id, appliedAt: d.toISOString() };
+  };
+  const list = [at(0, 'now'), at(6, 'six'), at(12, 'twelve'), at(24, 'two-years')];
+
+  it('keeps everything when set to forever', () => {
+    expect(expiredIds(list, 0, new Date(NOW))).toEqual([]);
+  });
+
+  it.each([
+    [6, ['six', 'twelve', 'two-years']],
+    [12, ['twelve', 'two-years']],
+    [24, ['two-years']],
+  ])('keeps %i months', (months, gone) => {
+    expect(expiredIds(list, months, new Date(NOW)).sort()).toEqual([...gone].sort());
+  });
+
+  it('ignores an unknown retention value rather than deleting', () => {
+    expect(expiredIds(list, 1, new Date(NOW))).toEqual([]);
+  });
+
+  it('keeps an entry whose date cannot be read', () => {
+    expect(expiredIds([{ id: 'x', appliedAt: 'garbage' }], 6, new Date(NOW))).toEqual([]);
+  });
+
+  it('drops the oldest beyond the hard cap', () => {
+    expect(expiredIds(list, 0, new Date(NOW), 2).sort()).toEqual(['twelve', 'two-years']);
+  });
+});
+
+describe('tracker fields', () => {
+  it('keeps only origin and path of a posting link', () => {
+    expect(normalizePostingUrl('https://jobs.acme.test/p/42?utm_source=x&token=abc#apply')).toBe(
+      'https://jobs.acme.test/p/42',
+    );
+  });
+
+  it('refuses non-web links and links with credentials', () => {
+    expect(normalizePostingUrl('javascript:alert(1)')).toBeNull();
+    expect(normalizePostingUrl('file:///etc/passwd')).toBeNull();
+    expect(normalizePostingUrl('https://user:pw@acme.test/')).toBeNull();
+    expect(normalizePostingUrl('not a url')).toBeNull();
+  });
+
+  it('accepts only real calendar dates for follow-up', () => {
+    expect(normalizeFollowUp('2026-10-01')).toBe('2026-10-01');
+    expect(normalizeFollowUp('2026-02-30')).toBeNull();
+    expect(normalizeFollowUp('tomorrow')).toBeNull();
+  });
+
+  it('rebuilds a patch and rejects anything invalid', () => {
+    expect(sanitizeTrackerPatch({ status: 'offer', extra: 1 })).toEqual({ status: 'offer' });
+    expect(sanitizeTrackerPatch({ status: 'hired' })).toBeNull();
+    expect(sanitizeTrackerPatch({ postingUrl: 'https://a.test/x?y=1' })).toEqual({
+      postingUrl: 'https://a.test/x',
+    });
+    expect(sanitizeTrackerPatch({ postingUrl: null, followUpOn: '' })).toEqual({
+      postingUrl: null,
+      followUpOn: null,
+    });
+    expect(sanitizeTrackerPatch({ notes: 'a\0b' })).toEqual({ notes: 'ab' });
+    expect(sanitizeTrackerPatch('nope')).toBeNull();
+    expect(sanitizeTrackerPatch({})).toBeNull();
+  });
+
+  it('applies and clears fields', () => {
+    const next = applyTrackerPatch(entry({ postingUrl: 'https://a.test/x', notes: 'n' }), {
+      status: 'rejected',
+      postingUrl: null,
+      notes: '',
+    });
+    expect(next.status).toBe('rejected');
+    expect(next).not.toHaveProperty('postingUrl');
+    expect(next).not.toHaveProperty('notes');
+  });
+});
+
+describe('CSV export', () => {
+  it('has a header and one quoted row per entry', () => {
+    const csv = historyToCsv([entry({ notes: 'said "hi"', profileId: 'p1' })], { p1: 'Main' });
+    const lines = csv.trim().split('\r\n');
+    expect(lines).toHaveLength(2);
+    expect(lines[0]).toContain('"Company"');
+    expect(lines[1]).toContain('"Acme"');
+    expect(lines[1]).toContain('"applied"');
+    expect(lines[1]).toContain('"Main"');
+    expect(lines[1]).toContain('"said ""hi"""');
+  });
+
+  it('neutralises spreadsheet formulas from page-supplied text', () => {
+    const csv = historyToCsv([
+      entry({ company: '=HYPERLINK("http://evil")', role: '+1', notes: '@x' }),
+    ]);
+    expect(csv).toContain(`"'=HYPERLINK(""http://evil"")"`);
+    expect(csv).toContain(`"'+1"`);
+    expect(csv).toContain(`"'@x"`);
+  });
+});

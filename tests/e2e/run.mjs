@@ -6,19 +6,26 @@
  * enforcement, and its own approximations of shadow DOM and layout. This run
  * exercises the built extension exactly as a user would receive it.
  */
-import { resolve, dirname } from 'node:path';
+import { resolve, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { execFileSync } from 'node:child_process';
+import { mkdtempSync, readFileSync as readCert } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { startServer } from './server.mjs';
 import { runV05Suite } from './suite-v05.mjs';
 import { runAtsSuite } from './suite-ats.mjs';
+import { runI18nSuite } from './suite-i18n.mjs';
 import { runA11ySuite } from './suite-a11y.mjs';
 import { runOnboardingSuite } from './suite-onboarding.mjs';
 import { runEditorSuite } from './suite-editor.mjs';
+import { runClickjackSuite } from './suite-clickjack.mjs';
+import { runMigrationSuite } from './suite-migration.mjs';
 import {
   launch,
   evalInWorker,
   readWidget,
   clickWidgetButton,
+  trustedClick,
   waitForWidget,
   sleep,
 } from './harness.mjs';
@@ -75,22 +82,21 @@ function findItem(widget, prefix) {
 
 /** Clicks a per-row link ("Why?", "Set what this is") by row label. */
 async function clickRowLink(page, labelPrefix, linkText) {
-  return page.evaluate(
+  return trustedClick(
+    page,
     (prefix, text) => {
       const host = document.querySelector('[data-fillwright-widget]');
-      if (!host || !host.shadowRoot) return false;
+      if (!host || !host.shadowRoot) return null;
       const rows = Array.from(host.shadowRoot.querySelectorAll('.fw-item'));
       const row = rows.find((item) => {
         const label = item.querySelector('.fw-item__label');
         return label && label.textContent.trim().toLowerCase().startsWith(prefix.toLowerCase());
       });
-      if (!row) return false;
+      if (!row) return null;
       const link = Array.from(row.querySelectorAll('button')).find(
         (button) => (button.textContent || '').trim() === text,
       );
-      if (!link) return false;
-      link.click();
-      return true;
+      return link ?? null;
     },
     labelPrefix,
     linkText,
@@ -99,30 +105,52 @@ async function clickRowLink(page, labelPrefix, linkText) {
 
 /** Chooses a canonical field in an open correction picker and confirms it. */
 async function teachField(page, labelPrefix, canonical) {
-  return page.evaluate(
-    (prefix, field) => {
-      const host = document.querySelector('[data-fillwright-widget]');
-      if (!host || !host.shadowRoot) return false;
-      const rows = Array.from(host.shadowRoot.querySelectorAll('.fw-item'));
-      const row = rows.find((item) => {
-        const label = item.querySelector('.fw-item__label');
-        return label && label.textContent.trim().toLowerCase().startsWith(prefix.toLowerCase());
-      });
-      if (!row) return false;
-      const select = row.querySelector('.fw-teach__select');
-      if (!select) return false;
-      select.value = field;
-      select.dispatchEvent(new Event('change', { bubbles: true }));
-      const use = Array.from(row.querySelectorAll('button')).find(
-        (button) => (button.textContent || '').trim() === 'Use this',
-      );
-      if (!use) return false;
-      use.click();
-      return true;
-    },
-    labelPrefix,
-    canonical,
-  );
+  return page
+    .evaluate(
+      (prefix, field) => {
+        const host = document.querySelector('[data-fillwright-widget]');
+        if (!host || !host.shadowRoot) return false;
+        const rows = Array.from(host.shadowRoot.querySelectorAll('.fw-item'));
+        const row = rows.find((item) => {
+          const label = item.querySelector('.fw-item__label');
+          return label && label.textContent.trim().toLowerCase().startsWith(prefix.toLowerCase());
+        });
+        if (!row) return false;
+        const select = row.querySelector('.fw-teach__select');
+        if (!select) return false;
+        select.value = field;
+        return true;
+      },
+      labelPrefix,
+      canonical,
+    )
+    .then((picked) =>
+      picked
+        ? trustedClick(
+            page,
+            (prefix) => {
+              const rows = Array.from(
+                document
+                  .querySelector('[data-fillwright-widget]')
+                  .shadowRoot.querySelectorAll('.fw-item'),
+              );
+              const row = rows.find((item) =>
+                item
+                  .querySelector('.fw-item__label')
+                  ?.textContent.trim()
+                  .toLowerCase()
+                  .startsWith(prefix.toLowerCase()),
+              );
+              return (
+                Array.from(row?.querySelectorAll('button') ?? []).find(
+                  (button) => (button.textContent || '').trim() === 'Use this',
+                ) ?? null
+              );
+            },
+            labelPrefix,
+          )
+        : false,
+    );
 }
 
 function dumpItems(widget) {
@@ -257,6 +285,9 @@ async function seedProfile(browser, extensionId) {
     // Only a US answer: the edge-case page asks two UK questions, one of them
     // under "please tell us", and neither may borrow the US answer.
     profile.sensitive.workAuthorization.authorizedIn = { US: 'yes' };
+    profile.sensitive.compensation.currentSalary = '12 LPA';
+    profile.sensitive.compensation.expectedSalary = '18 LPA';
+    profile.sensitive.compensation.shareCompensation = true;
 
     const saved = await send({ type: 'ui:save-profile', profile });
     if (!saved.ok) return { ok: false, error: saved.error };
@@ -305,11 +336,45 @@ async function readInputs(page, ids) {
 
 /* --------------------------------------------------------------- the run */
 
+async function startSecureServer() {
+  const dir = mkdtempSync(join(tmpdir(), 'fw-e2e-tls-'));
+  const key = join(dir, 'key.pem');
+  const cert = join(dir, 'cert.pem');
+  execFileSync(
+    'openssl',
+    [
+      'req',
+      '-x509',
+      '-newkey',
+      'rsa:2048',
+      '-nodes',
+      '-keyout',
+      key,
+      '-out',
+      cert,
+      '-days',
+      '1',
+      '-subj',
+      '/CN=fillwright-e2e',
+    ],
+    { stdio: 'ignore' },
+  );
+  return startServer(resolve(root, 'test-pages'), 0, '127.0.0.1', {
+    key: readCert(key),
+    cert: readCert(cert),
+  });
+}
+
 async function main() {
   const server = await startServer(resolve(root, 'test-pages'));
   // A second loopback address is a different origin that the test build has
   // no host access to — the "form in someone else's iframe" case.
   const foreign = await startServer(resolve(root, 'test-pages'), 0, '127.0.0.2').catch(() => null);
+  // The same fixtures over HTTPS, reached under a real ATS hostname (the
+  // harness maps it to loopback), so site adapters actually run. Needs a
+  // throwaway self-signed certificate; without openssl the tests that use it
+  // say so and are skipped rather than silently passing.
+  const secure = await startSecureServer().catch(() => null);
   const { browser, worker, extensionId } = await launch({ headless: process.env.HEADED !== '1' });
 
   console.log(`\nFillwright end-to-end (real Chrome)`);
@@ -605,6 +670,20 @@ async function main() {
       const tellUs = findItem(widget, 'Right to work status');
       assert(tellUs, 'the "tell us" UK question was not listed');
       assertEqual(tellUs.value, '', 'the "tell us" UK question got the US answer');
+    });
+
+    await test('current and expected CTC each get their own figure, never converted', async () => {
+      const ctc = await browser.newPage();
+      await ctc.goto(`${server.origin}/ctc.html`, { waitUntil: 'domcontentloaded' });
+      await scanPage(worker, `${server.origin}/ctc.html`);
+      await waitForWidget(ctc, (state) => state.text.includes('application field'));
+      assert(await clickWidgetButton(ctc, 'Review'), 'no Review button');
+      const widget = await waitForWidget(ctc, (state) => state.items.length >= 3);
+      const row = (prefix) => widget.items.find((item) => item.label.startsWith(prefix));
+      assertEqual(row('Current CTC')?.value, '12', 'current CTC did not get the current figure');
+      assertEqual(row('Expected CTC')?.value, '18', 'expected CTC did not get the expected figure');
+      assertEqual(row('Current monthly')?.value ?? '', '', 'an annual figure was used as monthly');
+      await ctc.close();
     });
 
     await test('a shadow-DOM field is detected', async () => {
@@ -1360,6 +1439,55 @@ async function main() {
       }
     });
 
+    /* --- resume reading: columns, annotation links (prompt 13) ------- */
+
+    const reviewText = async (bytes, name) => {
+      const { writeFileSync: write, mkdtempSync } = await import('node:fs');
+      const { join } = await import('node:path');
+      const { tmpdir } = await import('node:os');
+      const file = join(mkdtempSync(join(tmpdir(), 'fw-read-')), name);
+      write(file, bytes);
+
+      const page = await browser.newPage();
+      await page.goto(`chrome-extension://${extensionId}/options.html#/import`, {
+        waitUntil: 'networkidle0',
+      });
+      const input = await page.$('input[type="file"]');
+      assert(input, 'the file input was not found');
+      await input.uploadFile(file);
+      await page.waitForFunction(
+        () => document.body.innerText.indexOf('Here is what Fillwright read') !== -1,
+        { timeout: 20_000 },
+      );
+      const seen = await page.evaluate(
+        () =>
+          document.body.innerText +
+          '\n' +
+          Array.from(document.querySelectorAll('input, textarea'))
+            .map((field) => field.value)
+            .join('\n'),
+      );
+      await page.close();
+      return seen;
+    };
+
+    await test('a PDF whose links exist only as annotations yields its profile links', async () => {
+      const { buildAnnotationLinkPdf } = await import('../fixtures/resume-files.mjs');
+      const seen = await reviewText(buildAnnotationLinkPdf(), 'links.pdf');
+      assert(
+        seen.includes('linkedin.com/in/arjun-mehta-example'),
+        'the LinkedIn annotation URL was not offered for review',
+      );
+      assert(!seen.includes('javascript:'), 'a javascript: annotation leaked into the review');
+    });
+
+    await test('a two-column PDF is read column by column', async () => {
+      const { buildTwoColumnPdf } = await import('../fixtures/resume-files.mjs');
+      const seen = await reviewText(buildTwoColumnPdf(), 'columns.pdf');
+      assert(seen.includes('Northwind Analytics'), 'the experience column was not parsed');
+      assert(seen.includes('Meera'), 'the name in the full-width header was not read');
+    });
+
     /* --- v0.5: proactive modes, corrections, SPA, focus, portability --- */
 
     await runV05Suite({
@@ -1375,9 +1503,27 @@ async function main() {
       foreign,
     });
 
+    /* --- click-jacking ------------------------------------------------------ */
+
+    await runClickjackSuite({ browser, worker, server, test, assert, assertEqual, scanPage });
+
     /* --- real-world ATS layouts ------------------------------------------ */
 
     await runAtsSuite({
+      secure,
+      browser,
+      worker,
+      extensionId,
+      server,
+      test,
+      assert,
+      assertEqual,
+      evalInWorker,
+    });
+
+    /* --- non-English forms (locale packs) -------------------------------- */
+
+    await runI18nSuite({
       browser,
       worker,
       extensionId,
@@ -1405,11 +1551,25 @@ async function main() {
       evalInWorker,
     });
 
+    /* --- older records and the handler boundary --------------------------- */
+
+    await runMigrationSuite({
+      browser,
+      extensionId,
+      server,
+      test,
+      assert,
+      assertEqual,
+      worker,
+      scanPage,
+    });
+
     await runOnboardingSuite({ browser, extensionId, test, assert, assertEqual });
   } finally {
     await browser.close();
     await server.close();
     await foreign?.close();
+    await secure?.close();
   }
 
   /* ------------------------------------------------------------- report */

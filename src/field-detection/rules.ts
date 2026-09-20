@@ -1,4 +1,6 @@
 import type { CanonicalField } from '@/types/fields';
+import { LOCALE_PACKS, type LocaleCode } from './locales';
+import { normalizeLabel } from './normalize';
 
 /**
  * The field vocabulary.
@@ -28,17 +30,107 @@ export interface FieldRule {
   types?: string[];
   /** Ceiling for this rule, 0..1. Defaults to 0.95. */
   weight?: number;
+  /**
+   * The rule only applies inside a section whose heading matches. Used for
+   * labels that mean nothing on their own — a bare "Start Month" or
+   * "Location" is only an entry's field when it sits in that entry's block.
+   */
+  section?: RegExp;
+  /** The rule only applies to these input types. */
+  onlyTypes?: string[];
+  /** Set on rules that come from a locale pack (see locales.ts). */
+  locale?: LocaleCode;
+  /** Locale rule that applies only when the control's language is its pack's. */
+  langOnly?: boolean;
 }
 
-/** Words that mean the field is about somebody other than the candidate. */
-export const THIRD_PARTY_RE =
-  /\b(?:referr?er|referee|reference|emergency|contact person|recruiter|manager|supervisor|guardian|parent|spouse|friend|colleague|witness|next of kin)\b/;
+const ENGLISH_THIRD_PARTY = [
+  'referr?er',
+  'referee',
+  'reference',
+  'emergency',
+  'contact person',
+  'recruiter',
+  'manager',
+  'supervisor',
+  'guardian',
+  'parent',
+  'spouse',
+  'friend',
+  'colleague',
+  'witness',
+  'next of kin',
+];
 
-/** Words that mean the field is about a company, not a person. */
-const COMPANY_CONTEXT_RE =
-  /\b(?:company|employer|organization|organisation|business|firm|agency|school|university|college|institution)\b/;
+/** Headings of an education block, and of a work-history block. */
+const EDUCATION_SECTION_RE =
+  /\b(?:education|academic|school|university|college|degree|qualifications?)\b/i;
+const EXPERIENCE_SECTION_RE =
+  /\b(?:experience|employment|work history|job history|career history|positions? held)\b/i;
 
-export const FIELD_RULES: FieldRule[] = [
+/** A month or year part, which the whole-date rules must leave alone. */
+const DATE_PART_RE = /\b(?:month|year|mm|yyyy|yy)\b/;
+
+const START_MONTH = {
+  exact: ['start month', 'from month', 'month started', 'start date month', 'from date month'],
+  patterns: [/\b(?:start|started|from|begin|began)\b.*\bmonth\b/],
+  not: [/\b(?:end|to|until|finish|finished|year)\b/],
+};
+const START_YEAR = {
+  exact: ['start year', 'from year', 'year started', 'start date year', 'from date year'],
+  patterns: [/\b(?:start|started|from|begin|began)\b.*\byear\b/],
+  not: [/\b(?:end|to|until|finish|finished|month|years)\b/],
+};
+const END_MONTH = {
+  exact: ['end month', 'to month', 'month ended', 'end date month', 'to date month'],
+  patterns: [/\b(?:end|ended|to|until|finish|finished)\b.*\bmonth\b/],
+  not: [/\b(?:start|from|begin|year)\b/],
+};
+const END_YEAR = {
+  exact: ['end year', 'to year', 'year ended', 'end date year', 'to date year'],
+  patterns: [/\b(?:end|ended|to|until|finish|finished)\b.*\byear\b/],
+  not: [/\b(?:start|from|begin|month|years)\b/],
+};
+
+/** Words that mark a pay question as about the pay the candidate has now. */
+const CURRENT_PAY_RE = /\b(?:current|present|last drawn|existing|currently)\b/;
+
+/** Words that mark a pay question as about the pay the candidate wants. */
+const EXPECTED_PAY_RE = /\b(?:expected|expecting|expectations?|desired|hike|increment)\b/;
+
+const ENGLISH_COMPANY = [
+  'company',
+  'employer',
+  'organization',
+  'organisation',
+  'business',
+  'firm',
+  'agency',
+  'school',
+  'university',
+  'college',
+  'institution',
+];
+
+/**
+ * Safety vocabulary is never gated by language: a German referee field on a
+ * page that claims to be English is still someone else's field.
+ */
+const wordsRe = (words: string[]) => new RegExp(`\\b(?:${words.join('|')})\\b`);
+
+/** Words that mean the field is about somebody other than the candidate, in every supported language. */
+export const THIRD_PARTY_RE = wordsRe([
+  ...ENGLISH_THIRD_PARTY,
+  ...LOCALE_PACKS.flatMap((pack) => pack.thirdParty),
+]);
+
+/** Words that mean the field is about a company, not a person, in every supported language. */
+const COMPANY_CONTEXT_RE = wordsRe([
+  ...ENGLISH_COMPANY,
+  ...LOCALE_PACKS.flatMap((pack) => pack.company),
+]);
+
+const ENGLISH_RULES: FieldRule[] = [
   /* ------------------------------------------------------------- identity */
   {
     field: 'personal.firstName',
@@ -95,15 +187,54 @@ export const FIELD_RULES: FieldRule[] = [
     includes: ['email'],
     autocomplete: ['email'],
     types: ['email'],
-    not: [THIRD_PARTY_RE, /\b(?:confirm|verify|re enter|repeat)\b/],
+    // "Confirm email" in every supported language: a confirmation box is not
+    // where the candidate's address is first asked for.
+    not: [
+      THIRD_PARTY_RE,
+      /\b(?:confirm\w*|verify|re enter|repeat|bestatig\w*|wiederhol\w*|resaisi\w*|repet\w*|repit\w*|bevestig\w*|herhaal\w*|conferma\w*|ripeti\w*)\b/,
+    ],
   },
   {
     field: 'personal.phone',
     exact: ['phone', 'mobile', 'contact number', 'primary phone', 'mobile phone', 'phone no'],
     includes: ['phone', 'mobile'],
-    autocomplete: ['tel', 'tel-national'],
+    autocomplete: ['tel'],
     types: ['tel'],
-    not: [THIRD_PARTY_RE, /\b(?:country code|extension|ext)\b/],
+    not: [THIRD_PARTY_RE, /\b(?:country code|phone code|dial code|calling code|extension|ext)\b/],
+  },
+  {
+    field: 'personal.phoneCountryCode',
+    exact: [
+      'country code',
+      'phone country code',
+      'country phone code',
+      'country calling code',
+      'calling code',
+      'dial code',
+      'dialing code',
+      'dialling code',
+      'isd code',
+      'phone code',
+      'phone prefix',
+    ],
+    includes: [
+      'country code',
+      'phone code',
+      'calling code',
+      'dial code',
+      'dialing code',
+      'isd code',
+    ],
+    autocomplete: ['tel-country-code'],
+    not: [THIRD_PARTY_RE, /\b(?:postal|zip|iso)\b/],
+  },
+  {
+    field: 'personal.phoneNational',
+    exact: ['national number', 'local number', 'phone without country code'],
+    includes: ['without country code', 'excluding country code'],
+    autocomplete: ['tel-national', 'tel-local'],
+    types: ['tel'],
+    not: [THIRD_PARTY_RE],
   },
   {
     field: 'personal.dateOfBirth',
@@ -265,17 +396,72 @@ export const FIELD_RULES: FieldRule[] = [
       'expected completion',
     ],
     includes: ['graduation date'],
-    patterns: [/\bexpected\b.*\b(?:graduation|completion|date|year)\b/],
+    patterns: [/\bexpected\b.*\b(?:graduation|completion|date)\b/],
+    not: [DATE_PART_RE],
   },
   {
     field: 'education.startDate',
-    exact: ['start date education', 'education start date', 'from year'],
+    exact: ['start date education', 'education start date'],
     patterns: [/\b(?:education|school|college|university|degree)\b.*\bstart\b/],
+    not: [DATE_PART_RE],
   },
   {
     field: 'education.endDate',
-    exact: ['end date education', 'education end date', 'to year'],
+    exact: ['end date education', 'education end date'],
     patterns: [/\b(?:education|school|college|university|degree)\b.*\bend\b/],
+    not: [DATE_PART_RE],
+  },
+  // Month and year asked separately. The bare labels only count inside an
+  // education block; the explicit ones count anywhere.
+  { field: 'education.startMonth', ...START_MONTH, section: EDUCATION_SECTION_RE },
+  { field: 'education.startYear', ...START_YEAR, section: EDUCATION_SECTION_RE },
+  { field: 'education.endMonth', ...END_MONTH, section: EDUCATION_SECTION_RE },
+  { field: 'education.endYear', ...END_YEAR, section: EDUCATION_SECTION_RE },
+  {
+    field: 'education.startMonth',
+    patterns: [
+      /\b(?:education|school|college|university|degree|course)\b.*\bstart\w*\b.*\bmonth\b/,
+    ],
+    not: [/\byear\b/],
+  },
+  {
+    field: 'education.startYear',
+    exact: ['year of admission', 'admission year', 'year of joining', 'first year attended'],
+    patterns: [/\b(?:education|school|college|university|degree|course)\b.*\bstart\w*\b.*\byear\b/],
+    not: [/\bmonth\b/],
+  },
+  {
+    field: 'education.endMonth',
+    exact: ['graduation month', 'month of graduation', 'expected graduation month'],
+    patterns: [/\b(?:education|school|college|university|degree|course)\b.*\bend\w*\b.*\bmonth\b/],
+    not: [/\byear\b/],
+  },
+  {
+    field: 'education.endYear',
+    exact: [
+      'graduation year',
+      'year of graduation',
+      'expected graduation year',
+      'passing year',
+      'year of passing',
+      'passout year',
+      'pass out year',
+      'last year attended',
+    ],
+    includes: ['graduation year', 'year of graduation', 'year of passing'],
+    patterns: [/\b(?:education|school|college|university|degree|course)\b.*\bend\w*\b.*\byear\b/],
+    not: [/\bmonth\b/],
+  },
+  {
+    field: 'education.location',
+    exact: ['location', 'school location', 'university location', 'college location'],
+    weight: 0.9,
+    section: EDUCATION_SECTION_RE,
+  },
+  {
+    field: 'education.location',
+    exact: ['school location', 'university location', 'college location', 'institution location'],
+    weight: 0.9,
   },
 
   /* ----------------------------------------------------------- experience */
@@ -341,11 +527,66 @@ export const FIELD_RULES: FieldRule[] = [
     field: 'experience.startDate',
     patterns: [/\b(?:employment|job|role|position|work)\b.*\bstart\b/],
     exact: ['employment start date'],
+    not: [DATE_PART_RE],
   },
   {
     field: 'experience.endDate',
     patterns: [/\b(?:employment|job|role|position|work)\b.*\bend\b/],
     exact: ['employment end date'],
+    not: [DATE_PART_RE],
+  },
+  { field: 'experience.startMonth', ...START_MONTH, section: EXPERIENCE_SECTION_RE },
+  { field: 'experience.startYear', ...START_YEAR, section: EXPERIENCE_SECTION_RE },
+  { field: 'experience.endMonth', ...END_MONTH, section: EXPERIENCE_SECTION_RE },
+  { field: 'experience.endYear', ...END_YEAR, section: EXPERIENCE_SECTION_RE },
+  {
+    field: 'experience.startMonth',
+    patterns: [/\b(?:employment|job|role|position|work)\b.*\bstart\w*\b.*\bmonth\b/],
+    not: [/\byear\b/],
+  },
+  {
+    field: 'experience.startYear',
+    patterns: [/\b(?:employment|job|role|position|work)\b.*\bstart\w*\b.*\byear\b/],
+    not: [/\bmonth\b/, /\byears\b/],
+  },
+  {
+    field: 'experience.endMonth',
+    patterns: [/\b(?:employment|job|role|position|work)\b.*\bend\w*\b.*\bmonth\b/],
+    not: [/\byear\b/],
+  },
+  {
+    field: 'experience.endYear',
+    patterns: [/\b(?:employment|job|role|position|work)\b.*\bend\w*\b.*\byear\b/],
+    not: [/\bmonth\b/, /\byears\b/],
+  },
+  {
+    // "I currently work here" ticks a box; a text field labelled "Current
+    // role" is a job title, so only checkboxes qualify.
+    field: 'experience.current',
+    exact: [
+      'i currently work here',
+      'currently work here',
+      'i am currently working here',
+      'current job',
+      'current role',
+      'current employer',
+      'present',
+      'currently employed here',
+      'i currently work in this role',
+    ],
+    includes: ['currently work here', 'currently working here', 'still work here'],
+    onlyTypes: ['checkbox'],
+  },
+  {
+    field: 'experience.location',
+    exact: ['location', 'company location', 'employer location', 'work location'],
+    weight: 0.9,
+    section: EXPERIENCE_SECTION_RE,
+  },
+  {
+    field: 'experience.location',
+    exact: ['company location', 'employer location'],
+    weight: 0.9,
   },
 
   /* ------------------------------------------------------------ documents */
@@ -541,13 +782,78 @@ export const FIELD_RULES: FieldRule[] = [
       'salary expectations',
       'expected compensation',
       'desired compensation',
-      'current salary',
-      'current ctc',
       'expected ctc',
     ],
     includes: ['salary', 'compensation', 'ctc'],
+    // Current pay is a different number. A label that asks about it — alone or
+    // alongside the expected figure — must never receive the expected one.
+    not: [CURRENT_PAY_RE],
+  },
+  {
+    field: 'sensitive.currentSalary',
+    exact: [
+      'current salary',
+      'current ctc',
+      'current compensation',
+      'present salary',
+      'present ctc',
+      'last drawn salary',
+      'last drawn ctc',
+      'existing salary',
+      'existing ctc',
+    ],
+    patterns: [
+      /\b(?:current|present|last drawn|existing)\b.*\b(?:salary|compensation|ctc|pay|package)\b/,
+    ],
+    not: [EXPECTED_PAY_RE, COMPANY_CONTEXT_RE],
   },
 ];
+
+/**
+ * Locale rules, merged under the English rules' negative discipline: each one
+ * inherits every `not` (and the input types) of the first English rule for
+ * its field, then adds its own. A locale can only add vocabulary; it can never
+ * lift a disqualification the English rule imposes.
+ */
+function localeRules(): FieldRule[] {
+  const english = new Map<CanonicalField, FieldRule>();
+  for (const rule of ENGLISH_RULES) if (!english.has(rule.field)) english.set(rule.field, rule);
+
+  const phrases = (list?: string[]) =>
+    list ? [...new Set(list.map((phrase) => normalizeLabel(phrase)).filter(Boolean))] : undefined;
+
+  return LOCALE_PACKS.flatMap((pack) =>
+    pack.rules.map((entry): FieldRule => {
+      const base = english.get(entry.field);
+      return {
+        field: entry.field,
+        exact: phrases(entry.exact),
+        includes: phrases(entry.includes),
+        patterns: entry.patterns,
+        not: [...(base?.not ?? []), ...(entry.not ?? [])],
+        types: base?.types,
+        weight: entry.weight ?? base?.weight,
+        locale: pack.code,
+        langOnly: entry.langOnly,
+      };
+    }),
+  );
+}
+
+export const FIELD_RULES: FieldRule[] = [...ENGLISH_RULES, ...localeRules()];
+
+/**
+ * Fields whose vocabulary applies whatever language the page declares. These
+ * are the ones where a miss is unsafe (a demographic question read as an
+ * ordinary field), not merely unhelpful.
+ */
+export function isSafetyField(field: CanonicalField): boolean {
+  return (
+    field.startsWith('sensitive.') ||
+    field === 'personal.dateOfBirth' ||
+    field === 'preferences.desiredSalary'
+  );
+}
 
 /**
  * Fields Fillwright must never fill without the user explicitly confirming on

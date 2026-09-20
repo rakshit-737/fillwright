@@ -494,3 +494,57 @@ describe('remembered mappings', () => {
     expect(first).toBe(second);
   });
 });
+
+describe('fill-time presence check', () => {
+  const entryFor = (fieldId: string, value: string) =>
+    ({
+      fieldId,
+      selected: true,
+      newValue: value,
+      label: 'Email',
+    }) as unknown as import('@/types/fields').FillPlanEntry;
+
+  function laidOut(input: HTMLElement, hits: () => Element[]): () => void {
+    input.getBoundingClientRect = () =>
+      ({ left: 10, top: 10, width: 200, height: 30, right: 210, bottom: 40 }) as DOMRect;
+    const original = (document as Document & { elementsFromPoint?: unknown }).elementsFromPoint;
+    Object.defineProperty(document, 'elementsFromPoint', { configurable: true, value: hits });
+    return () =>
+      Object.defineProperty(document, 'elementsFromPoint', {
+        configurable: true,
+        value: original,
+      });
+  }
+
+  it('does not write into a control that something else covers', async () => {
+    document.body.innerHTML = '<div id="cover"></div><input id="f">';
+    const input = document.getElementById('f') as HTMLInputElement;
+    const restore = laidOut(input, () => [document.getElementById('cover')!, input]);
+    try {
+      const { outcomes } = await fillFields([entryFor('x', 'a@b.co')], {
+        elements: new Map([['x', [input]]]),
+        highlight: false,
+      });
+      expect(input.value).toBe('');
+      expect(outcomes[0]).toMatchObject({ ok: false, error: expect.stringMatching(/covered/) });
+    } finally {
+      restore();
+    }
+  });
+
+  it('writes into a control that is what is actually there', async () => {
+    document.body.innerHTML = '<input id="f">';
+    const input = document.getElementById('f') as HTMLInputElement;
+    const restore = laidOut(input, () => [input]);
+    try {
+      const { outcomes } = await fillFields([entryFor('x', 'a@b.co')], {
+        elements: new Map([['x', [input]]]),
+        highlight: false,
+      });
+      expect(outcomes[0]?.ok).toBe(true);
+      expect(input.value).toBe('a@b.co');
+    } finally {
+      restore();
+    }
+  });
+});

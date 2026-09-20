@@ -24,15 +24,30 @@ It never submits an application. That click is always yours.
   from different entries, never the same one twice.
 - **Drives custom dropdowns** (React Select, Downshift, ARIA comboboxes) by
   opening them and picking the matching option, and refuses when two options fit.
+- **Handles split form shapes** — separate month and year selects, a phone
+  country-code select beside the number, "I currently work here", and a State
+  list that only loads after Country is chosen (offered as "N more fields can
+  be filled now", never filled on its own).
 - **Verifies every write** and reports what did not take, with a one-click retry.
 - **Learns from your corrections.** Tell it what an unrecognised field means and
   it remembers, for that site, on this device only.
+- **Reuses what you wrote.** Point a field at one of your custom fields or
+  saved answers, and on a written question pick a saved answer (ranked by how
+  well it matches) to edit and use. Never chosen for you.
 - **Explains itself.** Every row in the review list has a "Why?" that says what
-  matched and where.
+  matched and where, and a "Show me" that points at the field on the page.
+  Rows are grouped by section, can be filtered by status, and any proposed
+  value can be edited for just this form.
+- **Leaves hidden fields alone.** Fields a person cannot see — honeypots,
+  off-screen or transparent inputs, fields covered by something else — are
+  never filled. The panel says how many it ignored and why.
 - **Encrypts what it stores**, optionally, with a passphrase only you hold.
 - **Refuses to guess** work authorisation, visa status, demographics, salary or
   criminal history. Those come only from answers you set yourself.
 - **Undoes a fill** in one click.
+- **Tracks your applications**, if you switch history on: status, notes,
+  follow-up dates and CSV export, kept on this device and encrypted with the
+  vault.
 
 ---
 
@@ -59,6 +74,39 @@ To produce a Web Store zip: `npm run presubmit` (runs every check, builds
 not ship). Listing copy, permission justifications, the privacy-practices
 declaration, screenshots and a checklist are in [`store/`](./store).
 
+### Verify the store package yourself
+
+Every release zip is built by CI from a version tag and is reproducible byte
+for byte, so you do not have to take it on trust. To check one:
+
+1. Download `fillwright-<version>.zip` and `SHA256SUMS` from the
+   [GitHub release](https://github.com/rakshit-737/fillwright/releases).
+2. Check the download: `sha256sum -c SHA256SUMS` (PowerShell:
+   `Get-FileHash fillwright-<version>.zip -Algorithm SHA256`).
+3. Optionally check where it came from:
+   `gh attestation verify fillwright-<version>.zip --repo rakshit-737/fillwright`.
+4. Rebuild it from source, with Node 22:
+
+   ```bash
+   git clone https://github.com/rakshit-737/fillwright.git
+   cd fillwright
+   git checkout v<version>
+   npm ci
+   export SOURCE_DATE_EPOCH=$(git log -1 --format=%ct)   # optional: this is the default
+   npm run build
+   node scripts/package.mjs --out rebuilt
+   cat rebuilt/SHA256SUMS
+   ```
+
+5. The hash printed by the last step must equal the one in the release's
+   `SHA256SUMS`. If it does not, please open an issue.
+
+The zip's entries are sorted, stamped with the tagged commit's time, and
+compressed with fixed settings (see `scripts/lib/zip.mjs`). Clone with git
+(not a source-archive download) so line endings follow `.gitattributes`, and
+use the same major Node version as CI, since deflate output can change with
+zlib.
+
 ---
 
 ## Using it
@@ -72,15 +120,21 @@ declaration, screenshots and a checklist are in [`store/`](./store).
    section can show **what autofill will see**; entries reorder with
    Alt+↑/↓; skills can be pasted as a list.
 4. **Options → Application preferences** — set work authorisation, relocation
-   and (optionally) demographics and salary. All off and unanswered by default.
+   and (optionally) demographics and salary (current and expected are kept
+   separate and never converted between units). All off and unanswered by default.
 5. **On an application**, click the Fillwright toolbar button or press
    `Alt+Shift+F`. A panel appears: "27 application fields found — 21 ready,
    4 to review, 2 need you". It can be dragged (or moved with the arrow keys on
    its title) and minimised with `Esc`.
    Under **Settings → When Fillwright appears** you can choose Assist (it offers
    help on pages that clearly are applications) or Smart (it also prepares the
-   plan in advance). Both need site access, which Chrome asks you for. Neither
-   fills or submits anything without you.
+   plan in advance, as counts only — values are fetched when you open it).
+   Both need site access, which Chrome asks you for: job sites only by default,
+   a single site from the popup's "Turn on for this site", or every https site
+   as a separate step. Settings → Permissions lists and revokes each one.
+   Neither fills or submits anything without you. "Fill" becomes active about
+   half a second after the panel is fully visible, and pauses if anything on
+   the page covers it.
 6. **Review, then Fill.** Every row shows what will change, how confident
    Fillwright is, and — behind "Why?" — what it matched on.
 7. **Correct anything it got wrong.** "Change" (or "Set what this is") lets you
@@ -92,8 +146,12 @@ declaration, screenshots and a checklist are in [`store/`](./store).
    and has one clear "Add education" button, the panel offers to add them.
 9. **Written questions** are marked "You need to write this". With on-device AI
    switched on, "Draft with on-device AI" shows exactly which facts would be
-   used, then gives you an editable draft; nothing reaches the form until you
-   press "Use this answer".
+   used — plus, unticked, an excerpt of the job posting and your saved answers —
+   then streams a draft you can cancel at any point (it stops by itself after
+   60 seconds and never exceeds the field's length limit). Nothing reaches the
+   form until you press "Use this answer". If Chrome still needs its model,
+   Settings → Writing assistance has "Download the on-device model" with
+   progress.
 10. **Job postings.** When the posting is on the page, the panel lists which
     skills it mentions that your profile has, and which it does not. It never
     changes your profile.
@@ -104,9 +162,11 @@ declaration, screenshots and a checklist are in [`store/`](./store).
 ## Testing it
 
 ```bash
-npm test             # 326 unit and integration tests (jsdom)
+npm test             # 330 unit and integration tests (jsdom)
 npm run test:e2e     # 96 end-to-end tests in real Chrome, including axe-core
 npm run perf         # performance budget in Chrome for Testing
+npm run eval         # classifier and parser accuracy vs tests/corpus/baseline.json
+npm run test:coverage # unit tests with coverage thresholds
 npm run check        # typecheck → lint → audit → test → build → verify
 npm run presubmit    # check + package + inspect the zip
 npm run probe:ai     # where Chrome exposes its on-device model
@@ -172,6 +232,8 @@ npx serve test-pages     # then open http://localhost:3000
 | `workday.html` | No `<label>` elements at all, `aria-labelledby`, ids with colons and brackets, a collapsed section |
 | `react-form.html` | Controlled inputs that revert any write not made through the native setter |
 | `edge-cases.html` | Prefilled fields, referee details, credentials, demographics, two-country work authorisation, shadow DOM, dynamically added fields, prompt injection |
+| `shadow-labels.html` | Labels inside shadow roots: nested `label[for]`, `aria-labelledby`, a label on the custom-element host, and a document id that must not leak in |
+| `draft-posting.html` | A job posting with an injection sentence and a 120-character essay question, for streamed drafting |
 | `hard-mode.html` | The regression playground: 50+ controls, repeated education and experience blocks, three custom dropdowns (including one in a portal and one deliberately ambiguous), a field that rejects writes, aria-only labels |
 | `ats/greenhouse.html` | Greenhouse job board: `job_application[...]` names, React-Select school and degree, EEO section |
 | `ats/lever.html` | Lever: labels in sibling divs, `urls[...]` names, a written "Additional information" |
@@ -181,8 +243,11 @@ npx serve test-pages     # then open http://localhost:3000
 | `ats/linkedin.html` | LinkedIn Easy Apply: a modal with Next / Review / Submit that must never be pressed |
 | `virtual-list.html` | A 600-entry virtualised dropdown |
 | `spa-steps.html`, `add-another.html`, `one-off.html`, `rejecting.html`, `frame-host.html` | Router navigation, adding blocks, one-off corrections, a form that rejects every write, a form in someone else's frame |
+| `saved-answers.html` | A field taught as one of your custom fields; a written question answered from a saved answer only after you confirm |
 | `newsletter.html`, `login.html` | Pages that are *not* applications, where proactive modes must stay silent |
 | `hostile-roles.html` | Submit buttons and links disguised as dropdowns, options and radios |
+| `hidden-fields.html` | Honeypots and six hiding techniques (opacity, off-screen, 1 px clip, `aria-hidden`, `inert`, covered); none may be filled |
+| `clickjack.html` | A page that fires synthetic clicks at Fill and covers the panel with a see-through, pointer-events:none overlay |
 
 Every fixture states its expected behaviour at the top of the page.
 
@@ -227,7 +292,12 @@ or a location.
 For PDFs, pdf.js returns positioned glyph runs rather than lines, so Fillwright
 reconstructs lines from baseline positions and re-inserts spacing from the gaps.
 Tabs are preserved through parsing because they are the only surviving trace of
-a two-column layout.
+a table-like row. Sidebar templates are detected per page: when a vertical
+gutter separates two independently flowing columns, the header is read first,
+then each column in turn. Links that exist only as clickable words ("LinkedIn |
+GitHub") are read from PDF link annotations and DOCX hyperlink relationships;
+only `http(s)` targets are kept. Names are matched in any script ("José
+Álvarez", "S. R. Jeevan").
 
 ### How field detection works
 
@@ -247,6 +317,14 @@ as a person's name, or "Confirm Email" as your email address.
 
 Below the confidence threshold (70% by default, adjustable), Fillwright suggests
 rather than fills.
+
+**Languages.** Besides English, forms in German, French, Spanish, Portuguese,
+Dutch and Italian are recognised. Labels are folded to plain letters first
+("Prénom" → "prenom"). The control's `lang` attribute picks the vocabulary
+pack; words that are also English ("Note", "Via") count only when the page
+declares that language. Sensitive, third-party and company words are
+recognised in every supported language regardless, so a German gender question
+on a page marked English is still left for you.
 
 ### How privacy is achieved
 
@@ -286,15 +364,25 @@ Summarised here; the full threat model is in [SECURITY.md](./SECURITY.md).
    extension pages, never on web pages) but reports it unavailable on machines
    without the model; 131 does not expose it at all. Generation with a real
    on-device model has not been verified — see `npm run probe:ai`.
+8. **Exports are plaintext unless you set a passphrase.** Tick "Protect the
+   export with a passphrase" to seal it (PBKDF2 600k + AES-GCM, as the vault);
+   forget the passphrase and the file cannot be opened. Without one, the file is
+   readable JSON and the page warns before saving it. Imports are shown for
+   review first; settings and learned fields from a file start unticked, and an
+   imported learned field is only proposed, never pre-ticked, until you confirm
+   it on a real form.
+9. **Step progress is per tab and per session.** It lives in memory-only
+   session storage and resets when the browser closes.
 10. **ATS layouts change.** The `test-pages/ats/` fixtures reproduce each
     system's DOM patterns as of this release; they are not copies of the live
     sites, which change without notice.
 11. **Searchable dropdowns see a short prefix.** To find an option in a list
     that loads as you type, Fillwright types up to six characters of the value
     into the site's search box, which the site can observe.
-8. **Exports are not encrypted.** The export warns about this before saving.
-9. **Step progress is per tab and per session.** It lives in memory-only
-   session storage and resets when the browser closes.
+12. **Six languages besides English.** Other languages match only through the
+    `autocomplete` attribute and English `name` attributes. Work-authorisation
+    answers still detect the country from English wording only, so a
+    non-English authorisation question is always left for you.
 
 ---
 

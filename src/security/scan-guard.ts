@@ -84,6 +84,7 @@ export function validateScan(input: unknown): ScanGuardResult {
           typeof signals.maxLength === 'number' && Number.isFinite(signals.maxLength)
             ? Math.max(0, Math.trunc(signals.maxLength))
             : null,
+        lang: sanitizeString(signals.lang, 35),
       },
       options: sanitizeOptions(raw.options),
       currentValue,

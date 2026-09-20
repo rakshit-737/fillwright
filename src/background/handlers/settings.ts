@@ -1,8 +1,9 @@
-import { handle, ok } from '../router';
+import { handle, ok, err } from '../router';
 import { getSettings, setSettings } from '@/storage/settings';
 import { listProfiles } from '@/storage/profiles';
 import { hasSiteAccess, syncAutoDetect } from '../auto-detect';
-import { AUTOFILL_MODES } from '@/types/settings';
+import { validateSettingsPatch } from '@/security/boundary';
+import { pruneHistory } from '@/storage/history';
 import type { UiRequest } from '@/types/messages';
 
 export function registerSettingsHandlers(): void {
@@ -10,11 +11,12 @@ export function registerSettingsHandlers(): void {
 
   handle('ui:set-settings', async (request) => {
     const { patch } = request as Extract<UiRequest, { type: 'ui:set-settings' }>;
-    const mode = patch.autofill?.mode;
-    if (mode !== undefined && !AUTOFILL_MODES.includes(mode)) {
-      delete patch.autofill!.mode;
-    }
-    const next = await setSettings(patch);
+    const checked = validateSettingsPatch(patch);
+    if (!checked.ok) return err(checked.error, checked.code);
+    const mode = checked.value.autofill?.mode;
+    const next = await setSettings(checked.value);
+    const retention = checked.value.privacy?.historyRetentionMonths;
+    if (retention !== undefined) await pruneHistory();
     if (mode !== undefined) await syncAutoDetect().catch(() => undefined);
     return ok(next);
   });

@@ -26,32 +26,57 @@ function merge<T>(base: T, patch: DeepPartial<T> | undefined): T {
   return out;
 }
 
+/** Keys removed in v3 (Fillwright 0.6) because nothing ever read them. */
+const DEAD_V3_KEYS: Array<[string, string]> = [
+  ['autofill', 'fillEmptyFieldsOnly'],
+  ['autofill', 'previewBeforeFill'],
+  ['ai', 'assistFieldMapping'],
+  ['privacy', 'encryptionEnabled'],
+];
+
 /**
- * Upgrades settings written by older versions.
+ * Upgrades settings written by older versions. Returns true when the stored
+ * record changed and should be written back.
  *
  * v1 (Fillwright 0.3) had `autofill.autoDetectOnKnownSites`, which was never
  * wired to anything. It is replaced by `autofill.mode`: a stored `true` becomes
  * Assist only if the user has already granted site access (otherwise Assist
  * could not run, and the setting would claim something false), and Manual in
  * every other case. The old key is dropped.
+ *
+ * v3 drops keys that did nothing: "fill empty fields only" (the overwrite
+ * switch is the one that decides), "preview before filling" (the panel always
+ * previews; nothing fills without confirmation), "assist field mapping" (never
+ * implemented) and `privacy.encryptionEnabled` (written, never read — the
+ * vault's own meta record is the source of truth).
  */
 export async function migrateSettings(raw: Record<string, unknown>): Promise<boolean> {
+  let changed = typeof raw.version !== 'number' || raw.version < SETTINGS_VERSION;
   const autofill = raw.autofill as Record<string, unknown> | undefined;
-  if (!autofill || !('autoDetectOnKnownSites' in autofill)) return false;
-  const wanted = autofill.autoDetectOnKnownSites === true;
-  delete autofill.autoDetectOnKnownSites;
-  if (autofill.mode === undefined) {
-    let access = false;
-    if (wanted) {
-      try {
-        access = await chrome.permissions.contains({ origins: ['https://*/*'] });
-      } catch {
-        access = false;
+  if (autofill && 'autoDetectOnKnownSites' in autofill) {
+    changed = true;
+    const wanted = autofill.autoDetectOnKnownSites === true;
+    delete autofill.autoDetectOnKnownSites;
+    if (autofill.mode === undefined) {
+      let access = false;
+      if (wanted) {
+        try {
+          access = await chrome.permissions.contains({ origins: ['https://*/*'] });
+        } catch {
+          access = false;
+        }
       }
+      autofill.mode = wanted && access ? 'assist' : 'manual';
     }
-    autofill.mode = wanted && access ? 'assist' : 'manual';
   }
-  return true;
+  for (const [group, key] of DEAD_V3_KEYS) {
+    const section = raw[group] as Record<string, unknown> | undefined;
+    if (section && typeof section === 'object' && key in section) {
+      delete section[key];
+      changed = true;
+    }
+  }
+  return changed;
 }
 
 export async function getSettings(): Promise<Settings> {

@@ -1,6 +1,12 @@
 import type { CanonicalField, FieldSignals, FillPlanEntry, MappingStatus } from '@/types/fields';
-import { FIELD_CATALOG, catalogGroups } from '@/field-detection/catalog';
+import {
+  FIELD_CATALOG,
+  catalogGroupOf,
+  catalogGroups,
+  isOpenableProfileField,
+} from '@/field-detection/catalog';
 import { STATUS_LABELS } from '@/autofill/status';
+import { customKeyFor, type AnswerChoice, type AnswerChoices } from '@/autofill/saved-answers';
 
 /**
  * The review row.
@@ -18,6 +24,8 @@ export interface DraftFact {
   id: string;
   label: string;
   value: string;
+  /** Extra context (posting excerpt, saved answers): unticked until the user ticks it. */
+  optional?: boolean;
 }
 
 /**
@@ -26,11 +34,86 @@ export interface DraftFact {
  */
 export type DraftView =
   | { phase: 'loading' }
-  | { phase: 'facts' | 'generating'; facts: DraftFact[]; chosen: Set<string> }
+  | {
+      phase: 'facts' | 'generating';
+      facts: DraftFact[];
+      chosen: Set<string>;
+      /** Text streamed so far while generating. */
+      text?: string;
+    }
   | { phase: 'result'; text: string; facts: DraftFact[]; chosen: Set<string> }
   | { phase: 'error'; message: string };
 
+/**
+ * "Use a saved answer" for one written question. Titles first; the text of
+ * the chosen answer arrives only after the user picks it, and is shown for
+ * editing before anything is written.
+ */
+export type SavedAnswerView =
+  | { phase: 'loading' }
+  | { phase: 'choose'; answers: AnswerChoice[]; busy?: boolean }
+  | { phase: 'result'; text: string; answers: AnswerChoice[] }
+  | { phase: 'error'; message: string };
+
+/** Which rows the list shows. Filtering never changes what is selected. */
+export type StatusFilter = 'all' | 'ready' | 'review' | 'needs-you' | 'missing-value' | 'filled';
+
+const FILTERS: Array<[StatusFilter, string]> = [
+  ['all', 'All fields'],
+  ['ready', 'Ready'],
+  ['review', 'To review'],
+  ['needs-you', 'Need you'],
+  ['missing-value', 'Not in your profile'],
+  ['filled', 'Already filled or not recognised'],
+];
+
+export function matchesFilter(status: MappingStatus, filter: StatusFilter): boolean {
+  switch (filter) {
+    case 'all':
+      return true;
+    case 'ready':
+      return status === 'ready';
+    case 'review':
+      return status === 'review';
+    case 'needs-you':
+      return (
+        status === 'needs-consent' || status === 'missing-value' || status === 'manual-required'
+      );
+    case 'missing-value':
+      return status === 'missing-value';
+    case 'filled':
+      return status === 'skipped-existing' || status === 'unmapped';
+  }
+}
+
+/**
+ * Everything the list needs to know about what the user has done so far.
+ * Owned by the widget, so it survives a redraw.
+ */
+export interface ReviewState {
+  selection: Set<string>;
+  /** Rows whose "Why?" explanation is open. */
+  expanded: Set<string>;
+  /** Rows whose correction picker is open. */
+  teaching: Set<string>;
+  /** Rows whose value editor is open. */
+  editing: Set<string>;
+  /**
+   * Values the user typed for this form. Content-script memory only: never
+   * sent to the service worker, never saved to the profile.
+   */
+  edits: Map<string, string>;
+  filter: StatusFilter;
+}
+
 export interface ReviewCallbacks {
+  /** Titles of the user's custom fields and saved answers, for the picker. */
+  choices?: AnswerChoices | null;
+  savedAnswers?: Map<string, SavedAnswerView>;
+  onSavedAnswerStart?: (entry: FillPlanEntry) => void;
+  onSavedAnswerPick?: (entry: FillPlanEntry, id: string) => void;
+  onSavedAnswerUse?: (entry: FillPlanEntry, text: string) => void;
+  onSavedAnswerCancel?: (entry: FillPlanEntry) => void;
   /** Raw signals per field, when diagnostics are on. Null otherwise. */
   diagnostics?: Map<string, FieldSignals> | null;
   drafts?: Map<string, DraftView>;
@@ -40,39 +123,141 @@ export interface ReviewCallbacks {
   onDraftUse?: (entry: FillPlanEntry, text: string) => void;
   onDraftCancel?: (entry: FillPlanEntry) => void;
   onToggle: (fieldId: string, selected: boolean) => void;
+  /** Select all / none within one section. */
+  onSetMany?: (fieldIds: string[], selected: boolean) => void;
+  onFilter?: (filter: StatusFilter) => void;
+  onEditStart?: (fieldId: string) => void;
+  /** An empty value removes the edit and goes back to the proposed value. */
+  onEditSave?: (fieldId: string, value: string) => void;
+  onEditCancel?: (fieldId: string) => void;
+  /** "Add it in your profile" on a row whose value is missing. */
+  onOpenProfile?: (field: CanonicalField) => void;
   /** The user told Fillwright what an unrecognised field means. */
-  onTeach: (entry: FillPlanEntry, field: CanonicalField, remember: boolean) => void;
+  onTeach: (
+    entry: FillPlanEntry,
+    field: CanonicalField,
+    remember: boolean,
+    customKey?: string,
+  ) => void;
   onExplainToggle: () => void;
+  /** Scroll the row's field into view and outline it on the page. */
+  onShowField?: (fieldId: string) => void;
 }
 
+/**
+ * The review list.
+ *
+ * Every control carries a `data-fw-key` that stays the same across redraws
+ * (field id plus control name), so the widget can put focus back on the very
+ * control the user pressed and keep the list where it was scrolled.
+ */
 export function renderReviewList(
   entries: FillPlanEntry[],
-  selection: Set<string>,
-  expandedExplanations: Set<string>,
-  teaching: Set<string>,
+  state: ReviewState,
   callbacks: ReviewCallbacks,
 ): HTMLElement {
-  const list = el('ul', 'fw-list');
+  const wrap = el('div', 'fw-review');
+
+  const filterRow = el('div', 'fw-filterrow');
+  const filterLabel = el('label', 'fw-note', 'Show');
+  filterLabel.setAttribute('for', 'fw-filter');
+  const filter = document.createElement('select');
+  filter.id = 'fw-filter';
+  filter.className = 'fw-filter';
+  filter.setAttribute('data-fw-key', 'filter');
+  for (const [value, label] of FILTERS) {
+    const option = document.createElement('option');
+    option.value = value;
+    option.textContent = label;
+    if (value === state.filter) option.selected = true;
+    filter.appendChild(option);
+  }
+  filter.addEventListener('change', () => callbacks.onFilter?.(filter.value as StatusFilter));
+  filterRow.appendChild(filterLabel);
+  filterRow.appendChild(filter);
+  wrap.appendChild(filterRow);
+
+  const list = el('div', 'fw-list');
   list.setAttribute('role', 'group');
   list.setAttribute('aria-label', 'Fields Fillwright found');
 
-  for (const entry of entries) {
-    list.appendChild(renderRow(entry, selection, expandedExplanations, teaching, callbacks));
+  // Sections in the order they first appear on the form.
+  const groups = new Map<string, FillPlanEntry[]>();
+  for (const raw of entries) {
+    if (!matchesFilter(raw.status, state.filter)) continue;
+    const edit = state.edits.get(raw.fieldId);
+    const entry = edit === undefined ? raw : { ...raw, newValue: edit };
+    const name = catalogGroupOf(entry.canonical);
+    const rows = groups.get(name) ?? [];
+    rows.push(entry);
+    groups.set(name, rows);
   }
 
-  return list;
+  if (groups.size === 0) {
+    list.appendChild(el('p', 'fw-note fw-empty', 'No fields match this filter.'));
+  }
+
+  let index = 0;
+  for (const [name, rows] of groups) {
+    const titleId = `fw-group-${index++}`;
+    const group = el('div', 'fw-group');
+    const head = el('div', 'fw-group__head');
+    const title = el('span', 'fw-group__title', name);
+    title.id = titleId;
+    head.appendChild(title);
+
+    const selectable = rows
+      .filter((entry) => isFillable(entry, state))
+      .map((entry) => entry.fieldId);
+    if (selectable.length > 0) {
+      const all = button('All', 'fw-link', () => callbacks.onSetMany?.(selectable, true));
+      all.setAttribute('aria-label', `Select all in ${name}`);
+      all.setAttribute('data-fw-key', `group:${name}:all`);
+      const none = button('None', 'fw-link', () => callbacks.onSetMany?.(selectable, false));
+      none.setAttribute('aria-label', `Select none in ${name}`);
+      none.setAttribute('data-fw-key', `group:${name}:none`);
+      head.appendChild(all);
+      head.appendChild(none);
+    }
+    group.appendChild(head);
+
+    const ul = el('ul', 'fw-group__list');
+    ul.setAttribute('aria-labelledby', titleId);
+    for (const entry of rows) ul.appendChild(renderRow(entry, state, callbacks));
+    group.appendChild(ul);
+    list.appendChild(group);
+  }
+
+  wrap.appendChild(list);
+  return wrap;
+}
+
+const FILE_FIELDS: ReadonlySet<CanonicalField> = new Set<CanonicalField>([
+  'documents.resume',
+  'documents.coverLetter',
+]);
+
+function isFillable(entry: FillPlanEntry, state: ReviewState): boolean {
+  if (entry.newValue === '') return false;
+  return entry.status !== 'manual-required' || state.edits.has(entry.fieldId);
+}
+
+function keyed<T extends HTMLElement>(node: T, entry: FillPlanEntry, name: string): T {
+  node.setAttribute('data-fw-key', `${entry.fieldId}:${name}`);
+  return node;
 }
 
 function renderRow(
   entry: FillPlanEntry,
-  selection: Set<string>,
-  expanded: Set<string>,
-  teaching: Set<string>,
+  state: ReviewState,
   callbacks: ReviewCallbacks,
 ): HTMLElement {
+  const { selection, expanded, teaching } = state;
+  const edited = state.edits.has(entry.fieldId);
   const tone = statusTone(entry.status);
   const item = el('li', `fw-item fw-item--${tone}`);
-  const fillable = entry.newValue !== '' && entry.status !== 'manual-required';
+  item.setAttribute('data-fw-row', entry.fieldId);
+  const fillable = isFillable(entry, state);
 
   const row = el('div', 'fw-item__row');
 
@@ -82,6 +267,7 @@ function renderRow(
     checkbox.className = 'fw-check';
     checkbox.checked = selection.has(entry.fieldId);
     checkbox.id = `fw-check-${entry.fieldId}`;
+    keyed(checkbox, entry, 'check');
     checkbox.addEventListener('change', () => callbacks.onToggle(entry.fieldId, checkbox.checked));
     row.appendChild(checkbox);
   } else {
@@ -94,7 +280,11 @@ function renderRow(
   const label = el('label', 'fw-item__label', entry.label);
   if (fillable) label.setAttribute('for', `fw-check-${entry.fieldId}`);
   labelRow.appendChild(label);
-  if (entry.remembered) {
+  if (edited) {
+    labelRow.appendChild(el('span', 'fw-chip', 'your edit'));
+  } else if (entry.imported) {
+    labelRow.appendChild(el('span', 'fw-chip', 'imported'));
+  } else if (entry.remembered) {
     labelRow.appendChild(el('span', 'fw-chip', 'remembered'));
   } else if (entry.corrected) {
     labelRow.appendChild(el('span', 'fw-chip', 'your choice'));
@@ -123,14 +313,18 @@ function renderRow(
   // field Fillwright is deliberately leaving alone, "95%" answers a question
   // nobody asked and hides the one that matters ("already filled in").
   const showsConfidence =
-    (entry.status === 'ready' || entry.status === 'review') && entry.newValue !== '';
+    !edited && (entry.status === 'ready' || entry.status === 'review') && entry.newValue !== '';
 
   const meta = el('span', 'fw-item__meta');
   meta.appendChild(
     el(
       'span',
       `fw-badge fw-badge--${tone}`,
-      showsConfidence ? `${Math.round(entry.confidence * 100)}%` : STATUS_LABELS[entry.status],
+      edited
+        ? 'Your value'
+        : showsConfidence
+          ? `${Math.round(entry.confidence * 100)}%`
+          : STATUS_LABELS[entry.status],
     ),
   );
   row.appendChild(meta);
@@ -141,6 +335,13 @@ function renderRow(
 
   const tools = el('div', 'fw-item__tools');
 
+  // Which field on the page is this row about? Show it rather than describe it.
+  if (callbacks.onShowField) {
+    const show = button('Show me', 'fw-link', () => callbacks.onShowField?.(entry.fieldId));
+    show.setAttribute('aria-label', `Show ${entry.label} on the page`);
+    tools.appendChild(show);
+  }
+
   if (entry.rationale) {
     const why = button(expanded.has(entry.fieldId) ? 'Hide reason' : 'Why?', 'fw-link', () => {
       if (expanded.has(entry.fieldId)) expanded.delete(entry.fieldId);
@@ -148,7 +349,7 @@ function renderRow(
       callbacks.onExplainToggle();
     });
     why.setAttribute('aria-expanded', String(expanded.has(entry.fieldId)));
-    tools.appendChild(why);
+    tools.appendChild(keyed(why, entry, 'why'));
   }
 
   // Any mapping can be corrected - a confident match can still be wrong for
@@ -167,7 +368,30 @@ function renderRow(
       callbacks.onExplainToggle();
     });
     change.setAttribute('aria-expanded', String(opening));
-    tools.appendChild(change);
+    tools.appendChild(keyed(change, entry, 'change'));
+  }
+
+  // A value for this form only. Offered wherever Fillwright would write, or
+  // could write if it had a value — never on a field the user already filled.
+  // File inputs are excluded: a browser never lets an extension attach a file,
+  // so a typed value there could not be used.
+  if (
+    entry.status !== 'skipped-existing' &&
+    !FILE_FIELDS.has(entry.canonical) &&
+    !state.editing.has(entry.fieldId)
+  ) {
+    const edit = button('Edit for this form', 'fw-link', () =>
+      callbacks.onEditStart?.(entry.fieldId),
+    );
+    edit.setAttribute('aria-label', `Edit ${entry.label} for this form`);
+    tools.appendChild(keyed(edit, entry, 'edit'));
+  }
+
+  if (entry.status === 'missing-value' && !edited && isOpenableProfileField(entry.canonical)) {
+    const add = button('Add it in your profile', 'fw-link', () =>
+      callbacks.onOpenProfile?.(entry.canonical),
+    );
+    tools.appendChild(keyed(add, entry, 'add'));
   }
 
   if (
@@ -176,11 +400,31 @@ function renderRow(
     !callbacks.drafts?.has(entry.fieldId)
   ) {
     tools.appendChild(
-      button('Draft with on-device AI', 'fw-link', () => callbacks.onDraftStart?.(entry)),
+      keyed(
+        button('Draft with on-device AI', 'fw-link', () => callbacks.onDraftStart?.(entry)),
+        entry,
+        'draft',
+      ),
+    );
+  }
+
+  if (
+    entry.status === 'manual-required' &&
+    entry.canonical !== 'documents.resume' &&
+    entry.canonical !== 'documents.coverLetter' &&
+    (callbacks.choices?.answers.length ?? 0) > 0 &&
+    !callbacks.savedAnswers?.has(entry.fieldId)
+  ) {
+    tools.appendChild(
+      button('Use a saved answer', 'fw-link', () => callbacks.onSavedAnswerStart?.(entry)),
     );
   }
 
   if (tools.childElementCount > 0) item.appendChild(tools);
+
+  if (state.editing.has(entry.fieldId)) {
+    item.appendChild(renderEditor(entry, callbacks));
+  }
 
   if (expanded.has(entry.fieldId)) {
     item.appendChild(renderWhy(entry));
@@ -196,7 +440,53 @@ function renderRow(
   const draft = callbacks.drafts?.get(entry.fieldId);
   if (draft) item.appendChild(renderDraft(entry, draft, callbacks));
 
+  const saved = callbacks.savedAnswers?.get(entry.fieldId);
+  if (saved) item.appendChild(renderSavedAnswer(entry, saved, callbacks));
+
   return item;
+}
+
+/**
+ * "Edit for this form": one text box. Enter saves, Escape cancels. The value
+ * stays in this tab's memory and is used only for this fill.
+ */
+function renderEditor(entry: FillPlanEntry, callbacks: ReviewCallbacks): HTMLElement {
+  const panel = el('div', 'fw-teach fw-edit');
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.className = 'fw-edit__input';
+  input.value = entry.newValue;
+  input.setAttribute('aria-label', `Value for ${entry.label}, this form only`);
+  input.autocomplete = 'off';
+  keyed(input, entry, 'edit-input');
+  const save = () => callbacks.onEditSave?.(entry.fieldId, input.value.trim());
+  input.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      save();
+    } else if (event.key === 'Escape') {
+      // Escape closes this editor, not the whole panel.
+      event.stopPropagation();
+      callbacks.onEditCancel?.(entry.fieldId);
+    }
+  });
+  panel.appendChild(input);
+  panel.appendChild(el('p', 'fw-note', 'Used for this form only. Your profile is not changed.'));
+  const actions = el('div', 'fw-teach__actions');
+  actions.appendChild(
+    keyed(
+      button('Cancel', 'fw-btn fw-btn--ghost fw-btn--sm', () =>
+        callbacks.onEditCancel?.(entry.fieldId),
+      ),
+      entry,
+      'edit-cancel',
+    ),
+  );
+  actions.appendChild(
+    keyed(button('Save', 'fw-btn fw-btn--primary fw-btn--sm', save), entry, 'edit-save'),
+  );
+  panel.appendChild(actions);
+  return panel;
 }
 
 /**
@@ -215,6 +505,7 @@ function renderTeachPicker(entry: FillPlanEntry, callbacks: ReviewCallbacks): HT
   const select = document.createElement('select');
   select.className = 'fw-teach__select';
   select.setAttribute('aria-label', `What ${entry.label} asks for`);
+  keyed(select, entry, 'teach-select');
 
   const blank = document.createElement('option');
   blank.value = '';
@@ -233,7 +524,49 @@ function renderTeachPicker(entry: FillPlanEntry, callbacks: ReviewCallbacks): HT
     }
     select.appendChild(optgroup);
   }
+  // The user's own custom fields and saved answers, by title. Choosing one
+  // of these opens a second list naming the item.
+  const own = document.createElement('optgroup');
+  own.label = 'Your own';
+  const ownKinds: Array<[string, string, AnswerChoice[]]> = [
+    [OWN_FIELD, 'One of your custom fields…', callbacks.choices?.custom ?? []],
+    [OWN_ANSWER, 'One of your saved answers…', callbacks.choices?.answers ?? []],
+  ];
+  for (const [value, text, items] of ownKinds) {
+    const option = document.createElement('option');
+    option.value = value;
+    option.textContent = items.length ? text : `${text} (none yet)`;
+    option.disabled = items.length === 0;
+    own.appendChild(option);
+  }
+  select.appendChild(own);
   panel.appendChild(select);
+
+  const second = document.createElement('select');
+  second.className = 'fw-teach__select fw-teach__own';
+  second.hidden = true;
+  panel.appendChild(second);
+
+  select.addEventListener('change', () => {
+    const kind = ownKinds.find(([value]) => value === select.value);
+    second.replaceChildren();
+    second.hidden = !kind;
+    if (!kind) return;
+    second.setAttribute(
+      'aria-label',
+      kind[0] === OWN_FIELD ? 'Which custom field' : 'Which saved answer',
+    );
+    const blankOwn = document.createElement('option');
+    blankOwn.value = '';
+    blankOwn.textContent = 'Choose…';
+    second.appendChild(blankOwn);
+    for (const item of kind[2]) {
+      const option = document.createElement('option');
+      option.value = item.id;
+      option.textContent = item.label;
+      second.appendChild(option);
+    }
+  });
 
   const rememberRow = el('label', 'fw-teach__remember');
   const remember = document.createElement('input');
@@ -249,6 +582,12 @@ function renderTeachPicker(entry: FillPlanEntry, callbacks: ReviewCallbacks): HT
   actions.appendChild(
     button('Use this', 'fw-btn fw-btn--primary fw-btn--sm', () => {
       if (!select.value) return;
+      if (select.value === OWN_FIELD || select.value === OWN_ANSWER) {
+        if (!second.value) return;
+        const kind = select.value === OWN_FIELD ? 'field' : 'answer';
+        callbacks.onTeach(entry, 'custom', remember.checked, customKeyFor(kind, second.value));
+        return;
+      }
       callbacks.onTeach(entry, select.value as CanonicalField, remember.checked);
     }),
   );
@@ -262,6 +601,94 @@ function renderTeachPicker(entry: FillPlanEntry, callbacks: ReviewCallbacks): HT
     ),
   );
 
+  return panel;
+}
+
+const OWN_FIELD = '__own-field';
+const OWN_ANSWER = '__own-answer';
+
+/**
+ * "Use a saved answer" on a written question.
+ *
+ * Mirrors drafting: titles first (ranked by how well they match the question,
+ * with none chosen), then the text of the one answer picked, in an editable
+ * box. Nothing reaches the form until "Use this answer" is pressed.
+ */
+function renderSavedAnswer(
+  entry: FillPlanEntry,
+  view: SavedAnswerView,
+  callbacks: ReviewCallbacks,
+): HTMLElement {
+  const panel = el('div', 'fw-teach fw-saved');
+  panel.setAttribute(
+    'aria-busy',
+    String(view.phase === 'loading' || (view.phase === 'choose' && Boolean(view.busy))),
+  );
+  const actions = el('div', 'fw-teach__actions');
+  const cancel = button('Cancel', 'fw-btn fw-btn--ghost fw-btn--sm', () =>
+    callbacks.onSavedAnswerCancel?.(entry),
+  );
+
+  if (view.phase === 'loading') {
+    panel.appendChild(el('p', 'fw-note', 'Loading your saved answers…'));
+    return panel;
+  }
+
+  if (view.phase === 'error') {
+    panel.appendChild(el('p', 'fw-error', view.message));
+    cancel.textContent = 'Close';
+    actions.appendChild(cancel);
+    panel.appendChild(actions);
+    return panel;
+  }
+
+  if (view.phase === 'choose') {
+    panel.appendChild(el('p', 'fw-teach__lead', 'Which saved answer?'));
+    const select = document.createElement('select');
+    select.className = 'fw-teach__select fw-saved__select';
+    select.setAttribute('aria-label', `Saved answer for ${entry.label}`);
+    const blank = document.createElement('option');
+    blank.value = '';
+    blank.textContent = 'Choose…';
+    select.appendChild(blank);
+    for (const answer of view.answers) {
+      const option = document.createElement('option');
+      option.value = answer.id;
+      option.textContent = answer.label;
+      select.appendChild(option);
+    }
+    select.disabled = Boolean(view.busy);
+    panel.appendChild(select);
+    panel.appendChild(
+      el('p', 'fw-note', 'Closest matches are listed first. You can edit it before it is used.'),
+    );
+    actions.appendChild(cancel);
+    const show = button('Show this answer', 'fw-btn fw-btn--primary fw-btn--sm', () => {
+      if (select.value) callbacks.onSavedAnswerPick?.(entry, select.value);
+    });
+    show.disabled = Boolean(view.busy);
+    actions.appendChild(show);
+    panel.appendChild(actions);
+    return panel;
+  }
+
+  panel.appendChild(el('p', 'fw-teach__lead', 'Your saved answer — edit it before you use it'));
+  const area = document.createElement('textarea');
+  area.className = 'fw-draft__text';
+  area.value = view.text;
+  area.rows = 6;
+  area.setAttribute('aria-label', `Saved answer for ${entry.label}`);
+  area.addEventListener('input', () => {
+    view.text = area.value;
+  });
+  panel.appendChild(area);
+  actions.appendChild(cancel);
+  actions.appendChild(
+    button('Use this answer', 'fw-btn fw-btn--primary fw-btn--sm', () => {
+      if (area.value.trim()) callbacks.onSavedAnswerUse?.(entry, area.value.trim());
+    }),
+  );
+  panel.appendChild(actions);
   return panel;
 }
 
@@ -359,6 +786,18 @@ function renderDraft(
       list.appendChild(row);
     }
     panel.appendChild(list);
+
+    if (busy && draft.text !== undefined) {
+      // Streamed text is shown as it arrives but cannot be edited or used
+      // until the draft is complete. Cancel stops the model.
+      const stream = document.createElement('textarea');
+      stream.className = 'fw-draft__text fw-draft__text--streaming';
+      stream.readOnly = true;
+      stream.rows = 6;
+      stream.value = draft.text;
+      stream.setAttribute('aria-label', `Draft being written for ${entry.label}`);
+      panel.appendChild(stream);
+    }
 
     actions.appendChild(cancel);
     const generate = button(

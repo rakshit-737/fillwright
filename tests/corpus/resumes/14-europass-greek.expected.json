@@ -1,0 +1,25 @@
+{
+  "layout": "Europass",
+  "firstName": "Eleni",
+  "lastName": "Papadopoulou",
+  "email": "eleni.papadopoulou@example.com",
+  "phone": "+30 694 555 1212",
+  "education": [
+    {
+      "institution": "Athens University of Economics and Business",
+      "degree": "Bachelor of Science",
+      "gpa": ""
+    }
+  ],
+  "experience": [
+    {
+      "company": "Aegean Retail Group",
+      "title": "Business Analyst"
+    }
+  ],
+  "skills": [
+    "SQL",
+    "Tableau",
+    "Excel"
+  ]
+}

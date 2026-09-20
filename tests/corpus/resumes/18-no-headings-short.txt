@@ -1,0 +1,8 @@
+Grace Oyelaran
+grace.oyelaran@example.com
++44 7700 900123
+London
+
+Software Engineer at Cobalt Street Ltd, 2021 - present. Built billing integrations.
+BSc Computer Science, University of Leeds, 2017 - 2020.
+Python, Django, AWS.

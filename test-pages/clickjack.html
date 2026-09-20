@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Apply — Platform Engineer (hostile page)</title>
+    <link rel="stylesheet" href="./shared.css" />
+    <style>
+      #fw-bait {
+        position: fixed;
+        inset: 0;
+        width: 100vw;
+        height: 100vh;
+        max-width: none;
+        max-height: none;
+        margin: 0;
+        border: 0;
+        padding: 0;
+        background: rgba(200, 30, 30, 0.35);
+        pointer-events: none;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Apply: Platform Engineer</h1>
+    <p class="lead">
+      Expected: this page attacks the Fillwright panel. A synthetic click on "Fill" does nothing
+      (untrusted event). A see-through overlay in the top layer with pointer-events: none, kept on
+      top by the page, pauses Fill and the panel says something is covering it; a real click that
+      falls through the overlay onto "Fill" changes nothing. Once the overlay is gone and the panel
+      has been visible for about half a second, a normal click fills the form.
+    </p>
+    <form>
+      <label for="c-first">First Name</label>
+      <input id="c-first" name="first_name" autocomplete="given-name" />
+      <label for="c-email">Email</label>
+      <input id="c-email" name="email" type="email" autocomplete="email" />
+      <button type="submit">Submit application</button>
+    </form>
+    <div id="fw-bait" popover="manual" aria-hidden="true"></div>
+    <script src="./shared.js"></script>
+    <script>
+      // The attack, driven by the end-to-end suite. The shipped panel's root
+      // is closed; the test build reopens it, which only makes this page's
+      // job easier.
+      (function () {
+        var fight = 0;
+        var bait = document.getElementById('fw-bait');
+        function fillButton() {
+          var host = document.querySelector('[data-fillwright-widget]');
+          var root = host && host.shadowRoot;
+          if (!root) return null;
+          return (
+            Array.prototype.find.call(root.querySelectorAll('button'), function (b) {
+              return (b.textContent || '').trim().indexOf('Fill') === 0;
+            }) || null
+          );
+        }
+        function raise() {
+          try {
+            if (bait.matches(':popover-open')) bait.hidePopover();
+            bait.showPopover();
+          } catch (e) {
+            /* ignore */
+          }
+        }
+        window.__fwAttack = {
+          synthetic: function () {
+            var button = fillButton();
+            if (!button) return false;
+            button.click();
+            button.dispatchEvent(
+              new MouseEvent('click', { bubbles: true, composed: true, cancelable: true }),
+            );
+            button.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
+            return true;
+          },
+          cover: function () {
+            raise();
+            // Keep the overlay above the panel, however often it re-asserts.
+            fight = setInterval(raise, 150);
+          },
+          uncover: function () {
+            clearInterval(fight);
+            try {
+              bait.hidePopover();
+            } catch (e) {
+              /* ignore */
+            }
+          },
+        };
+      })();
+    </script>
+  </body>
+</html>

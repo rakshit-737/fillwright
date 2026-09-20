@@ -113,7 +113,8 @@ if (!/attachShadow\(\{\s*mode:\s*(["'`])closed/.test(content)) {
   fail('content.js does not use a closed shadow root');
 }
 const contentKB = files['content.js'].length / 1024;
-if (contentKB > 100) fail(`content.js is ${contentKB.toFixed(1)} KB (budget 100 KB)`);
+// Same budget as scripts/perf.mjs.
+if (contentKB > 128) fail(`content.js is ${contentKB.toFixed(1)} KB (budget 128 KB)`);
 
 const zipMB = statSync(zipPath).size / (1024 * 1024);
 if (zipMB > 10) fail(`package is ${zipMB.toFixed(1)} MB`);

@@ -1,3 +1,4 @@
+import type { ImportSelection } from '@/profile/portable';
 import type { CanonicalField, FillOutcome, ScanResult, SavedMapping } from './fields';
 import type { Profile } from './profile';
 import type { Settings } from './settings';
@@ -21,6 +22,26 @@ export interface ApplicationHistoryEntry {
   fieldsFilled: number;
   /** Which of the user's profiles was used. */
   profileId?: string;
+  /* Tracker fields — only ever set by the user in the History pane. */
+  /** Missing on older records, which read as 'applied'. */
+  status?: ApplicationStatus;
+  notes?: string;
+  /** A calendar date, yyyy-mm-dd. */
+  followUpOn?: string;
+  /** Stored only when the user ticks it for this entry: origin + path, no query. */
+  postingUrl?: string;
+}
+
+export type ApplicationStatus =
+  'applied' | 'assessment' | 'interview' | 'offer' | 'rejected' | 'withdrawn';
+
+/** What the History pane may change on an entry. `null` clears a field. */
+export interface HistoryTrackerPatch {
+  status?: ApplicationStatus;
+  notes?: string;
+  followUpOn?: string | null;
+  profileId?: string | null;
+  postingUrl?: string | null;
 }
 
 /* ---------- popup / options → background ---------- */
@@ -37,13 +58,16 @@ export type UiRequest =
   | { type: 'ui:set-active-profile'; profileId: string }
   | { type: 'ui:list-history' }
   | { type: 'ui:clear-history' }
+  | { type: 'ui:update-history'; id: string; patch: HistoryTrackerPatch }
+  | { type: 'ui:delete-history-entry'; id: string }
   | { type: 'ui:list-saved-mappings'; origin?: string }
   | { type: 'ui:delete-saved-mapping'; id: string }
   | { type: 'ui:update-saved-mapping'; id: string; canonical?: CanonicalField; disabled?: boolean }
   | { type: 'ui:clear-saved-mappings'; origin?: string }
   | { type: 'ui:erase-all-data' }
   | { type: 'ui:export-data'; includeHistory?: boolean }
-  | { type: 'ui:import-data'; payload: unknown }
+  | { type: 'ui:preview-import'; payload: unknown }
+  | { type: 'ui:import-data'; payload: unknown; selection: ImportSelection }
   | { type: 'ui:sync-auto-detect' }
   | { type: 'ui:vault-status' }
   | { type: 'ui:vault-enable'; passphrase: string }
@@ -67,9 +91,19 @@ export type ContentRequest =
        * Corrections the user made for this fill only, without asking Fillwright
        * to remember them. Applied like saved mappings, never persisted.
        */
-      overrides?: Array<{ fingerprint: string; canonical: CanonicalField }>;
+      overrides?: Array<{ fingerprint: string; canonical: CanonicalField; customKey?: string }>;
+      /**
+       * Counts and statuses only (Smart mode, before the user opened the
+       * panel). The worker blanks every proposed value.
+       */
+      withholdValues?: boolean;
     }
-  | { type: 'content:fill-complete'; outcomes: FillOutcome[] }
+  | {
+      type: 'content:fill-complete';
+      outcomes: FillOutcome[];
+      /** Ids of remembered mappings that were written. Ids only, never values. */
+      mappingIds?: string[];
+    }
   | { type: 'content:save-mapping'; mapping: Omit<SavedMapping, 'id' | 'createdAt' | 'useCount'> }
   | {
       type: 'content:log-application';
@@ -90,10 +124,24 @@ export type ContentRequest =
   | { type: 'content:job-match'; text: string }
   | { type: 'content:list-profiles' }
   /** Opens one of a fixed set of Fillwright pages (import, privacy, …). */
-  | { type: 'content:open-page'; route: string }
+  | { type: 'content:open-page'; route: string; field?: string }
   | { type: 'content:switch-profile'; profileId: string }
   | { type: 'content:draft-facts' }
-  | { type: 'content:draft'; question: string; factIds: string[]; maxCharacters?: number };
+  | {
+      type: 'content:draft';
+      question: string;
+      factIds: string[];
+      maxCharacters?: number;
+      /** Posting excerpt; used only when `factIds` includes 'posting'. */
+      posting?: string;
+    }
+  /**
+   * Titles of the user's custom fields and saved answers, for the picker and
+   * the "Use a saved answer" list. Never values or answer text.
+   */
+  | { type: 'content:answer-choices'; question?: string }
+  /** The text of ONE saved answer, after the user picked it by title. */
+  | { type: 'content:saved-answer'; id: string };
 
 export type AnyRequest = UiRequest | ContentRequest;
 

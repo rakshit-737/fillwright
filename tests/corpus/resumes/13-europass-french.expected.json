@@ -1,0 +1,26 @@
+{
+  "layout": "Europass",
+  "firstName": "Julien",
+  "lastName": "Moreau",
+  "email": "julien.moreau@example.com",
+  "phone": "+33 6 12 34 56 78",
+  "education": [
+    {
+      "institution": "INSA Lyon",
+      "degree": "Master of Engineering",
+      "gpa": ""
+    }
+  ],
+  "experience": [
+    {
+      "company": "Rhône Systèmes SA",
+      "title": "Embedded Software Engineer"
+    }
+  ],
+  "skills": [
+    "C",
+    "Embedded Linux",
+    "FreeRTOS",
+    "Python"
+  ]
+}

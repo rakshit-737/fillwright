@@ -8,7 +8,9 @@
  * page text or values.
  */
 
-const CONTROL_TAGS = new Set(['INPUT', 'SELECT', 'TEXTAREA']);
+// OPTION counts: a dependent dropdown ("State" after "Country") changes by
+// gaining options, not by gaining a control.
+const CONTROL_TAGS = new Set(['INPUT', 'SELECT', 'TEXTAREA', 'OPTION']);
 
 /**
  * True when a mutation batch might have added or removed a form control.
@@ -38,20 +40,22 @@ function touches(nodes: NodeList): boolean {
 }
 
 /**
- * A fingerprint of the page's form controls: how many there are, and the
- * identity of the first and last. Two equal signatures mean a mutation burst
- * did not change the form, so no rescan is needed. Called off the observer.
+ * A fingerprint of the page's form controls: how many there are, how many
+ * dropdown options they offer, and the identity of the first and last. Two
+ * equal signatures mean a mutation burst did not change the form, so no
+ * rescan is needed. Called off the observer.
  */
 export function controlSignature(doc: Document): string {
   const controls = doc.getElementsByTagName('input').length;
   const selects = doc.getElementsByTagName('select').length;
   const areas = doc.getElementsByTagName('textarea').length;
+  const options = doc.getElementsByTagName('option').length;
   const all = doc.querySelectorAll('input, select, textarea');
   const first = all[0];
   const last = all[all.length - 1];
   const id = (element: Element | undefined) =>
     element ? `${element.tagName}#${element.id}|${element.getAttribute('name') ?? ''}` : '';
-  return `${controls}/${selects}/${areas}|${id(first)}|${id(last)}`;
+  return `${controls}/${selects}/${areas}/${options}|${id(first)}|${id(last)}`;
 }
 
 /**

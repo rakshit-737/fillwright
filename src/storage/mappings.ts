@@ -14,11 +14,35 @@ export async function saveMapping(
   const existing = (await listMappings(input.origin)).find(
     (m) => m.fingerprint === input.fingerprint,
   );
-  const mapping: SavedMapping = existing
-    ? { ...existing, ...input, useCount: existing.useCount }
-    : { ...input, id: newId('map'), createdAt: now(), useCount: 0 };
+  const mapping = mergeMapping(existing, input);
+  // Re-teaching a field as an ordinary one must not keep a stale custom key.
+  if (!input.customKey) delete mapping.customKey;
   await idb.put('mappings', mapping);
   return mapping;
+}
+
+/**
+ * Combines a new rule with the one already stored for the same field.
+ *
+ * A rule saved without `imported` was chosen by the user on a real form, so it
+ * confirms (and clears) an imported one. An import never downgrades a rule the
+ * user taught here, unless it points the field somewhere else.
+ */
+export function mergeMapping(
+  existing: SavedMapping | undefined,
+  input: Omit<SavedMapping, 'id' | 'createdAt' | 'useCount'>,
+): SavedMapping {
+  const { imported: _drop, ...base } = existing ?? ({} as Partial<SavedMapping>);
+  void _drop;
+  const imported =
+    input.imported === true &&
+    !(existing && !existing.imported && existing.canonical === input.canonical);
+  const { imported: _ignored, ...rest } = input;
+  void _ignored;
+  const merged: SavedMapping = existing
+    ? { ...(base as SavedMapping), ...rest, useCount: existing.useCount }
+    : { ...rest, id: newId('map'), createdAt: now(), useCount: 0 };
+  return imported ? { ...merged, imported: true } : merged;
 }
 
 export async function recordMappingUse(id: string): Promise<void> {

@@ -1,0 +1,25 @@
+{
+  "layout": "no headings",
+  "firstName": "Grace",
+  "lastName": "Oyelaran",
+  "email": "grace.oyelaran@example.com",
+  "phone": "+44 7700 900123",
+  "education": [
+    {
+      "institution": "University of Leeds",
+      "degree": "BSc",
+      "gpa": ""
+    }
+  ],
+  "experience": [
+    {
+      "company": "Cobalt Street Ltd",
+      "title": "Software Engineer"
+    }
+  ],
+  "skills": [
+    "Python",
+    "Django",
+    "AWS"
+  ]
+}

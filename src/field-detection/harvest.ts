@@ -135,6 +135,7 @@ function describeAriaRadioGroup(
   if (signals.ariaLabel && options.some((option) => option.label === signals.ariaLabel)) {
     signals.ariaLabel = '';
   }
+  const shown = isVisible(group) || members.some(isVisible);
   return {
     id,
     kind: 'radio-group',
@@ -142,7 +143,8 @@ function describeAriaRadioGroup(
     options,
     currentValue: checked ? ariaOptionValue(checked) : '',
     hasExistingValue: Boolean(checked),
-    visible: isVisible(group) || members.some(isVisible),
+    visible: shown,
+    hiddenReason: shown ? null : groupHiddenReason([group, ...members]),
     disabled: group.getAttribute('aria-disabled') === 'true' || members.every(isDisabled),
     readOnly: group.getAttribute('aria-readonly') === 'true',
     order,
@@ -197,6 +199,7 @@ function describeControl(id: string, element: HTMLElement, order: number): Detec
   const kind = controlKind(element);
   const options = readOptions(element);
   const currentValue = readValue(element);
+  const visibility = assessVisibility(element);
 
   return {
     id,
@@ -205,7 +208,8 @@ function describeControl(id: string, element: HTMLElement, order: number): Detec
     options,
     currentValue,
     hasExistingValue: currentValue.trim().length > 0,
-    visible: isVisible(element),
+    visible: visibility.visible,
+    hiddenReason: visibility.reason,
     disabled: isDisabled(element),
     readOnly: isReadOnly(element),
     order,
@@ -282,6 +286,7 @@ function describeRadioGroup(id: string, members: HTMLInputElement[], order: numb
   // not on any individual radio — an individual radio's label is its option.
   const signals = readSignals(first, 'radio-group', options);
   signals.labelText = truncate(groupLabel(first) || signals.labelText);
+  const shown = members.some(isVisible);
 
   return {
     id,
@@ -290,7 +295,8 @@ function describeRadioGroup(id: string, members: HTMLInputElement[], order: numb
     options,
     currentValue: checked?.value ?? '',
     hasExistingValue: Boolean(checked),
-    visible: members.some(isVisible),
+    visible: shown,
+    hiddenReason: shown ? null : groupHiddenReason(members),
     disabled: members.every(isDisabled),
     readOnly: false,
     order,
@@ -353,6 +359,7 @@ function readSignals(
     optionLabels: options.slice(0, 40).map((option) => option.label),
     required: element.hasAttribute('required') || element.getAttribute('aria-required') === 'true',
     maxLength: Number.isFinite(input.maxLength) && input.maxLength > 0 ? input.maxLength : null,
+    lang: truncate(element.closest('[lang]')?.getAttribute('lang') ?? '', 35),
   };
 }
 
@@ -370,7 +377,7 @@ export function labelForControl(element: HTMLElement): string {
   if (labelledBy) {
     const text = labelledBy
       .split(/\s+/)
-      .map((id) => ownerDocument(element).getElementById(id)?.textContent ?? '')
+      .map((id) => idScope(element).getElementById(id)?.textContent ?? '')
       .join(' ')
       .trim();
     if (text) return clean(text);
@@ -379,7 +386,7 @@ export function labelForControl(element: HTMLElement): string {
   // 2. <label for="id">
   if (element.id) {
     const escaped = cssEscape(element.id);
-    const label = ownerDocument(element).querySelector<HTMLLabelElement>(`label[for="${escaped}"]`);
+    const label = idScope(element).querySelector<HTMLLabelElement>(`label[for="${escaped}"]`);
     if (label?.textContent?.trim()) return clean(label.textContent);
   }
 
@@ -412,6 +419,16 @@ export function labelForControl(element: HTMLElement): string {
     if (text && text.length <= 120) return text;
   }
 
+  // 6. Inside a shadow root with nothing else: form-associated custom
+  // elements carry the label on the host, not on the inner control.
+  const root = element.getRootNode();
+  if (root instanceof ShadowRoot) {
+    const host = root.host as HTMLElement;
+    const own = host.getAttribute('aria-label') || host.getAttribute('label');
+    if (own?.trim()) return clean(own);
+    return labelForControl(host);
+  }
+
   return '';
 }
 
@@ -429,7 +446,7 @@ function groupLabel(element: HTMLElement): string {
   if (labelledBy) {
     const text = labelledBy
       .split(/\s+/)
-      .map((id) => ownerDocument(element).getElementById(id)?.textContent ?? '')
+      .map((id) => idScope(element).getElementById(id)?.textContent ?? '')
       .join(' ');
     if (text.trim()) return clean(text);
   }
@@ -452,7 +469,7 @@ function describedByText(element: HTMLElement): string {
   return clean(
     describedBy
       .split(/\s+/)
-      .map((id) => ownerDocument(element).getElementById(id)?.textContent ?? '')
+      .map((id) => idScope(element).getElementById(id)?.textContent ?? '')
       .join(' '),
   );
 }
@@ -592,17 +609,214 @@ function readValue(element: HTMLElement): string {
 }
 
 function isVisible(element: HTMLElement): boolean {
-  if (!element.isConnected) return false;
-  // getClientRects() is empty for display:none and for detached subtrees, and
-  // it is far cheaper than a full getComputedStyle on every control.
-  if (element.getClientRects().length === 0) {
-    // Radios and checkboxes are routinely visually hidden but still operable
-    // via a styled label, so they are judged by their label's visibility.
-    const label = element.closest('label');
-    if (!label || label.getClientRects().length === 0) return false;
+  return assessVisibility(element).visible;
+}
+
+/** First hidden member's reason, for a group judged not visible. */
+function groupHiddenReason(members: HTMLElement[]): string | null {
+  for (const member of members) {
+    const { reason } = assessVisibility(member);
+    if (reason) return reason;
   }
+  return null;
+}
+
+/* -------------------------------------------------------------- visibility */
+
+export interface VisibilityAssessment {
+  visible: boolean;
+  /** Plain-language reason, shown to the user on request. Null when visible. */
+  reason: string | null;
+}
+
+const SHOWN: VisibilityAssessment = { visible: true, reason: null };
+const hidden = (reason: string): VisibilityAssessment => ({ visible: false, reason });
+
+/** Below this many CSS pixels in either direction nobody can see or use it. */
+const MIN_SIZE = 4;
+/** Effective opacity below this is invisible to a person. */
+const MIN_OPACITY = 0.1;
+
+/**
+ * Decides whether a person could actually see a control.
+ *
+ * Hidden fields are how anti-bot honeypots work (fill one and the application
+ * is silently discarded) and how autofill data harvesting works (a page hides
+ * a "phone" field and reads what the extension writes into it). So a control
+ * has to pass every check: it has a box, is on the page, is big enough, is not
+ * clipped away, is not transparent, and is not inside an aria-hidden or inert
+ * subtree. Anything unsure is treated as hidden.
+ *
+ * Radios and checkboxes are routinely visually hidden behind a styled label
+ * that the user clicks instead, so when one of those fails it is judged by its
+ * label. That exception is deliberately not extended to text fields.
+ */
+export function assessVisibility(element: HTMLElement): VisibilityAssessment {
+  if (!element.isConnected) return hidden('no longer on the page');
+  const own = assessBox(element);
+  if (own.visible) return own;
+  if (isToggle(element)) {
+    const label = labelElementFor(element);
+    if (label) {
+      const viaLabel = assessBox(label);
+      if (viaLabel.visible) return viaLabel;
+    }
+  }
+  return own;
+}
+
+function isToggle(element: HTMLElement): boolean {
+  return (
+    element instanceof HTMLInputElement && (element.type === 'checkbox' || element.type === 'radio')
+  );
+}
+
+function labelElementFor(element: HTMLElement): HTMLElement | null {
+  const wrapping = element.closest('label');
+  if (wrapping) return wrapping;
+  const labels = (element as HTMLInputElement).labels;
+  return labels && labels.length > 0 ? (labels[0] as HTMLElement) : null;
+}
+
+function assessBox(element: HTMLElement): VisibilityAssessment {
+  // getClientRects() is empty for display:none and detached subtrees.
+  if (element.getClientRects().length === 0) return hidden('not displayed');
+
   const style = getComputedStyle(element);
-  return style.visibility !== 'hidden' && style.display !== 'none';
+  if (style.display === 'none') return hidden('not displayed');
+  if (style.visibility === 'hidden' || style.visibility === 'collapse') {
+    return hidden('set to visibility: hidden');
+  }
+
+  const rect = element.getBoundingClientRect();
+  if (rect.width < MIN_SIZE || rect.height < MIN_SIZE) {
+    return hidden(`too small to see (${Math.round(rect.width)}×${Math.round(rect.height)} px)`);
+  }
+
+  const view = element.ownerDocument.defaultView;
+  const scrollX = view?.scrollX ?? 0;
+  const scrollY = view?.scrollY ?? 0;
+  // The viewport width, not the scroll width: a field parked at left:10000px
+  // widens the scroll width itself and would otherwise count as on the page.
+  const pageWidth = Math.max(
+    element.ownerDocument.documentElement.clientWidth,
+    view?.innerWidth ?? 0,
+  );
+  if (
+    rect.right + scrollX <= 0 ||
+    rect.bottom + scrollY <= 0 ||
+    (pageWidth > 0 && rect.left + scrollX >= pageWidth)
+  ) {
+    return hidden('positioned off-screen');
+  }
+
+  let opacity = 1;
+  let visibleArea = { left: rect.left, top: rect.top, right: rect.right, bottom: rect.bottom };
+  let node: Element | null = element;
+  let hops = 0;
+  while (node && hops < 64) {
+    hops++;
+    if (node.getAttribute('aria-hidden') === 'true') {
+      return hidden('inside a part of the page marked aria-hidden');
+    }
+    if (node.hasAttribute('inert')) return hidden('inside an inert part of the page');
+
+    const nodeStyle = node === element ? style : getComputedStyle(node);
+    const own = Number.parseFloat(nodeStyle.opacity);
+    if (Number.isFinite(own)) opacity *= own;
+    if (opacity < MIN_OPACITY) return hidden('transparent (opacity close to zero)');
+
+    if (isClippedAway(nodeStyle)) return hidden('clipped out of view');
+
+    // A container that clips its overflow limits what can be seen of the
+    // control inside it.
+    if (node !== element && clipsOverflow(nodeStyle)) {
+      const box = node.getBoundingClientRect();
+      visibleArea = {
+        left: Math.max(visibleArea.left, box.left),
+        top: Math.max(visibleArea.top, box.top),
+        right: Math.min(visibleArea.right, box.right),
+        bottom: Math.min(visibleArea.bottom, box.bottom),
+      };
+      if (
+        visibleArea.right - visibleArea.left < MIN_SIZE ||
+        visibleArea.bottom - visibleArea.top < MIN_SIZE
+      ) {
+        return hidden('clipped out of view by its container');
+      }
+    }
+
+    node = composedParent(node);
+  }
+  return SHOWN;
+}
+
+/** Parent element, stepping out of shadow roots to their host. */
+function composedParent(node: Element): Element | null {
+  if (node.parentElement) return node.parentElement;
+  const root = node.getRootNode();
+  return root instanceof ShadowRoot ? root.host : null;
+}
+
+function clipsOverflow(style: CSSStyleDeclaration): boolean {
+  const clipping = (value: string) => value === 'hidden' || value === 'clip';
+  return clipping(style.overflowX || style.overflow) || clipping(style.overflowY || style.overflow);
+}
+
+/** `clip: rect(0 0 0 0)` / `clip-path: inset(50%)` — the screen-reader-only pattern. */
+function isClippedAway(style: CSSStyleDeclaration): boolean {
+  const clip = style.clip;
+  if (clip && clip !== 'auto') {
+    const numbers = (clip.match(/-?\d+(?:\.\d+)?/g) ?? []).map(Number);
+    if (numbers.length === 4) {
+      const [top, right, bottom, left] = numbers as [number, number, number, number];
+      if (right - left < MIN_SIZE || bottom - top < MIN_SIZE) return true;
+    }
+  }
+  const path = style.clipPath;
+  if (path && path !== 'none') {
+    const inset = /^inset\(\s*(\d+(?:\.\d+)?)%/.exec(path);
+    if (inset && Number(inset[1]) >= 50) return true;
+    if (/^circle\(\s*0(?:px|%)?[\s)]/.test(path)) return true;
+  }
+  return false;
+}
+
+/**
+ * Fill-time check that the control is what is actually at its position.
+ *
+ * Run only for entries the user ticked, just before writing. A page can pass
+ * every style check and still lay an opaque element over a field; what a
+ * person would click there is what `hitTest` reports. Fillwright's own panel
+ * is looked through. Returns a reason when the control is covered, or null.
+ *
+ * `hitTest` is `document.elementsFromPoint` in the page; tests pass a stub.
+ */
+export function obscuredBy(
+  element: HTMLElement,
+  hitTest: (x: number, y: number) => Element[] = (x, y) =>
+    element.ownerDocument.elementsFromPoint(x, y),
+): string | null {
+  const candidates = [element, labelElementFor(element)].filter(
+    (node): node is HTMLElement => node !== null,
+  );
+
+  const rect = element.getBoundingClientRect();
+  const x = rect.left + rect.width / 2;
+  const y = rect.top + rect.height / 2;
+  const hits = hitTest(x, y);
+  const top = hits.find((hit) => !hit.closest('[data-fillwright-ui]'));
+  if (!top) return null;
+  if (candidates.some((candidate) => candidate === top || candidate.contains(top))) return null;
+  // Across a shadow boundary the hit is the host (or something inside it).
+  if (element.getRootNode() instanceof ShadowRoot) {
+    let host: Node = element.getRootNode();
+    while (host instanceof ShadowRoot) {
+      if (host.host === top || host.host.contains(top)) return null;
+      host = host.host.getRootNode();
+    }
+  }
+  return 'covered by something else on the page';
 }
 
 function isDisabled(element: HTMLElement): boolean {
@@ -641,6 +855,17 @@ function radioGroupMembers(
 
 function ownerDocument(element: HTMLElement | Element): Document {
   return element.ownerDocument ?? document;
+}
+
+/**
+ * The tree that ids referenced by this element live in. Inside a shadow root
+ * that is the shadow root itself — the document cannot see in, and an id in
+ * the document must not label a control inside the shadow tree.
+ */
+function idScope(element: Element): Document | ShadowRoot {
+  const root = element.getRootNode();
+  if (root instanceof ShadowRoot) return root;
+  return ownerDocument(element);
 }
 
 function clean(text: string): string {

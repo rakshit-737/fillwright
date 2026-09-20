@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="nl">
+  <head>
+    <meta charset="utf-8" />
+    <title>Sollicitatie — Softwareontwikkelaar</title>
+    <link rel="stylesheet" href="../shared.css" />
+  </head>
+  <body>
+    <h1>Sollicitatie — Softwareontwikkelaar</h1>
+    <p class="lead" lang="en">
+      Expected (locale pack "nl"): every label is in this language and the name attributes
+      carry no English, so only the nl vocabulary can identify the fields. First name, last
+      name, email and phone fill from the profile. The gender question is recognised as sensitive
+      and is left for you. The referee's email is someone else's and stays empty. The form is
+      never submitted.
+    </p>
+    <form id="app">
+      <label for="f1">Voornaam</label>
+      <input id="f1" name="f1" />
+      <label for="f2">Achternaam</label>
+      <input id="f2" name="f2" />
+      <label for="f3">E-mailadres</label>
+      <input id="f3" name="f3" type="email" />
+      <label for="f4">Telefoonnummer</label>
+      <input id="f4" name="f4" type="tel" />
+      <label for="f5">Geslacht</label>
+      <select id="f5" name="f5">
+        <option value="">Kies</option>
+        <option value="Vrouw">Vrouw</option>
+        <option value="Man">Man</option>
+        <option value="Anders">Anders</option>
+      </select>
+      <label for="f6">E-mailadres referentie</label>
+      <input id="f6" name="f6" type="email" />
+      <button type="submit">Sollicitatie versturen</button>
+    </form>
+    <script src="../shared.js"></script>
+  </body>
+</html>

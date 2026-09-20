@@ -2,6 +2,34 @@
 
 Notable changes, newest first. Versions follow semantic versioning.
 
+## 0.6.1 — 2026-09-20
+
+### Performance
+
+- **`content.js` is back under 100 KB: 120.7 KB → 69.1 KB.** 0.6.0 shipped a
+  content script that had grown past the budget, and raised the budget to
+  128 KB rather than the script being made smaller. The panel — its markup,
+  its stylesheet and the review list — is the larger half of that code and is
+  needed only once somebody opens it, so it now ships as a second bundle,
+  `panel.js` (57 KB), injected into the frame the first time a panel is shown.
+  A page nobody asks about never parses it. The budget is 100 KB again, and
+  the presubmit check enforces the same number.
+- Nothing was removed to get there: every panel feature behaves exactly as
+  before, behind the same closed shadow root in the same isolated world, and
+  the 134 end-to-end cases (which drive the real panel in Chrome) pass
+  unchanged. On the CI runner the 50-field injection now measures 28 ms
+  (budget 50 ms) and harvest + classify 13.7 ms (budget 120 ms).
+
+### Security
+
+- The panel is fetched by asking the service worker (`content:load-panel`),
+  because a content script cannot inject a file itself. The tab and frame come
+  from the sender Chrome reports, never from the message, and the file is
+  named in the handler — so a page that subverted its content script can still
+  only load Fillwright's own panel into its own frame. `verify-build.mjs` and
+  `presubmit.mjs` now check both injected bundles for surviving module syntax,
+  and look for the closed shadow root where it now lives.
+
 ## 0.6.0 — 2026-09-20
 
 ### Security

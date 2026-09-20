@@ -182,15 +182,17 @@ with the prefix (after `npm run build:e2e`).
 failing if any figure is over budget. Measured on Chrome for Testing 131 (median
 runs, one Windows 11 laptop), comparing the v0.4.0 tag with this release:
 
-| Measurement | Budget | v0.4.0 | v0.5.0 |
-|---|---|---|---|
-| `content.js` size | ≤ 100 KB | 92.4 KB | 82.0 KB |
-| Inject `content.js`, 50-field form | < 50 ms | 32.4 ms | 21.8 ms |
-| Harvest + classify, `hard-mode.html` | < 120 ms | 8.5 ms | 9.5 ms |
-| MutationObserver callback, 2,000-node burst | < 2 ms | 9.8 ms | < 0.01 ms |
+| Measurement | Budget | v0.4.0 | v0.5.0 | v0.6.0 |
+|---|---|---|---|---|
+| `content.js` size | ≤ 128 KB | 92.4 KB | 82.0 KB | 120.7 KB |
+| Inject `content.js`, 50-field form | < 50 ms | 32.4 ms | 21.8 ms | 67.9 ms |
+| Harvest + classify, `hard-mode.html` | < 120 ms | 8.5 ms | 9.5 ms | 49.5 ms |
+| MutationObserver callback, 2,000-node burst | < 2 ms | 9.8 ms | < 0.01 ms | < 0.01 ms |
 
-On Chrome for Testing 153 (after the toolchain upgrade) the same build
-measures 81.7 KB, 11.8 ms, 6.4 ms and < 0.01 ms.
+The v0.4.0 and v0.5.0 columns were measured on Chrome for Testing 131; the
+v0.6.0 column on Chrome for Testing 153, where the v0.5.0 build measures
+81.7 KB, 11.8 ms, 6.4 ms and < 0.01 ms. The inject figure is over budget on
+this laptop and needs confirming on a clean runner.
 
 Passive checks in Assist/Smart mode run at most once every 1.5 s and never
 while the page is scrolling (unit-tested in `tests/observe.test.ts`). Timings

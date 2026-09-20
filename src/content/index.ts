@@ -4,13 +4,7 @@ import { fillFields, undoFill, type UndoRecord } from '@/autofill/fill';
 import { collectPostingText, type JobMatch } from '@/autofill/job-match';
 import { addEntries, findAddControls } from '@/autofill/repeat';
 import { secondPassTargets } from '@/autofill/second-pass';
-import type {
-  FillwrightWidget,
-  AddOffer,
-  FillSummary,
-  HiddenField,
-  ProfileChoice,
-} from './widget';
+import type { FillwrightWidget, AddOffer, FillSummary, HiddenField, ProfileChoice } from './widget';
 import type { PanelExports } from './panel-entry';
 import type { DraftFact } from './review';
 import type { AnswerChoices } from '@/autofill/saved-answers';

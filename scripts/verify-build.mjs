@@ -66,7 +66,9 @@ for (const file of referenced) {
 // activation, panel.js when the panel is first opened.
 for (const name of ['content.js', 'panel.js']) {
   if (!existsSync(resolve(dist, name))) {
-    fail(`dist/${name} is missing — the ${name === 'content.js' ? 'content script' : 'panel'} build did not run`);
+    fail(
+      `dist/${name} is missing — the ${name === 'content.js' ? 'content script' : 'panel'} build did not run`,
+    );
     continue;
   }
   const source = readFileSync(resolve(dist, name), 'utf8');

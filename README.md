@@ -8,6 +8,17 @@ forms after showing you exactly what it is about to write.
 
 It never submits an application. That click is always yours.
 
+## Screenshots
+
+All five are captured from the real extension by `npm run screenshots`, on local
+fixture pages, using an obviously fictional profile ("Alex Example").
+
+| | |
+|---|---|
+| ![The Fillwright panel sitting over a job application form, reporting 14 application fields found, 8 ready and 6 needing you, with Review and Fill buttons](./store/screenshots/1-panel-on-form.png) | ![The review list expanded in the panel, each row showing the proposed value, a confidence percentage, and Show me, Why?, Change and Edit for this form links](./store/screenshots/2-review-list.png) |
+| ![The Profile editor in the options page, with a profile readiness score, a per-section list of what is missing, and the personal information fields marked "entered by you"](./store/screenshots/3-profile-editor.png) | ![The Privacy Center listing exactly what is stored on this device and where, with application history off, above a step-by-step map of where your data goes](./store/screenshots/4-privacy-center.png) |
+| ![The Security page showing encryption is off, with side-by-side lists of what encrypting at rest does and does not protect, and a Turn on encryption button](./store/screenshots/5-vault.png) | |
+
 ---
 
 ## What it does
@@ -162,8 +173,8 @@ zlib.
 ## Testing it
 
 ```bash
-npm test             # 330 unit and integration tests (jsdom)
-npm run test:e2e     # 96 end-to-end tests in real Chrome, including axe-core
+npm test             # 879 unit and integration tests (jsdom)
+npm run test:e2e     # 134 end-to-end tests in real Chrome, including axe-core
 npm run perf         # performance budget in Chrome for Testing
 npm run eval         # classifier and parser accuracy vs tests/corpus/baseline.json
 npm run test:coverage # unit tests with coverage thresholds

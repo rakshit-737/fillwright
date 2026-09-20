@@ -14,8 +14,8 @@ Run these in order before uploading `release/fillwright-<version>.zip`.
    - remote scripts, stylesheets, dynamic imports or fetches;
    - `eval` / `new Function` outside pdf.js (pdf.js runs with
      `isEvalSupported: false`, and the CSP blocks eval anyway);
-   - `content.js` over 100 KB, or a package over 10 MB.
-2. `npm run test:e2e` — the real-browser suite (96 tests).
+   - `content.js` over 128 KB, or a package over 10 MB.
+2. `npm run test:e2e` — the real-browser suite (134 tests).
 3. `npm run perf` — the performance budget.
 4. `npm run screenshots` — regenerates `store/screenshots/*.png` (1280×800).
 
